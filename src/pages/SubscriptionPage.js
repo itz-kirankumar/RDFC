@@ -14,6 +14,11 @@ const SubscriptionPage = ({ navigate, embedded = false }) => {
         ],
     };
 
+    const handleSubscribeClick = () => {
+        const whatsappUrl = "https://wa.me/919092112941?text=HI%20RDFC%20Team!%20I%20want%20to%20subscribe%20to%20Daily%20RC%20Practice%20Program";
+        window.open(whatsappUrl, '_blank');
+    };
+
     return (
         <div className={`max-w-4xl mx-auto ${!embedded && 'mt-10'}`}>
             <div className="text-center mb-10">
@@ -26,23 +31,15 @@ const SubscriptionPage = ({ navigate, embedded = false }) => {
                     
                     <div className="absolute top-0 -right-20">
                         <div className="transform rotate-45 bg-amber-500 text-center text-white font-semibold py-2 px-20 text-sm uppercase tracking-wider">
-                            50% OFF
+                            Special Offer
                         </div>
                     </div>
 
-                    <div className="text-center">
-                        <span className="bg-gray-700 text-amber-300 text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider">
-                            Early Bird Offer
-                        </span>
-                        <h2 className="text-3xl font-semibold text-white mt-4">{plan.name}</h2>
-                    </div>
-
-                    <div className="my-8 text-center">
-                        <span className="text-5xl font-bold text-white">₹{plan.price}</span>
-                        <span className="text-2xl text-gray-400 line-through ml-2">₹{plan.originalPrice}</span>
-                    </div>
-                     <div className="text-center my-4">
-                        <p className="text-gray-400">Apply Coupon <span className="font-bold text-amber-300">RDFC</span> for discount!</p>
+                    <h2 className="text-3xl font-bold text-white text-center">{plan.name}</h2>
+                    <div className="flex flex-col items-center mt-4">
+                        <span className="text-5xl font-extrabold text-white">₹{plan.price}</span>
+                        <span className="text-lg text-gray-500 line-through">₹{plan.originalPrice}</span>
+                        <p className="text-sm text-gray-400">per user</p>
                     </div>
 
                     <ul className="mb-8 space-y-4 text-gray-300 flex-grow">
@@ -55,7 +52,7 @@ const SubscriptionPage = ({ navigate, embedded = false }) => {
                     </ul>
 
                     <button 
-                        onClick={() => alert("This will redirect to your payment link!")}
+                        onClick={handleSubscribeClick}
                         className="mt-auto w-full bg-amber-500 text-gray-900 py-3 rounded-lg font-semibold hover:bg-amber-400 transition-all transform hover:scale-105 text-lg"
                     >
                         Subscribe Now
