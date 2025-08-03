@@ -77,7 +77,7 @@ const LoginPage = ({ navigate }) => {
                 <section className="py-20 bg-gray-800">
                     <div className="container mx-auto px-4">
                         <div className="text-center mb-12">
-                            <h2 className="text-3xl font-extrabold text-white">Try Our Free Sectional Tests</h2>
+                            <h2 className="text-3xl font-extrabold text-white">Try Our Free RC Tests</h2>
                             <p className="text-gray-400 mt-2">Get a feel for our platform. Sign in to attempt these free starter tests.</p>
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
