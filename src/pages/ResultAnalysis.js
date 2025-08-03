@@ -7,6 +7,9 @@ const ResultAnalysis = ({ navigate, attemptId }) => {
     const [attempt, setAttempt] = useState(null);
     const [test, setTest] = useState(null);
     const [loading, setLoading] = useState(true);
+    const [view, setView] = useState('summary'); // 'summary' or 'analysis'
+    const [currentQuestion, setCurrentQuestion] = useState({ secIdx: 0, qIdx: 0 });
+    const [revealed, setRevealed] = useState({});
 
     useEffect(() => {
         const fetchData = async () => {
@@ -23,12 +26,8 @@ const ResultAnalysis = ({ navigate, attemptId }) => {
                     const testSnap = await getDoc(testRef);
                     if (testSnap.exists()) {
                         setTest(testSnap.data());
-                    } else {
-                        throw new Error("Test data not found for this attempt.");
-                    }
-                } else {
-                    throw new Error("Attempt data not found.");
-                }
+                    } else { throw new Error("Test data not found for this attempt."); }
+                } else { throw new Error("Attempt data not found."); }
             } catch (error) {
                 console.error("Error fetching results:", error);
                 alert(error.message);
@@ -42,97 +41,151 @@ const ResultAnalysis = ({ navigate, attemptId }) => {
     if (loading) return <div className="text-center text-gray-400">Loading Analysis...</div>;
     if (!attempt || !test) return <div className="text-center text-gray-400">Could not load analysis data.</div>;
 
-    // --- Calculate Scores ---
+    // --- Calculations ---
     const sectionWiseResults = test.sections.map((section, secIdx) => {
-        let correct = 0, incorrect = 0, unattempted = 0;
+        let correct = 0, incorrect = 0, unattempted = 0, time = 0;
         section.questions.forEach((q, qIdx) => {
             const userAnswer = attempt.answers[secIdx]?.[qIdx];
             if (userAnswer === undefined || userAnswer === null) unattempted++;
             else if (userAnswer === q.correctOption) correct++;
             else incorrect++;
+            time += attempt.timeTaken[secIdx]?.[qIdx] || 0;
         });
         const score = (correct * 3) - (incorrect * 1);
-        return { name: section.name, score, correct, incorrect, unattempted };
+        const accuracy = (correct + incorrect) > 0 ? (correct / (correct + incorrect)) * 100 : 0;
+        return { name: section.name, score, correct, incorrect, unattempted, time, accuracy };
     });
 
     const totalScore = sectionWiseResults.reduce((acc, sec) => acc + sec.score, 0);
     const totalCorrect = sectionWiseResults.reduce((acc, sec) => acc + sec.correct, 0);
     const totalIncorrect = sectionWiseResults.reduce((acc, sec) => acc + sec.incorrect, 0);
-    const totalUnattempted = sectionWiseResults.reduce((acc, sec) => acc + sec.unattempted, 0);
+    const totalAttempted = totalCorrect + totalIncorrect;
+    const totalAccuracy = totalAttempted > 0 ? (totalCorrect / totalAttempted) * 100 : 0;
+    const totalTime = sectionWiseResults.reduce((acc, sec) => acc + sec.time, 0);
 
-    // --- Prepare Chart Data ---
-    const chartData = test.sections.flatMap((section, secIdx) => 
-        section.questions.map((q, qIdx) => ({
-            name: `${section.name[0]}${qIdx + 1}`,
-            time: attempt.timeTaken[secIdx]?.[qIdx] || 0,
-        }))
-    );
+    const activeQuestion = test.sections[currentQuestion.secIdx].questions[currentQuestion.qIdx];
+    const userAnswerIndex = attempt.answers[currentQuestion.secIdx]?.[currentQuestion.qIdx];
+    const isCorrect = userAnswerIndex === activeQuestion.correctOption;
+    const isUnattempted = userAnswerIndex === null || userAnswerIndex === undefined;
+    const questionKey = `${currentQuestion.secIdx}-${currentQuestion.qIdx}`;
 
-    return (
-        <div className="max-w-4xl mx-auto bg-gray-800 p-4 sm:p-8 rounded-lg shadow-lg">
-            <h1 className="text-3xl font-bold text-white text-center">Test Analysis: {test.title}</h1>
-            
-            <div className="mt-8 bg-gray-700 rounded-lg p-6">
-                <h2 className="text-2xl font-semibold mb-4 text-center">Score Summary</h2>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
-                    <div className="p-4 bg-gray-600 rounded-lg"><div className="text-3xl font-bold text-white">{totalScore}</div><div className="text-sm text-gray-300">Total Score</div></div>
-                    <div className="p-4 bg-green-800/50 rounded-lg"><div className="text-3xl font-bold text-green-300">{totalCorrect}</div><div className="text-sm text-green-400">Correct</div></div>
-                    <div className="p-4 bg-red-800/50 rounded-lg"><div className="text-3xl font-bold text-red-300">{totalIncorrect}</div><div className="text-sm text-red-400">Incorrect</div></div>
-                    <div className="p-4 bg-gray-600/50 rounded-lg"><div className="text-3xl font-bold text-gray-300">{totalUnattempted}</div><div className="text-sm text-gray-400">Unattempted</div></div>
+    // --- Views ---
+    if (view === 'summary') {
+        return (
+            <div className="max-w-4xl mx-auto bg-gray-800 p-8 rounded-lg shadow-lg animate-fade-in">
+                <h1 className="text-3xl font-bold text-white text-center">Scorecard: {test.title}</h1>
+                <div className="mt-8 bg-gray-700 rounded-lg p-6">
+                    <h2 className="text-2xl font-semibold mb-4 text-center">Overall Performance</h2>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+                        <div className="p-4 bg-gray-600 rounded-lg"><div className="text-3xl font-bold text-white">{totalScore}</div><div className="text-sm text-gray-300">Total Score</div></div>
+                        <div className="p-4 bg-gray-600 rounded-lg"><div className="text-3xl font-bold text-white">{totalAccuracy.toFixed(2)}%</div><div className="text-sm text-gray-300">Accuracy</div></div>
+                        <div className="p-4 bg-gray-600 rounded-lg"><div className="text-3xl font-bold text-white">{Math.floor(totalTime / 60)}m {Math.round(totalTime % 60)}s</div><div className="text-sm text-gray-300">Time Spent</div></div>
+                        <div className="p-4 bg-gray-600 rounded-lg"><div className="text-3xl font-bold text-white">{totalCorrect}/{totalAttempted}</div><div className="text-sm text-gray-300">Attempted</div></div>
+                    </div>
+                </div>
+                <div className="mt-8">
+                     <h2 className="text-2xl font-semibold mb-4 text-center">Sectional Breakdown</h2>
+                     <div className="bg-gray-700 rounded-lg overflow-hidden">
+                        <table className="min-w-full text-center">
+                            <thead className="bg-gray-600">
+                                <tr>
+                                    <th className="py-3 px-4 font-semibold text-sm">Section</th>
+                                    <th className="py-3 px-4 font-semibold text-sm">Score</th>
+                                    <th className="py-3 px-4 font-semibold text-sm">Correct</th>
+                                    <th className="py-3 px-4 font-semibold text-sm">Incorrect</th>
+                                    <th className="py-3 px-4 font-semibold text-sm">Unattempted</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-600">
+                                {sectionWiseResults.map(sec => (
+                                    <tr key={sec.name}>
+                                        <td className="py-4 px-4 font-bold">{sec.name}</td>
+                                        <td className="py-4 px-4">{sec.score}</td>
+                                        <td className="py-4 px-4 text-green-400">{sec.correct}</td>
+                                        <td className="py-4 px-4 text-red-400">{sec.incorrect}</td>
+                                        <td className="py-4 px-4 text-gray-400">{sec.unattempted}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                     </div>
+                </div>
+                <div className="text-center mt-12">
+                    <button onClick={() => setView('analysis')} className="bg-white text-gray-900 px-8 py-3 rounded-md font-semibold hover:bg-gray-200 shadow transition-all transform hover:scale-105">
+                        Analyze Now
+                    </button>
                 </div>
             </div>
-            
-            <div className="mt-8 bg-gray-700 rounded-lg p-6">
-                <h2 className="text-2xl font-semibold mb-4 text-center">Time Analysis (per Question)</h2>
-                <ResponsiveContainer width="100%" height={300}>
-                    <BarChart data={chartData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#555" />
-                        <XAxis dataKey="name" stroke="#ccc" />
-                        <YAxis stroke="#ccc" label={{ value: 'Seconds', angle: -90, position: 'insideLeft', fill: '#ccc' }} />
-                        <Tooltip contentStyle={{ backgroundColor: '#333', border: '1px solid #555' }} />
-                        <Legend />
-                        <Bar dataKey="time" fill="#8884d8" name="Time Taken (s)" />
-                    </BarChart>
-                </ResponsiveContainer>
-            </div>
-            
-            <div className="mt-8">
-                <h2 className="text-2xl font-semibold mb-4">Detailed Solutions</h2>
-                {test.sections.map((section, secIdx) => (
-                    <div key={secIdx} className="mb-8">
-                        <h3 className="text-xl font-bold p-3 bg-gray-700 rounded-t-lg">{section.name} Summary</h3>
-                        <div className="grid grid-cols-4 gap-px bg-gray-700 text-center rounded-b-lg overflow-hidden">
-                             <div className="p-2 bg-gray-800"><div className="font-bold text-white">{sectionWiseResults[secIdx].score}</div><div className="text-xs text-gray-400">Score</div></div>
-                             <div className="p-2 bg-gray-800"><div className="font-bold text-green-400">{sectionWiseResults[secIdx].correct}</div><div className="text-xs text-gray-400">Correct</div></div>
-                             <div className="p-2 bg-gray-800"><div className="font-bold text-red-400">{sectionWiseResults[secIdx].incorrect}</div><div className="text-xs text-gray-400">Incorrect</div></div>
-                             <div className="p-2 bg-gray-800"><div className="font-bold text-gray-300">{sectionWiseResults[secIdx].unattempted}</div><div className="text-xs text-gray-400">Unattempted</div></div>
-                        </div>
+        );
+    }
 
-                        {section.questions.map((q, qIdx) => {
-                            const userAnswerIndex = attempt.answers[secIdx]?.[qIdx];
-                            const isCorrect = userAnswerIndex === q.correctOption;
-                            const isUnattempted = userAnswerIndex === null || userAnswerIndex === undefined;
-                            
-                            return (
-                                <div key={qIdx} className={`border-x border-b border-gray-700 p-4 ${isCorrect ? 'bg-green-900/20' : isUnattempted ? 'bg-gray-800' : 'bg-red-900/20'}`}>
-                                    <p className="font-semibold text-gray-300">Q{qIdx + 1}: {q.questionText}</p>
-                                    {q.questionImageUrl && <img src={q.questionImageUrl} alt="Question" className="my-4 rounded-lg max-w-md"/>}
-                                    <div className="mt-3 text-sm space-y-2">
-                                        <p><strong>Your Answer:</strong> <span className={isCorrect ? 'text-green-400' : isUnattempted ? 'text-gray-500' : 'text-red-400'}>{isUnattempted ? 'Not Attempted' : q.options[userAnswerIndex]}</span></p>
-                                        <p><strong>Correct Answer:</strong> <span className="text-green-400">{q.options[q.correctOption]}</span></p>
-                                    </div>
-                                    <div className="mt-4 p-3 bg-gray-900/50 rounded-md">
-                                        <p className="font-semibold text-sm text-gray-300">Solution:</p>
-                                        <p className="text-sm text-gray-400 whitespace-pre-wrap">{q.solution}</p>
-                                        {q.solutionImageUrl && <img src={q.solutionImageUrl} alt="Solution" className="my-4 rounded-lg max-w-md"/>}
-                                    </div>
-                                </div>
-                            );
-                        })}
+    return (
+        <div className="max-w-7xl mx-auto flex flex-col md:flex-row gap-4">
+            <div className="flex-1 bg-gray-800 shadow-md rounded-lg p-6 overflow-auto" style={{ maxHeight: 'calc(100vh - 120px)' }}>
+                <p className="font-semibold text-gray-300 mb-4">Question {currentQuestion.qIdx + 1}:</p>
+                <p className="text-white whitespace-pre-wrap mb-6">{activeQuestion.questionText}</p>
+                
+                <div className="space-y-3">
+                    {activeQuestion.options.map((option, index) => {
+                        let borderColor = 'border-gray-700';
+                        if (revealed[questionKey] && index === activeQuestion.correctOption) borderColor = 'border-green-500';
+                        else if (revealed[questionKey] && index === userAnswerIndex) borderColor = 'border-red-500';
+
+                        return (
+                            <div key={index} className={`flex items-start p-3 border-2 rounded-lg ${borderColor}`}>
+                                <span className="mr-3">{index + 1}.</span>
+                                <p className="flex-1">{option}</p>
+                            </div>
+                        );
+                    })}
+                </div>
+
+                <div className="mt-6 border-t border-gray-700 pt-4">
+                    {!revealed[questionKey] ? (
+                        <button onClick={() => setRevealed(prev => ({...prev, [questionKey]: 'answer'}))} className="bg-gray-700 px-4 py-2 rounded-md text-sm font-semibold hover:bg-gray-600">Reveal Answer</button>
+                    ) : (
+                        <div>
+                            <p><strong>Your Answer:</strong> <span className={isCorrect ? 'text-green-400' : isUnattempted ? 'text-gray-500' : 'text-red-400'}>{isUnattempted ? 'Not Attempted' : activeQuestion.options[userAnswerIndex]}</span></p>
+                            <p><strong>Correct Answer:</strong> <span className="text-green-400">{activeQuestion.options[activeQuestion.correctOption]}</span></p>
+                            {revealed[questionKey] !== 'solution' && <button onClick={() => setRevealed(prev => ({...prev, [questionKey]: 'solution'}))} className="mt-4 bg-gray-700 px-4 py-2 rounded-md text-sm font-semibold hover:bg-gray-600">Show Explanation</button>}
+                        </div>
+                    )}
+                </div>
+
+                {revealed[questionKey] === 'solution' && (
+                    <div className="mt-4 p-4 bg-gray-900/50 rounded-md">
+                        <p className="font-semibold text-sm text-gray-300">Explanation:</p>
+                        <p className="text-sm text-gray-400 whitespace-pre-wrap mt-2">{activeQuestion.solution}</p>
+                    </div>
+                )}
+            </div>
+
+            <div className="w-full md:w-80 bg-gray-800 shadow-md rounded-lg p-4">
+                {test.sections.map((section, secIdx) => (
+                    <div key={secIdx} className="mb-4">
+                        <p className="font-bold text-center mb-2">{section.name}</p>
+                        <div className="grid grid-cols-5 gap-2">
+                            {section.questions.map((q, qIdx) => {
+                                const userAnswer = attempt.answers[secIdx]?.[qIdx];
+                                const isCorrect = userAnswer === q.correctOption;
+                                const isUnattempted = userAnswer === null || userAnswer === undefined;
+                                let colorClass = 'bg-gray-600 hover:bg-gray-500'; // Unattempted
+                                if (isCorrect) colorClass = 'bg-green-600 hover:bg-green-500';
+                                else if (!isUnattempted) colorClass = 'bg-red-600 hover:bg-red-500';
+                                
+                                if (currentQuestion.secIdx === secIdx && currentQuestion.qIdx === qIdx) {
+                                    colorClass += ' ring-2 ring-offset-2 ring-offset-gray-800 ring-white';
+                                }
+
+                                return <button key={qIdx} onClick={() => setCurrentQuestion({secIdx, qIdx})} className={`h-9 w-9 flex items-center justify-center rounded-md font-semibold transition-all text-white ${colorClass}`}>{qIdx+1}</button>
+                            })}
+                        </div>
                     </div>
                 ))}
+                 <div className="text-center mt-8 border-t border-gray-700 pt-4">
+                    <button onClick={() => navigate('home')} className="bg-gray-700 text-white px-6 py-2 rounded-lg font-semibold hover:bg-gray-600 w-full">Back to Dashboard</button>
+                </div>
             </div>
-            <div className="text-center mt-8"><button onClick={() => navigate('home')} className="bg-gray-700 text-white px-6 py-3 rounded-lg font-semibold hover:bg-gray-600">Back to Dashboard</button></div>
         </div>
     );
 };
