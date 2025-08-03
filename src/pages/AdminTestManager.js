@@ -36,9 +36,8 @@ const FormTextarea = ({ label, value, onChange, required = false, rows = 3, plac
 const TestEditorModal = ({ isOpen, setIsOpen, testToEdit, onSave }) => {
     const [title, setTitle] = useState('');
     const [description, setDescription] = useState('');
-    const [type, setType] = useState('SECTIONAL');
+    const [type, setType] = useState('TEST');
     const [isFree, setIsFree] = useState(false);
-    const [isPublished, setIsPublished] = useState(false);
     const [sections, setSections] = useState([{ name: SECTIONS[0], duration: 40, questions: [{ questionText: '', options: ['', '', '', ''], correctOption: 0, solution: '', questionImageUrl: '', solutionImageUrl: '' }] }]);
     const [loading, setLoading] = useState(false);
 
@@ -48,20 +47,18 @@ const TestEditorModal = ({ isOpen, setIsOpen, testToEdit, onSave }) => {
             setDescription(testToEdit.description);
             setType(testToEdit.type);
             setIsFree(testToEdit.isFree || false);
-            setIsPublished(testToEdit.isPublished || false);
             setSections(testToEdit.sections.map(s => ({...s, questions: s.questions.map(q => ({...q}))})));
         } else {
             setTitle('');
             setDescription('');
-            setType('SECTIONAL');
+            setType('TEST');
             setIsFree(false);
-            setIsPublished(false);
             setSections([{ name: SECTIONS[0], duration: 40, questions: [{ questionText: '', options: ['', '', '', ''], correctOption: 0, solution: '', questionImageUrl: '', solutionImageUrl: '' }] }]);
         }
     }, [testToEdit, isOpen]);
 
     useEffect(() => {
-        if (type === 'SECTIONAL' && sections.length > 1) {
+        if ((type === 'SECTIONAL' || type === 'TEST') && sections.length > 1) {
             setSections([sections[0]]);
         }
     }, [type, sections]);
@@ -108,8 +105,16 @@ const TestEditorModal = ({ isOpen, setIsOpen, testToEdit, onSave }) => {
     const handleSubmit = async (e) => {
         e.preventDefault();
         setLoading(true);
-        const finalSections = type === 'SECTIONAL' ? [{...sections[0], name: sections[0].name}] : sections;
-        const testData = { title, description, type, isFree, isPublished, sections: finalSections, lastUpdated: serverTimestamp() };
+        const finalSections = (type === 'SECTIONAL' || type === 'TEST') ? [{...sections[0], name: sections[0].name}] : sections;
+        const testData = { 
+            title, 
+            description, 
+            type, 
+            isFree, 
+            isPublished: testToEdit ? testToEdit.isPublished : false,
+            sections: finalSections, 
+            lastUpdated: serverTimestamp() 
+        };
         
         try {
             if (testToEdit) {
@@ -143,6 +148,7 @@ const TestEditorModal = ({ isOpen, setIsOpen, testToEdit, onSave }) => {
                                     <div>
                                         <label className="block text-sm font-medium text-gray-300">Test Type</label>
                                         <select value={type} onChange={e => setType(e.target.value)} className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-white focus:ring focus:ring-gray-500 focus:ring-opacity-50">
+                                            <option value="TEST">Test</option>
                                             <option value="SECTIONAL">Sectional</option>
                                             <option value="MOCK">Full Mock</option>
                                         </select>
@@ -151,7 +157,6 @@ const TestEditorModal = ({ isOpen, setIsOpen, testToEdit, onSave }) => {
                                 <FormTextarea label="Description" value={description} onChange={e => setDescription(e.target.value)} />
                                 <div className="flex items-center space-x-8">
                                     <div className="flex items-center"><Switch checked={isFree} onChange={setIsFree} className={`${isFree ? 'bg-green-500' : 'bg-gray-600'} relative inline-flex items-center h-6 rounded-full w-11`}><span className={`${isFree ? 'translate-x-6' : 'translate-x-1'} inline-block w-4 h-4 transform bg-white rounded-full transition-transform`}/></Switch><label className="ml-2 text-sm font-medium text-gray-300">Free Test</label></div>
-                                    <div className="flex items-center"><Switch checked={isPublished} onChange={setIsPublished} className={`${isPublished ? 'bg-green-500' : 'bg-gray-600'} relative inline-flex items-center h-6 rounded-full w-11`}><span className={`${isPublished ? 'translate-x-6' : 'translate-x-1'} inline-block w-4 h-4 transform bg-white rounded-full transition-transform`}/></Switch><label className="ml-2 text-sm font-medium text-gray-300">Published</label></div>
                                 </div>
                                 
                                 <h3 className="text-lg font-semibold text-white pt-4 border-t border-gray-700">Sections & Questions</h3>
@@ -161,7 +166,7 @@ const TestEditorModal = ({ isOpen, setIsOpen, testToEdit, onSave }) => {
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                             <div>
                                                 <label className="block text-sm font-medium text-gray-300">Section Name</label>
-                                                <select value={section.name} onChange={e => handleSectionChange(secIndex, 'name', e.target.value)} disabled={type === 'MOCK' && sections.length > 1 && SECTIONS.some(s => s === section.name)} className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white">
+                                                <select value={section.name} onChange={e => handleSectionChange(secIndex, 'name', e.target.value)} className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white disabled:opacity-50">
                                                     {SECTIONS.map(s => <option key={s} value={s}>{s}</option>)}
                                                 </select>
                                             </div>
