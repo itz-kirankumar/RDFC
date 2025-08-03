@@ -1,29 +1,24 @@
 import React from 'react';
 
-const SubscriptionPage = () => {
+const SubscriptionPage = ({ navigate, embedded = false }) => {
     
     const plan = {
-        name: 'CAT Premium Access',
+        name: 'Daily RC Practice Program',
         price: '499',
-        originalPrice: '999',
+        originalPrice: '1000',
         features: [
-            '15 Full-Length VARC Sectionals',
-            '15 Full-Length QA Sectionals',
-            '15 Full-Length DILR Sectionals',
-            '20 Full-Length Mock Tests',
-            '90 Daily VARC Tests',
-            '90 Daily QA Tests',
-            '90 Daily DILR Tests',
+            'Daily 10-Minute CAT RC Drills',
+            'Access to all Passages until CAT 2025',
             'Detailed Performance Analytics',
-            'Access to all future test updates'
+            'Mobile-Friendly Interface'
         ],
     };
 
     return (
-        <div className="max-w-4xl mx-auto mt-10 animate-fade-in">
+        <div className={`max-w-4xl mx-auto ${!embedded && 'mt-10'}`}>
             <div className="text-center mb-10">
-                <h1 className="text-4xl font-extrabold text-white">Unlock Your Full Potential</h1>
-                <p className="mt-4 text-lg text-gray-400">You've completed your free trials. Choose a plan to get unlimited access to all our premium tests and features.</p>
+                <h1 className={`font-extrabold text-white ${embedded ? 'text-3xl' : 'text-4xl'}`}>Unlock Your Full Potential</h1>
+                <p className="mt-4 text-lg text-gray-400">Join our daily practice program to master Reading Comprehension.</p>
             </div>
             
             <div className="flex justify-center">
@@ -46,6 +41,9 @@ const SubscriptionPage = () => {
                         <span className="text-5xl font-bold text-white">₹{plan.price}</span>
                         <span className="text-2xl text-gray-400 line-through ml-2">₹{plan.originalPrice}</span>
                     </div>
+                     <div className="text-center my-4">
+                        <p className="text-gray-400">Apply Coupon <span className="font-bold text-amber-300">RDFC</span> for discount!</p>
+                    </div>
 
                     <ul className="mb-8 space-y-4 text-gray-300 flex-grow">
                         {plan.features.map(feature => (
@@ -57,12 +55,18 @@ const SubscriptionPage = () => {
                     </ul>
 
                     <button 
-                        onClick={() => alert("This button is ready for your payment link!")}
+                        onClick={() => alert("This will redirect to your payment link!")}
                         className="mt-auto w-full bg-amber-500 text-gray-900 py-3 rounded-lg font-semibold hover:bg-amber-400 transition-all transform hover:scale-105 text-lg"
                     >
                         Subscribe Now
                     </button>
                     <p className="text-xs text-center text-gray-500 mt-3">Limited seats available at this price.</p>
+
+                    {!embedded && (
+                         <button onClick={() => navigate('home')} className="text-center text-gray-400 hover:text-white mt-6 w-full">
+                            &larr; Back to Dashboard
+                        </button>
+                    )}
                 </div>
             </div>
         </div>
