@@ -7,6 +7,7 @@ import UserDashboard from './pages/UserDashboard';
 import AdminDashboard from './pages/AdminDashboard';
 import AdminTestManager from './pages/AdminTestManager';
 import AdminUserManagement from './pages/AdminUserManagement';
+import CreateTestPage from './pages/CreateTestPage'; // <-- Import the new page
 import TestInterfacePage from './pages/TestInterfacePage';
 import ResultAnalysis from './pages/ResultAnalysis';
 
@@ -37,6 +38,7 @@ const MainRouter = () => {
         switch (currentPage) {
             case 'home': pageComponent = <AdminDashboard navigate={navigate} />; break;
             case 'manageTests': pageComponent = <AdminTestManager navigate={navigate} />; break;
+            case 'createTest': pageComponent = <CreateTestPage navigate={navigate} {...pageData} />; break; // <-- Add route for new page
             case 'userManagement': pageComponent = <AdminUserManagement navigate={navigate} />; break;
             default: pageComponent = <AdminDashboard navigate={navigate} />;
         }

@@ -45,7 +45,7 @@ const UserDashboard = ({ navigate }) => {
         const isAttempted = !!attemptId;
 
         let buttonText = "Start Test";
-        let buttonAction = () => navigate('test', { testId: test.id });
+        let buttonAction = () => navigate('test', { testId: test.id }); // Fullscreen initiated by TestInterfacePage
         let buttonClass = "bg-white text-gray-900 hover:bg-gray-200";
         let isDisabled = isLocked;
 
