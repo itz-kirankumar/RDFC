@@ -12,7 +12,7 @@ const Navbar = ({ navigate }) => {
                         onClick={() => user ? navigate('home') : null} 
                         className={`text-xl sm:text-2xl font-bold text-white tracking-wider ${user ? 'cursor-pointer' : ''}`}
                     >
-                        RDFC<span className="text-gray-400">.blog</span>
+                        RDFC<span className="text-gray-400"> Test</span>
                     </span>
                     {user && userData && (
                         <div className="ml-4 flex items-center">
