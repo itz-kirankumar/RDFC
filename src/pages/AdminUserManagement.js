@@ -1,26 +1,24 @@
 import React, { useState, useEffect, Fragment } from 'react';
-import { collection, doc, updateDoc, Timestamp, serverTimestamp, onSnapshot, setDoc, deleteDoc } from 'firebase/firestore'; 
+import { collection, doc, updateDoc, Timestamp, serverTimestamp, onSnapshot, setDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { Dialog, Transition } from '@headlessui/react';
-import { useAuth } from '../contexts/AuthContext'; 
+import { useAuth } from '../contexts/AuthContext';
 
 // --- Configuration Constants ---
-// REQUIRED_ADMIN_EMAILS is now primarily for display/metrics, not for multi-admin logic
 const REQUIRED_ADMIN_EMAILS = [
     "kiran160703kumar@gmail.com",
     "atalgupta887@gmail.com"
 ];
 
 // Helper function to process user data
-const processUserData = (docSnap) => { 
+const processUserData = (docSnap) => {
     const data = docSnap.data();
-    return { 
-        id: docSnap.id, 
+    return {
+        id: docSnap.id,
         ...data,
         isSubscribed: data.isSubscribed || false,
         expiryDate: data.expiryDate || null,
         subscribedAt: data.subscribedAt || null,
-        // No more 'settledByAdmins' field on user document itself for individual tracking
     };
 };
 
@@ -50,7 +48,7 @@ const UserEditModal = ({ isOpen, setIsOpen, user, handleGrantAccess, handleRevok
                     <Dialog.Panel className="w-full max-w-md transform overflow-hidden rounded-2xl bg-gray-800 border border-gray-700 p-6 text-left align-middle shadow-xl transition-all">
                         <Dialog.Title as="h3" className="text-lg font-medium leading-6 text-white">Manage Premium Access</Dialog.Title>
                         <div className="mt-2"><p className="text-sm text-gray-400">Manage subscription for {user.email}</p></div>
-                        
+
                         <div className="mt-4 space-y-4">
                             <div>
                                 <label className="block text-sm font-medium text-gray-300">Set Validity (in days)</label>
@@ -80,7 +78,7 @@ const UserEditModal = ({ isOpen, setIsOpen, user, handleGrantAccess, handleRevok
 // --- User Row Component (for 'All Users' tab) ---
 const UserRow = ({ user, handleOpenModal }) => {
     return (
-        <tr key={user.id}> 
+        <tr key={user.id}>
             <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">{user.email}</td>
             <td className="px-6 py-4 whitespace-nowrap text-sm">
                 <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${user.isSubscribed ? 'bg-green-800 text-green-100' : 'bg-gray-700 text-gray-300'}`}>
@@ -101,11 +99,11 @@ const UserRow = ({ user, handleOpenModal }) => {
 };
 
 // --- Premium User Row Component (for 'Premium Users' tab, with individual admin settlement) ---
-const PremiumUserRow = ({ user, mySettledUsers, handleToggleMySettledStatus }) => {
+const PremiumUserRow = ({ user, mySettledUsers, handleToggleMySettledStatus, handleOpenModal }) => {
     const isSettledByMe = mySettledUsers.includes(user.id);
 
     return (
-        <tr key={user.id}> 
+        <tr key={user.id}>
             <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">{user.email}</td>
             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400">
                 {user.subscribedAt ? user.subscribedAt.toDate().toLocaleDateString() : 'N/A'}
@@ -115,13 +113,16 @@ const PremiumUserRow = ({ user, mySettledUsers, handleToggleMySettledStatus }) =
             </td>
             {/* Display only THIS admin's status */}
             <td className="px-4 py-4 whitespace-nowrap text-sm">
-                <button 
+                <button
                     onClick={() => handleToggleMySettledStatus(user.id, !isSettledByMe)}
-                    className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full 
+                    className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full
                         ${isSettledByMe ? 'bg-blue-800 text-blue-100' : 'bg-orange-700 text-orange-100'} hover:opacity-80`}
                 >
                     {isSettledByMe ? 'Settled' : 'Not Settled'}
                 </button>
+            </td>
+            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                <button onClick={() => handleOpenModal(user)} className="text-gray-300 hover:text-white">Manage Access</button>
             </td>
         </tr>
     );
@@ -129,17 +130,19 @@ const PremiumUserRow = ({ user, mySettledUsers, handleToggleMySettledStatus }) =
 
 // --- Main AdminUserManagement Component ---
 export default function AdminUserManagement() {
-    const { userData } = useAuth(); 
+    const { userData } = useAuth();
     const [users, setUsers] = useState([]);
-    const [mySettledUsers, setMySettledUsers] = useState([]); // State to hold THIS admin's settled user IDs
-    const [subscriptionCharge, setSubscriptionCharge] = useState(0); 
+    const [mySettledUsers, setMySettledUsers] = useState([]);
+    const [subscriptionCharge, setSubscriptionCharge] = useState(0);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedUser, setSelectedUser] = useState(null);
-    const [isModalOpen, setIsModalOpen] = useState(false); 
-    const [activeTab, setActiveTab] = useState('all'); 
-    const [validityDays, setValidityDays] = useState(30); 
-    const [newSubscriptionCharge, setNewSubscriptionCharge] = useState(''); // For updating charge
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [activeTab, setActiveTab] = useState('all');
+    const [validityDays, setValidityDays] = useState(30);
+    const [newSubscriptionCharge, setNewSubscriptionCharge] = useState('');
+    const [currentPage, setCurrentPage] = useState(1);
+    const usersPerPage = 10;
 
     useEffect(() => {
         // Listener for Subscription Settings
@@ -148,7 +151,7 @@ export default function AdminUserManagement() {
             if (docSnap.exists()) {
                 const currentCharge = docSnap.data().charge || 0;
                 setSubscriptionCharge(currentCharge);
-                setNewSubscriptionCharge(currentCharge.toString()); // Set input field to current value
+                setNewSubscriptionCharge(currentCharge.toString());
             } else {
                 setDoc(subscriptionSettingsRef, { charge: 499 }).then(() => {
                     setSubscriptionCharge(499);
@@ -171,10 +174,10 @@ export default function AdminUserManagement() {
         });
 
         // Listener for THIS ADMIN's settled users
-        if (userData?.uid) { 
+        if (userData?.uid) {
             const mySettledUsersColRef = collection(db, 'adminSettings', userData.uid, 'settledUsers');
             const unsubscribeMySettledUsers = onSnapshot(mySettledUsersColRef, (snapshot) => {
-                const settledUserIds = snapshot.docs.map(doc => doc.id); 
+                const settledUserIds = snapshot.docs.map(doc => doc.id);
                 setMySettledUsers(settledUserIds);
             }, (error) => {
                 console.error("Error fetching admin's settled users:", error);
@@ -182,7 +185,7 @@ export default function AdminUserManagement() {
             return () => {
                 unsubscribeSettings();
                 unsubscribeUsers();
-                unsubscribeMySettledUsers(); 
+                unsubscribeMySettledUsers();
             };
         }
 
@@ -194,25 +197,22 @@ export default function AdminUserManagement() {
 
     const handleOpenModal = (user) => {
         setSelectedUser(user);
-        setValidityDays(30); 
-        setIsModalOpen(true); 
+        setValidityDays(30);
+        setIsModalOpen(true);
     };
 
     const handleGrantAccess = async (userId, userEmail, days) => {
         try {
             const userRef = doc(db, 'users', userId);
-            const mySettledUserRef = doc(db, 'adminSettings', userData.uid, 'settledUsers', userId);
-            
+
             const updatedUserRefData = {
                 isSubscribed: true,
                 expiryDate: Timestamp.fromDate(new Date(Date.now() + days * 24 * 60 * 60 * 1000)),
-                subscribedAt: users.find(u => u.id === userId)?.subscribedAt || serverTimestamp(), 
+                subscribedAt: users.find(u => u.id === userId)?.subscribedAt || serverTimestamp(),
             };
             await updateDoc(userRef, updatedUserRefData);
 
-            await setDoc(mySettledUserRef, { timestamp: serverTimestamp() }); 
-
-            alert(`Access granted to ${userEmail} for ${days} days and marked as settled by you.`);
+            alert(`Access granted to ${userEmail} for ${days} days.`);
             setIsModalOpen(false);
         } catch (error) {
             console.error("Error granting access:", error);
@@ -234,8 +234,8 @@ export default function AdminUserManagement() {
                 await updateDoc(userRef, updatedUserRefData);
 
                 // Delete from this admin's settled list upon revoke
-                await deleteDoc(mySettledUserRef); 
-                
+                await deleteDoc(mySettledUserRef);
+
                 alert(`Access revoked for ${userEmail}.`);
                 setIsModalOpen(false);
             } catch (error) {
@@ -282,14 +282,22 @@ export default function AdminUserManagement() {
         return matchesSearch && matchesTab;
     });
 
+    // Pagination logic
+    const indexOfLastUser = currentPage * usersPerPage;
+    const indexOfFirstUser = indexOfLastUser - usersPerPage;
+    const currentUsers = filteredUsers.slice(indexOfFirstUser, indexOfLastUser);
+    const totalPages = Math.ceil(filteredUsers.length / usersPerPage);
+    const paginate = (pageNumber) => setCurrentPage(pageNumber);
+
     const premiumUsers = users.filter(user => user.isSubscribed);
-    
+
+    const totalUsersCount = users.length;
     const totalPremiumUsers = premiumUsers.length;
     const totalEarningsExpected = totalPremiumUsers * subscriptionCharge;
 
     const oneWeekAgo = new Date();
     oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
-    const weeklyPremiumUsers = premiumUsers.filter(user => 
+    const weeklyPremiumUsers = premiumUsers.filter(user =>
         user.subscribedAt && user.subscribedAt.toDate() >= oneWeekAgo
     );
 
@@ -304,7 +312,7 @@ export default function AdminUserManagement() {
     return (
         <div className="max-w-7xl mx-auto">
             <h1 className="text-3xl font-bold text-white mb-6">User Management</h1>
-            
+
             {/* Financial Overview Section */}
             <div className="bg-gray-800 p-6 rounded-lg shadow-md mb-8">
                 <h2 className="text-2xl font-bold text-white mb-4">Financial Overview</h2>
@@ -313,20 +321,24 @@ export default function AdminUserManagement() {
                         <p className="text-gray-400 text-sm">Subscription Charge (per user)</p>
                         <p className="text-white text-2xl font-bold">₹{subscriptionCharge}</p>
                         <div className="mt-2 flex items-center justify-center">
-                            <FormInput 
-                                type="number" 
-                                value={newSubscriptionCharge} 
-                                onChange={(e) => setNewSubscriptionCharge(e.target.value)} 
+                            <FormInput
+                                type="number"
+                                value={newSubscriptionCharge}
+                                onChange={(e) => setNewSubscriptionCharge(e.target.value)}
                                 placeholder="New Charge"
                                 className="w-24 mr-2"
                             />
-                            <button 
-                                onClick={handleUpdateSubscriptionCharge} 
+                            <button
+                                onClick={handleUpdateSubscriptionCharge}
                                 className="bg-white text-gray-900 px-3 py-1 rounded-md text-xs font-semibold hover:bg-gray-200"
                             >
                                 Update
                             </button>
                         </div>
+                    </div>
+                    <div className="bg-gray-700 p-4 rounded-lg text-center">
+                        <p className="text-gray-400 text-sm">Total Users</p>
+                        <p className="text-white text-2xl font-bold">{totalUsersCount}</p>
                     </div>
                     <div className="bg-gray-700 p-4 rounded-lg text-center">
                         <p className="text-gray-400 text-sm">Total Premium Users</p>
@@ -348,39 +360,39 @@ export default function AdminUserManagement() {
                         <p className="text-gray-400 text-sm">Total Earnings (Expected)</p>
                         <p className="text-white text-2xl font-bold">₹{totalEarningsExpected.toLocaleString()}</p>
                     </div>
-                    <div className="bg-gray-700 p-4 rounded-lg text-center col-span-full md:col-span-1">
+                    <div className="bg-gray-700 p-4 rounded-lg text-center">
                         <p className="text-gray-400 text-sm">Remaining to Settle </p>
                         <p className="text-red-400 text-2xl font-bold">₹{remainingToSettleAmountByMe.toLocaleString()}</p>
                     </div>
-                    <div className="bg-gray-700 p-4 rounded-lg text-center col-span-full md:col-span-1">
+                    <div className="bg-gray-700 p-4 rounded-lg text-center">
                         <p className="text-gray-400 text-sm">My 50% Share (of Total Earnings)</p>
                         <p className="text-white text-2xl font-bold">₹{myShareOfTotalEarnings.toLocaleString()}</p>
                     </div>
-                     <div className="bg-gray-700 p-4 rounded-lg text-center col-span-full md:col-span-1">
+                     <div className="bg-gray-700 p-4 rounded-lg text-center">
                         <p className="text-gray-400 text-sm">My 50% Share (of Remaining to Settle)</p>
                         <p className="text-white text-2xl font-bold">₹{myShareOfRemainingToSettle.toLocaleString()}</p>
                     </div>
                 </div>
             </div>
 
-            <input 
+            <input
                 type="text"
                 placeholder="Search by user email..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full p-2 rounded-md bg-gray-700 text-white border border-gray-600 mb-4 focus:border-white focus:ring focus:ring-gray-500 focus:ring-opacity-50"
             />
-            
+
             {/* Tabs for filtering users */}
             <div className="flex mb-4">
-                <button 
-                    onClick={() => setActiveTab('all')} 
+                <button
+                    onClick={() => setActiveTab('all')}
                     className={`px-4 py-2 rounded-t-md font-semibold text-sm ${activeTab === 'all' ? 'bg-gray-700 text-white' : 'bg-gray-800 text-gray-400 hover:text-white'}`}
                 >
                     All Users
                 </button>
-                <button 
-                    onClick={() => setActiveTab('premium')} 
+                <button
+                    onClick={() => setActiveTab('premium')}
                     className={`px-4 py-2 rounded-t-md font-semibold text-sm ${activeTab === 'premium' ? 'bg-gray-700 text-white' : 'bg-gray-800 text-gray-400 hover:text-white'}`}
                 >
                     Premium Users
@@ -394,32 +406,52 @@ export default function AdminUserManagement() {
                         {loading ? (
                             <p className="p-6 text-center text-gray-400">Loading users...</p>
                         ) : (
-                            <table className="min-w-full divide-y divide-gray-700">
-                                <thead className="bg-gray-700">
-                                    <tr>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Email</th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Subscription Status</th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Subscribed At</th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Expiry Date</th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="bg-gray-800 divide-y divide-gray-700">
-                                    {filteredUsers.length > 0 ? (
-                                        filteredUsers.map(user => (
-                                            <UserRow 
-                                                key={user.id} 
-                                                user={user} 
-                                                handleOpenModal={handleOpenModal} 
-                                            />
-                                        ))
-                                    ) : (
+                            <>
+                                <table className="min-w-full divide-y divide-gray-700">
+                                    <thead className="bg-gray-700">
                                         <tr>
-                                            <td colSpan={5} className="px-6 py-4 text-center text-gray-400">No users found.</td>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Email</th>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Subscription Status</th>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Subscribed At</th>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Expiry Date</th>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Actions</th>
                                         </tr>
-                                    )}
-                                </tbody>
-                            </table>
+                                    </thead>
+                                    <tbody className="bg-gray-800 divide-y divide-gray-700">
+                                        {currentUsers.length > 0 ? (
+                                            currentUsers.map(user => (
+                                                <UserRow
+                                                    key={user.id}
+                                                    user={user}
+                                                    handleOpenModal={handleOpenModal}
+                                                />
+                                            ))
+                                        ) : (
+                                            <tr>
+                                                <td colSpan={5} className="px-6 py-4 text-center text-gray-400">No users found.</td>
+                                            </tr>
+                                        )}
+                                    </tbody>
+                                </table>
+                                {/* Pagination Controls */}
+                                <div className="p-4 flex justify-between items-center bg-gray-700">
+                                    <button
+                                        onClick={() => paginate(currentPage - 1)}
+                                        disabled={currentPage === 1}
+                                        className="px-4 py-2 rounded-md bg-gray-600 text-white disabled:opacity-50"
+                                    >
+                                        Previous
+                                    </button>
+                                    <span className="text-gray-300">Page {currentPage} of {totalPages}</span>
+                                    <button
+                                        onClick={() => paginate(currentPage + 1)}
+                                        disabled={currentPage === totalPages}
+                                        className="px-4 py-2 rounded-md bg-gray-600 text-white disabled:opacity-50"
+                                    >
+                                        Next
+                                    </button>
+                                </div>
+                            </>
                         )}
                     </div>
                 </div>
@@ -432,46 +464,68 @@ export default function AdminUserManagement() {
                         {loading ? (
                             <p className="p-6 text-center text-gray-400">Loading users...</p>
                         ) : (
-                            <table className="min-w-full divide-y divide-gray-700">
-                                <thead className="bg-gray-700">
-                                    <tr>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Email</th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Subscribed At</th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Expiry Date</th>
-                                        {/* Display only one 'My Status' column */}
-                                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase">My Status</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="bg-gray-800 divide-y divide-gray-700">
-                                    {premiumUsers.length > 0 ? (
-                                        premiumUsers.map(user => (
-                                            <PremiumUserRow 
-                                                key={user.id} 
-                                                user={user} 
-                                                mySettledUsers={mySettledUsers} 
-                                                handleToggleMySettledStatus={handleToggleMySettledStatus} 
-                                            />
-                                        ))
-                                    ) : (
+                            <>
+                                <table className="min-w-full divide-y divide-gray-700">
+                                    <thead className="bg-gray-700">
                                         <tr>
-                                            <td colSpan={4} className="px-6 py-4 text-center text-gray-400">No premium users found.</td> 
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Email</th>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Subscribed At</th>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Expiry Date</th>
+                                            {/* Display only one 'My Status' column */}
+                                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase">My Status</th>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Actions</th>
                                         </tr>
-                                    )}
-                                </tbody>
-                            </table>
+                                    </thead>
+                                    <tbody className="bg-gray-800 divide-y divide-gray-700">
+                                        {currentUsers.length > 0 ? (
+                                            currentUsers.map(user => (
+                                                <PremiumUserRow
+                                                    key={user.id}
+                                                    user={user}
+                                                    mySettledUsers={mySettledUsers}
+                                                    handleToggleMySettledStatus={handleToggleMySettledStatus}
+                                                    handleOpenModal={handleOpenModal}
+                                                />
+                                            ))
+                                        ) : (
+                                            <tr>
+                                                <td colSpan={5} className="px-6 py-4 text-center text-gray-400">No premium users found.</td>
+                                            </tr>
+                                        )}
+                                    </tbody>
+                                </table>
+                                {/* Pagination Controls */}
+                                <div className="p-4 flex justify-between items-center bg-gray-700">
+                                    <button
+                                        onClick={() => paginate(currentPage - 1)}
+                                        disabled={currentPage === 1}
+                                        className="px-4 py-2 rounded-md bg-gray-600 text-white disabled:opacity-50"
+                                    >
+                                        Previous
+                                    </button>
+                                    <span className="text-gray-300">Page {currentPage} of {totalPages}</span>
+                                    <button
+                                        onClick={() => paginate(currentPage + 1)}
+                                        disabled={currentPage === totalPages}
+                                        className="px-4 py-2 rounded-md bg-gray-600 text-white disabled:opacity-50"
+                                    >
+                                        Next
+                                    </button>
+                                </div>
+                            </>
                         )}
                     </div>
                 </div>
             )}
 
-            <UserEditModal 
-                isOpen={isModalOpen} 
-                setIsOpen={setIsModalOpen} 
+            <UserEditModal
+                isOpen={isModalOpen}
+                setIsOpen={setIsModalOpen}
                 user={selectedUser}
-                handleGrantAccess={handleGrantAccess} 
-                handleRevokeAccess={handleRevokeAccess} 
-                validityDays={validityDays} 
-                setValidityDays={setValidityDays} 
+                handleGrantAccess={handleGrantAccess}
+                handleRevokeAccess={handleRevokeAccess}
+                validityDays={validityDays}
+                setValidityDays={setValidityDays}
             />
         </div>
     );
