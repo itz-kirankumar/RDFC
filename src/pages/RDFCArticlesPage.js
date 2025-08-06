@@ -8,8 +8,8 @@ const RDFCArticlesPage = ({ navigate }) => {
     const [linkedArticles, setLinkedArticles] = useState({});
     const [loading, setLoading] = useState(true);
     const [articleUrl, setArticleUrl] = useState('');
-    const [articleName, setArticleName] = useState(''); // New state for article name
-    const [articleDescription, setArticleDescription] = useState(''); // New state for article description
+    const [articleName, setArticleName] = useState('');
+    const [articleDescription, setArticleDescription] = useState('');
     const [selectedTestId, setSelectedTestId] = useState('');
     const [isEditing, setIsEditing] = useState(false);
 
@@ -44,7 +44,7 @@ const RDFCArticlesPage = ({ navigate }) => {
 
         return () => unsubscribe();
     }, []);
-    
+
     // Auto-populate form when selecting a test that already has a linked article
     useEffect(() => {
         if (selectedTestId) {
@@ -77,7 +77,7 @@ const RDFCArticlesPage = ({ navigate }) => {
 
         try {
             const articleRef = doc(db, 'rdfcArticles', selectedTestId);
-            await setDoc(articleRef, { 
+            await setDoc(articleRef, {
                 url: articleUrl,
                 name: articleName,
                 description: articleDescription
@@ -111,12 +111,20 @@ const RDFCArticlesPage = ({ navigate }) => {
         return <div className="text-center text-gray-400">Loading...</div>;
     }
 
+    // Filter tests to show only unlinked ones
+    const unlinkedTests = tests.filter(test => !linkedArticles[test.id]);
+    // Filter articles to show only linked ones
+    const linkedArticleList = Object.values(linkedArticles).map(article => ({
+        ...article,
+        testTitle: tests.find(test => test.id === article.id)?.title || 'N/A'
+    }));
+
     return (
         <div className="max-w-7xl mx-auto">
             <div className="flex justify-between items-center mb-6">
                 <h1 className="text-3xl font-bold text-white">RDFC Articles Manager</h1>
-                <button 
-                    onClick={() => navigate('home')} 
+                <button
+                    onClick={() => navigate('home')}
                     className="bg-gray-800 text-white px-6 py-2 rounded-md font-semibold hover:bg-gray-700 shadow transition-all transform hover:scale-105"
                 >
                     &larr; Back to Dashboard
@@ -127,15 +135,18 @@ const RDFCArticlesPage = ({ navigate }) => {
                 <h2 className="text-2xl font-bold text-white mb-4">{isEditing ? 'Edit Article Link' : 'Link New Article'}</h2>
                 <form onSubmit={handleLinkArticle} className="space-y-4">
                     <div className="flex flex-col md:flex-row gap-4">
-                        <select 
-                            value={selectedTestId} 
-                            onChange={(e) => setSelectedTestId(e.target.value)} 
+                        <select
+                            value={selectedTestId}
+                            onChange={(e) => setSelectedTestId(e.target.value)}
                             className="flex-1 rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-white focus:ring focus:ring-gray-500 focus:ring-opacity-50"
                         >
                             <option value="">Select a Test</option>
-                            {tests.map(test => (
+                            {unlinkedTests.map(test => (
                                 <option key={test.id} value={test.id}>{test.title}</option>
                             ))}
+                            {isEditing && selectedTestId && (
+                                <option key={selectedTestId} value={selectedTestId}>{tests.find(test => test.id === selectedTestId)?.title}</option>
+                            )}
                         </select>
                         <input
                             type="url"
@@ -182,33 +193,24 @@ const RDFCArticlesPage = ({ navigate }) => {
                             </tr>
                         </thead>
                         <tbody className="bg-gray-800 divide-y divide-gray-700">
-                            {tests.map(test => {
-                                const article = linkedArticles[test.id];
-                                return (
-                                    <tr key={test.id}>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">{test.title}</td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400">
-                                            {article ? article.name : 'N/A'}
-                                        </td>
-                                        <td className="px-6 py-4 text-sm text-gray-400">
-                                            {article ? article.description : 'N/A'}
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400">
-                                            {article ? <a href={article.url} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300 truncate">{article.url}</a> : 'N/A'}
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-4">
-                                            {article ? (
-                                                <>
-                                                    <button onClick={() => setSelectedTestId(test.id)} className="text-gray-300 hover:text-white">Edit</button>
-                                                    <button onClick={() => handleUnlinkArticle(test.id)} className="text-red-500 hover:text-red-400">Unlink</button>
-                                                </>
-                                            ) : (
-                                                <span className="text-gray-500">No Link</span>
-                                            )}
-                                        </td>
-                                    </tr>
-                                );
-                            })}
+                            {linkedArticleList.map(article => (
+                                <tr key={article.id}>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">{article.testTitle}</td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400">
+                                        {article.name}
+                                    </td>
+                                    <td className="px-6 py-4 text-sm text-gray-400">
+                                        {article.description}
+                                    </td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400">
+                                        <a href={article.url} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300 truncate">{article.url}</a>
+                                    </td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-4">
+                                        <button onClick={() => setSelectedTestId(article.id)} className="text-gray-300 hover:text-white">Edit</button>
+                                        <button onClick={() => handleUnlinkArticle(article.id)} className="text-red-500 hover:text-red-400">Unlink</button>
+                                    </td>
+                                </tr>
+                            ))}
                         </tbody>
                     </table>
                 </div>
