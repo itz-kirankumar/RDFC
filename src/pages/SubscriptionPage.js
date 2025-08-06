@@ -42,8 +42,24 @@ const SubscriptionPage = ({ navigate, embedded = false }) => {
 
     const plans = [
         {
+            name: 'Read Daily For CAT Program',
+            price: '419',
+            originalPrice: '1000',
+            duration: 'until CAT 2025',
+            features: [
+                { title: 'Deep Dive Articles', description: 'Access to exclusive daily articles to build your reading skills.' },
+                { title: 'Article-Specific RC Tests', description: 'Test your comprehension on each article with dedicated RC questions.' },
+                { title: 'Exclusive WhatsApp Group', description: 'Connect with a community of aspirants and get direct support from our team.' },
+                { title: 'Deep Dive Insights', description: 'Analyze your performance with powerful, in-depth metrics to track your progress.' },
+                { title: 'Full Access until CAT 2025', description: 'All passages and tests are available to you until the CAT 2025 exam.' }
+            ],
+            whatsappMessage: "Hi, RDFC Team!! I wanted to enroll for Read Daily For CAT Program.",
+            isRecommended: true,
+            checkoutLink: `https://wa.me/919092112941?text=${encodeURIComponent("Hi, RDFC Team!! I wanted to enroll for Read Daily For CAT Program.")}`
+        },
+        {
             name: 'RDFC Monthly Subscription',
-            price: '99',
+            price: '129',
             originalPrice: '200',
             duration: 'per month',
             features: [
@@ -53,16 +69,22 @@ const SubscriptionPage = ({ navigate, embedded = false }) => {
                 { title: 'Deep Dive Insights', description: 'Analyze your performance with powerful, in-depth metrics to track your progress.' },
             ],
             whatsappMessage: "Hi, RDFC Team! I wanted to enroll for the RDFC Monthly Subscription.",
+            isRecommended: false,
+            checkoutLink: `https://wa.me/919092112941?text=${encodeURIComponent("Hi, RDFC Team! I wanted to enroll for the RDFC Monthly Subscription.")}`
         }
     ];
 
-    const handleSubscribeClick = (message) => {
-        const whatsappUrl = `https://wa.me/919092112941?text=${encodeURIComponent(message)}`;
-        window.open(whatsappUrl, '_blank');
+    const handleSubscribeClick = (checkoutLink) => {
+        window.open(checkoutLink, '_blank');
     };
 
     const formatTime = (time) => {
         return time < 10 ? `0${time}` : time;
+    };
+
+    const calculateDiscountPercentage = (originalPrice, newPrice) => {
+        const discount = ((parseInt(originalPrice) - parseInt(newPrice)) / parseInt(originalPrice)) * 100;
+        return Math.round(discount);
     };
 
     return (
@@ -74,60 +96,65 @@ const SubscriptionPage = ({ navigate, embedded = false }) => {
                 <p className="mt-4 text-lg text-gray-400">
                     Join our program to master Reading Comprehension and stay ahead.
                 </p>
-                <div className="mt-6 flex justify-center items-center space-x-2 text-white">
+                {/* <div className="mt-6 flex justify-center items-center space-x-2 text-white">
                     <span className="text-red-500 font-bold text-xl">Limited Time Deal:</span>
                     <span className="text-2xl font-mono">{formatTime(timeLeft.hours || 0)}</span>:
                     <span className="text-2xl font-mono">{formatTime(timeLeft.minutes || 0)}</span>:
                     <span className="text-2xl font-mono">{formatTime(timeLeft.seconds || 0)}</span>
-                </div>
+                </div> */}
             </div>
             
-            {/* The change is here: using flexbox to center the single plan */}
-            <div className="flex justify-center">
-                <div className="w-full md:w-1/2">
-                    {plans.map((plan, index) => (
-                        <div key={index} className="border-2 border-amber-400 rounded-lg p-8 flex flex-col bg-gray-900 shadow-2xl relative overflow-hidden">
-                            
-                            <div className="absolute top-4 right-4 bg-red-600 text-white font-semibold py-1 px-3 rounded-full text-xs">
-                                50% OFF!
+            <div className="flex flex-col md:flex-row justify-center items-stretch space-y-8 md:space-y-0 md:space-x-8">
+                {plans.map((plan, index) => (
+                    <div 
+                        key={index} 
+                        className={`w-full md:w-1/2 p-8 flex flex-col bg-gray-900 shadow-2xl relative overflow-hidden rounded-lg
+                            ${plan.isRecommended ? 'border-4 border-amber-400 transform scale-105 transition-transform' : 'border-2 border-gray-700'}`
+                        }
+                    >
+                        {plan.isRecommended && (
+                            <div className="absolute top-0 left-0 bg-amber-400 text-gray-900 font-bold px-3 py-1 text-sm rounded-br-lg">
+                                Save More!
                             </div>
-
-                            <h2 className="text-3xl font-bold text-white text-center mt-4">
-                                {plan.name}
-                            </h2>
-                            
-                            <div className="flex flex-col items-center mt-4">
-                                <div className="flex items-baseline space-x-2">
-                                    <span className="text-4xl font-extrabold text-white">₹{plan.price}</span>
-                                    <span className="text-xl text-gray-500 line-through">₹{plan.originalPrice}</span>
-                                </div>
-                                <p className="text-sm text-gray-400">{plan.duration}</p>
-                            </div>
-
-                            <ul className="my-8 space-y-6 text-gray-300 flex-grow">
-                                {plan.features.map((feature, idx) => (
-                                    <li key={idx} className="flex items-start text-left">
-                                        <svg className="w-6 h-6 text-green-400 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path></svg>
-                                        <div>
-                                            <h3 className="font-semibold text-lg text-white">{feature.title}</h3>
-                                            <p className="text-sm text-gray-400 mt-1">{feature.description}</p>
-                                        </div>
-                                    </li>
-                                ))}
-                            </ul>
-
-                            <button 
-                                onClick={() => handleSubscribeClick(plan.whatsappMessage)}
-                                className="mt-auto w-full bg-amber-500 text-gray-900 py-4 rounded-lg font-bold hover:bg-amber-400 transition-all transform hover:scale-105 text-lg"
-                            >
-                                Subscribe Now
-                            </button>
-                            <p className="text-xs text-center text-gray-500 mt-3">
-                                Limited seats available at this price.
-                            </p>
+                        )}
+                        <div className="absolute top-4 right-4 bg-red-600 text-white font-semibold py-1 px-3 rounded-full text-xs">
+                            {calculateDiscountPercentage(plan.originalPrice, plan.price)}% OFF!
                         </div>
-                    ))}
-                </div>
+                        <h2 className="text-3xl font-bold text-white text-center mt-4">
+                            {plan.name}
+                        </h2>
+                        
+                        <div className="flex flex-col items-center mt-4">
+                            <div className="flex items-baseline space-x-2">
+                                <span className="text-4xl font-extrabold text-white">₹{plan.price}</span>
+                                <span className="text-xl text-gray-500 line-through">₹{plan.originalPrice}</span>
+                            </div>
+                            <p className="text-sm text-gray-400">{plan.duration}</p>
+                        </div>
+
+                        <ul className="my-8 space-y-6 text-gray-300 flex-grow">
+                            {plan.features.map((feature, idx) => (
+                                <li key={idx} className="flex items-start text-left">
+                                    <svg className="w-6 h-6 text-green-400 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path></svg>
+                                    <div>
+                                        <h3 className="font-semibold text-lg text-white">{feature.title}</h3>
+                                        <p className="text-sm text-gray-400 mt-1">{feature.description}</p>
+                                    </div>
+                                </li>
+                            ))}
+                        </ul>
+
+                        <button 
+                            onClick={() => handleSubscribeClick(plan.checkoutLink)}
+                            className="mt-auto w-full bg-amber-500 text-gray-900 py-4 rounded-lg font-bold hover:bg-amber-400 transition-all transform hover:scale-105 text-lg"
+                        >
+                            Subscribe Now
+                        </button>
+                        <p className="text-xs text-center text-gray-500 mt-3">
+                            Limited seats available at this price.
+                        </p>
+                    </div>
+                ))}
             </div>
 
             {!embedded && (
