@@ -42,20 +42,6 @@ const SubscriptionPage = ({ navigate, embedded = false }) => {
 
     const plans = [
         {
-            name: 'Read Daily For CAT Program',
-            price: '499',
-            originalPrice: '1000',
-            duration: 'until CAT 2025',
-            features: [
-                { title: 'Deep Dive Articles', description: 'Access to exclusive daily articles to build your reading skills.' },
-                { title: 'Article-Specific RC Tests', description: 'Test your comprehension on each article with dedicated RC questions.' },
-                { title: 'Exclusive WhatsApp Group', description: 'Connect with a community of aspirants and get direct support from our team.' },
-                { title: 'Deep Dive Insights', description: 'Analyze your performance with powerful, in-depth metrics to track your progress.' },
-                { title: 'Full Access until CAT 2025', description: 'All passages and tests are available to you until the CAT 2025 exam.' }
-            ],
-            whatsappMessage: "Hi, RDFC Team!! I wanted to enroll for Read Daily For CAT Program.",
-        },
-        {
             name: 'RDFC Monthly Subscription',
             price: '99',
             originalPrice: '200',
@@ -96,49 +82,52 @@ const SubscriptionPage = ({ navigate, embedded = false }) => {
                 </div>
             </div>
             
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                {plans.map((plan, index) => (
-                    <div key={index} className="border-2 border-amber-400 rounded-lg p-8 flex flex-col bg-gray-900 shadow-2xl relative overflow-hidden">
-                        
-                        <div className="absolute top-4 right-4 bg-red-600 text-white font-semibold py-1 px-3 rounded-full text-xs">
-                            50% OFF!
-                        </div>
-
-                        <h2 className="text-3xl font-bold text-white text-center mt-4">
-                            {plan.name}
-                        </h2>
-                        
-                        <div className="flex flex-col items-center mt-4">
-                            <div className="flex items-baseline space-x-2">
-                                <span className="text-4xl font-extrabold text-white">₹{plan.price}</span>
-                                <span className="text-xl text-gray-500 line-through">₹{plan.originalPrice}</span>
+            {/* The change is here: using flexbox to center the single plan */}
+            <div className="flex justify-center">
+                <div className="w-full md:w-1/2">
+                    {plans.map((plan, index) => (
+                        <div key={index} className="border-2 border-amber-400 rounded-lg p-8 flex flex-col bg-gray-900 shadow-2xl relative overflow-hidden">
+                            
+                            <div className="absolute top-4 right-4 bg-red-600 text-white font-semibold py-1 px-3 rounded-full text-xs">
+                                50% OFF!
                             </div>
-                            <p className="text-sm text-gray-400">{plan.duration}</p>
+
+                            <h2 className="text-3xl font-bold text-white text-center mt-4">
+                                {plan.name}
+                            </h2>
+                            
+                            <div className="flex flex-col items-center mt-4">
+                                <div className="flex items-baseline space-x-2">
+                                    <span className="text-4xl font-extrabold text-white">₹{plan.price}</span>
+                                    <span className="text-xl text-gray-500 line-through">₹{plan.originalPrice}</span>
+                                </div>
+                                <p className="text-sm text-gray-400">{plan.duration}</p>
+                            </div>
+
+                            <ul className="my-8 space-y-6 text-gray-300 flex-grow">
+                                {plan.features.map((feature, idx) => (
+                                    <li key={idx} className="flex items-start text-left">
+                                        <svg className="w-6 h-6 text-green-400 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path></svg>
+                                        <div>
+                                            <h3 className="font-semibold text-lg text-white">{feature.title}</h3>
+                                            <p className="text-sm text-gray-400 mt-1">{feature.description}</p>
+                                        </div>
+                                    </li>
+                                ))}
+                            </ul>
+
+                            <button 
+                                onClick={() => handleSubscribeClick(plan.whatsappMessage)}
+                                className="mt-auto w-full bg-amber-500 text-gray-900 py-4 rounded-lg font-bold hover:bg-amber-400 transition-all transform hover:scale-105 text-lg"
+                            >
+                                Subscribe Now
+                            </button>
+                            <p className="text-xs text-center text-gray-500 mt-3">
+                                Limited seats available at this price.
+                            </p>
                         </div>
-
-                        <ul className="my-8 space-y-6 text-gray-300 flex-grow">
-                            {plan.features.map((feature, idx) => (
-                                <li key={idx} className="flex items-start text-left">
-                                    <svg className="w-6 h-6 text-green-400 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path></svg>
-                                    <div>
-                                        <h3 className="font-semibold text-lg text-white">{feature.title}</h3>
-                                        <p className="text-sm text-gray-400 mt-1">{feature.description}</p>
-                                    </div>
-                                </li>
-                            ))}
-                        </ul>
-
-                        <button 
-                            onClick={() => handleSubscribeClick(plan.whatsappMessage)}
-                            className="mt-auto w-full bg-amber-500 text-gray-900 py-4 rounded-lg font-bold hover:bg-amber-400 transition-all transform hover:scale-105 text-lg"
-                        >
-                            Subscribe Now
-                        </button>
-                        <p className="text-xs text-center text-gray-500 mt-3">
-                            Limited seats available at this price.
-                        </p>
-                    </div>
-                ))}
+                    ))}
+                </div>
             </div>
 
             {!embedded && (

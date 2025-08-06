@@ -153,9 +153,9 @@ export default function AdminUserManagement() {
                 setSubscriptionCharge(currentCharge);
                 setNewSubscriptionCharge(currentCharge.toString());
             } else {
-                setDoc(subscriptionSettingsRef, { charge: 499 }).then(() => {
-                    setSubscriptionCharge(499);
-                    setNewSubscriptionCharge('499');
+                setDoc(subscriptionSettingsRef, { charge: 99 }).then(() => {
+                    setSubscriptionCharge(99);
+                    setNewSubscriptionCharge('99');
                 }).catch(e => console.error("Error setting default subscription config:", e));
             }
         }, (error) => {
