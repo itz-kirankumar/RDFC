@@ -219,6 +219,10 @@ const LoginPage = ({ navigate }) => {
                     align-items: center;
                 }
 
+                .banner-content-wrapper:hover {
+                    animation-play-state: paused;
+                }
+
                 .banner-item {
                     display: inline-flex;
                     align-items: center;
