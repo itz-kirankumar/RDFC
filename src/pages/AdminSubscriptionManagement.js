@@ -215,6 +215,7 @@ const BannerManagementModal = ({ isOpen, setIsOpen, bannerToEdit, handleSaveBann
     const [bannerText, setBannerText] = useState('');
     const [bannerLink, setBannerLink] = useState('');
     const [bannerImageUrl, setBannerImageUrl] = useState('');
+    const [saleTitle, setSaleTitle] = useState(''); // New state for sale title
     const [isActive, setIsActive] = useState(true);
     const [startTime, setStartTime] = useState('');
     const [endTime, setEndTime] = useState('');
@@ -226,6 +227,7 @@ const BannerManagementModal = ({ isOpen, setIsOpen, bannerToEdit, handleSaveBann
             setBannerText(bannerToEdit.text);
             setBannerLink(bannerToEdit.link);
             setBannerImageUrl(bannerToEdit.imageUrl || '');
+            setSaleTitle(bannerToEdit.saleTitle || ''); // Populate new state
             setIsActive(bannerToEdit.isActive);
             setStartTime(bannerToEdit.startTime?.toDate().toISOString().slice(0, 16) || '');
             setEndTime(bannerToEdit.endTime?.toDate().toISOString().slice(0, 16) || '');
@@ -238,6 +240,7 @@ const BannerManagementModal = ({ isOpen, setIsOpen, bannerToEdit, handleSaveBann
         setBannerText('');
         setBannerLink('');
         setBannerImageUrl('');
+        setSaleTitle(''); // Reset new state
         setIsActive(true);
         setStartTime('');
         setEndTime('');
@@ -254,6 +257,7 @@ const BannerManagementModal = ({ isOpen, setIsOpen, bannerToEdit, handleSaveBann
             text: bannerText,
             link: bannerLink,
             imageUrl: bannerImageUrl,
+            saleTitle: saleTitle, // Include new state in data
             isActive: isActive,
             startTime: startTime ? Timestamp.fromDate(new Date(startTime)) : null,
             endTime: endTime ? Timestamp.fromDate(new Date(endTime)) : null,
@@ -274,6 +278,7 @@ const BannerManagementModal = ({ isOpen, setIsOpen, bannerToEdit, handleSaveBann
                         
                         <div className="mt-4 space-y-4">
                             <FormInput label="Banner Text" type="text" value={bannerText} onChange={e => setBannerText(e.target.value)} placeholder="e.g., Get 50% OFF! Limited time deal!" />
+                            <FormInput label="Sale Title (optional)" type="text" value={saleTitle} onChange={e => setSaleTitle(e.target.value)} placeholder="e.g., MEGA SALE!" /> {/* New input for sale title */}
                             <FormInput label="Banner Link (URL)" type="text" value={bannerLink} onChange={e => setBannerLink(e.target.value)} placeholder="Optional. Link for the banner click." />
                             <FormInput label="Image URL" type="text" value={bannerImageUrl} onChange={e => setBannerImageUrl(e.target.value)} placeholder="Optional. Google Drive URL for banner image" />
                             
@@ -488,6 +493,7 @@ export default function AdminSubscriptionManagement() {
                         <thead className="bg-gray-700">
                             <tr>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Banner Text</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Sale Title</th> {/* New table header */}
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Link</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Image URL</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Start Time</th>
@@ -501,6 +507,7 @@ export default function AdminSubscriptionManagement() {
                                 banners.map(banner => (
                                     <tr key={banner.id}>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-white">{banner.text}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-white">{banner.saleTitle || 'N/A'}</td> {/* Display new field */}
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400">{banner.link || 'N/A'}</td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400 truncate max-w-xs">{banner.imageUrl || 'N/A'}</td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400">
@@ -523,7 +530,7 @@ export default function AdminSubscriptionManagement() {
                                 ))
                             ) : (
                                 <tr>
-                                    <td colSpan="7" className="px-6 py-4 text-center text-gray-400">No banners found.</td>
+                                    <td colSpan="8" className="px-6 py-4 text-center text-gray-400">No banners found.</td>
                                 </tr>
                             )}
                         </tbody>

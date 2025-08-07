@@ -44,7 +44,7 @@ const CountdownTimer = ({ targetDate, offerName, isFlashing = false }) => {
     }
 
     return (
-        <span className={`ml-4 text-red-300 font-bold text-sm ${isFlashing ? 'animate-flash' : ''}`}>
+        <span className={`ml-4 bg-gradient-to-r from-red-600 via-red-400 to-red-600 text-transparent bg-clip-text font-bold text-sm animate-shine`}>
             {offerName || 'Ends in'}: {timeLeft.days ? `${timeLeft.days}d ` : ''}
             {formatTime(timeLeft.hours)}:
             {formatTime(timeLeft.minutes)}:
@@ -65,7 +65,7 @@ const LoginPage = ({ navigate }) => {
             setLoading(true);
             try {
                 const q = query(
-                    collection(db, 'tests'), 
+                    collection(db, 'tests'),
                     where("isFree", "==", true),
                     where("isPublished", "==", true)
                 );
@@ -85,7 +85,7 @@ const LoginPage = ({ navigate }) => {
     useEffect(() => {
         const bannersCol = collection(db, 'banners');
         const qBanners = query(
-            bannersCol, 
+            bannersCol,
             where('isActive', '==', true),
             orderBy('createdAt', 'desc') // Order by creation time to maintain some consistency
         );
@@ -96,7 +96,7 @@ const LoginPage = ({ navigate }) => {
             const filteredBanners = fetchedBanners.filter(banner => {
                 const startTime = banner.startTime?.toDate();
                 const endTime = banner.endTime?.toDate();
-                
+
                 const isStarted = !startTime || now >= startTime;
                 const isNotEnded = !endTime || now <= endTime;
 
@@ -130,7 +130,7 @@ const LoginPage = ({ navigate }) => {
         const bannerContent = (
             <div className="flex items-center justify-center p-3 text-center text-sm font-semibold flex-shrink-0">
                 {banner.imageUrl && <img src={banner.imageUrl} alt="banner" className="h-6 inline-block mr-2 object-contain" onError={(e) => e.target.style.display='none'} />}
-                <span className="bg-gradient-to-r from-gray-900 to-gray-700 text-transparent bg-clip-text"> {/* Dark gradient text for banner */}
+                <span className="bg-gradient-to-r from-gray-200 via-white to-gray-200 text-transparent bg-clip-text animate-shine">
                     {banner.text}
                 </span>
                 {banner.endTime && new Date(banner.endTime.toDate()) > new Date() && (
@@ -186,38 +186,47 @@ const LoginPage = ({ navigate }) => {
                     50% { opacity: 0.5; }
                 }
 
+                @keyframes shine {
+                    0% { background-position: -200% 0; }
+                    100% { background-position: 200% 0; }
+                }
+
+                .animate-shine {
+                    background-size: 200% auto;
+                    animation: shine 5s linear infinite;
+                }
+
                 .banner-container {
                     width: 100%;
                     overflow: hidden;
                     white-space: nowrap;
-                    background-color: #dc2626; /* Red background */
-                    background-image: repeating-linear-gradient(45deg, #ef4444 0, #ef4444 10px, #dc2626 10px, #dc2626 20px); /* Red checkered background */
+                    background-color: #1a202c;
                     box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
-                    position: fixed; /* Fixed to the viewport */
+                    position: fixed;
                     top: 0;
                     left: 0;
-                    z-index: 1000; /* Very high z-index to be always on top */
-                    height: 40px; /* Explicit height for the banner */
+                    z-index: 1000;
+                    height: 40px;
                 }
 
                 .banner-content-wrapper {
                     display: inline-block;
-                    animation: slide 30s linear infinite; /* Adjust duration as needed */
-                    padding: 8px 0; /* Add some vertical padding */
-                    min-width: 400%; /* Ensure enough content to scroll seamlessly */
-                    height: 100%; /* Ensure wrapper takes full height of container */
-                    display: flex; /* Use flex to vertically center content */
-                    align-items: center; /* Vertically center content */
+                    animation: slide 30s linear infinite;
+                    padding: 8px 0;
+                    min-width: 400%;
+                    height: 100%;
+                    display: flex;
+                    align-items: center;
                 }
 
                 .banner-item {
                     display: inline-flex;
                     align-items: center;
-                    margin-right: 80px; /* Increased space between duplicated banners for better flow */
+                    margin-right: 80px;
                     text-shadow: 1px 1px 2px rgba(0,0,0,0.3);
                 }
                 .banner-item:last-child {
-                    margin-right: 0; /* No margin after the last item in the group */
+                    margin-right: 0;
                 }
                 `}
             </style>
@@ -227,7 +236,7 @@ const LoginPage = ({ navigate }) => {
                 <div className="banner-container">
                     <div className="banner-content-wrapper">
                         {/* Duplicate banners multiple times for seamless infinite scroll */}
-                        {Array(40).fill(null).map((_, i) => ( // Increased duplication to 40 times
+                        {Array(40).fill(null).map((_, i) => (
                             activeBanners.map(banner => renderBannerItem(banner))
                         ))}
                     </div>
@@ -235,8 +244,8 @@ const LoginPage = ({ navigate }) => {
             )}
 
             {/* Navbar is now positioned below the banner dynamically */}
-            <Navbar navigate={navigate} bannerHeight={bannerHeight} /> {/* Pass bannerHeight to Navbar */}
-            <main style={{ paddingTop: `${bannerHeight + 64}px` }}> {/* Dynamic padding-top to account for banner and Navbar */}
+            <Navbar navigate={navigate} bannerHeight={bannerHeight} />
+            <main style={{ paddingTop: `${bannerHeight + 64}px` }}>
                 {/* Hero Section */}
                 <div className="relative pb-32 flex content-center items-center justify-center min-h-[75vh] lg:min-h-[85vh] bg-gray-950">
                     <div className="absolute top-0 w-full h-full bg-grid z-0">
@@ -291,7 +300,7 @@ const LoginPage = ({ navigate }) => {
                             </p>
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                            {loading ? <p className="text-center col-span-3 text-gray-400">Loading free tests...</p> 
+                            {loading ? <p className="text-center col-span-3 text-gray-400">Loading free tests...</p>
                                      : freeTests.length > 0 ? freeTests.map(test => (
                                 <div key={test.id} className="bg-gray-950 rounded-lg shadow-lg p-6 flex flex-col justify-between hover:shadow-2xl transition-all">
                                     <div>
@@ -310,11 +319,11 @@ const LoginPage = ({ navigate }) => {
                 {/* Subscription Section */}
                 <section className="py-20 bg-gray-950">
                     <div className="container mx-auto px-4">
-                        <SubscriptionPage embedded={true} /> {/* Pass embedded prop */}
+                        <SubscriptionPage embedded={true} />
                     </div>
                 </section>
             </main>
-            <footer className="bg-gray-900 pt-8 pb-6"> {/* Corrected closing brace here */}
+            <footer className="bg-gray-900 pt-8 pb-6">
                 <div className="container mx-auto px-4">
                     <div className="flex flex-wrap items-center md:justify-between justify-center">
                         <div className="w-full md:w-4/12 px-4 mx-auto text-center">
