@@ -13,7 +13,8 @@ import ResultAnalysis from './pages/ResultAnalysis';
 import RDFCArticlesPage from './pages/RDFCArticlesPage';
 import RDFCArticleViewer from './pages/RDFCArticleViewer';
 import AllTestsPage from './pages/AllTestsPage';
-
+import Earnings from './pages/Earnings'; // Earnings is now a dedicated page
+import AdminSubscriptionManagement from './pages/AdminSubscriptionManagement'; // New: Admin Subscription Management page
 
 const MainRouter = () => {
     const { user, userData, loading } = useAuth();
@@ -44,6 +45,8 @@ const MainRouter = () => {
             case 'createTest': pageComponent = <CreateTestPage navigate={navigate} {...pageData} />; break;
             case 'userManagement': pageComponent = <AdminUserManagement navigate={navigate} />; break;
             case 'manageRDFCArticles': pageComponent = <RDFCArticlesPage navigate={navigate} />; break;
+            case 'earnings': pageComponent = <Earnings navigate={navigate} />; break;
+            case 'manageSubscriptions': pageComponent = <AdminSubscriptionManagement navigate={navigate} />; break; // New: Route for Admin Subscription Management
             default: pageComponent = <AdminDashboard navigate={navigate} />;
         }
     } else {
@@ -62,7 +65,9 @@ const MainRouter = () => {
         <div className="bg-gray-900 text-white min-h-screen font-sans antialiased">
             <Navbar navigate={navigate} />
             {user && <div className="h-16 w-full"></div>}
-            <main className="p-4 sm:p-6 md:p-8">{pageComponent}</main>
+            <main className="p-4 sm:p-6 md:p-8">
+                {pageComponent}
+            </main>
         </div>
     );
 };

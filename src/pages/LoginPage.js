@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { db } from '../firebase/config';
-import { collection, getDocs, query, where } from 'firebase/firestore';
+import { collection, getDocs, query, where, onSnapshot, orderBy } from 'firebase/firestore';
 import Navbar from '../components/Navbar';
 import SubscriptionPage from './SubscriptionPage';
 
@@ -9,6 +9,7 @@ const LoginPage = ({ navigate }) => {
     const { signInWithGoogle } = useAuth();
     const [freeTests, setFreeTests] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [activeBanners, setActiveBanners] = useState([]);
 
     // Fetch all free tests to display as a preview
     useEffect(() => {
@@ -32,6 +33,17 @@ const LoginPage = ({ navigate }) => {
         fetchFreeTests();
     }, []);
 
+    // Fetch active banners
+    useEffect(() => {
+        const bannersCol = collection(db, 'banners');
+        const qBanners = query(bannersCol, where('isActive', '==', true), orderBy('createdAt', 'desc'));
+        const unsubscribeBanners = onSnapshot(qBanners, (snapshot) => {
+            const fetchedBanners = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            setActiveBanners(fetchedBanners);
+        });
+        return () => unsubscribeBanners();
+    }, []);
+
     const features = [
         {
             icon: `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-book-open-check"><path d="M8 2.8c1.3-.8 2.8-.8 4-1.2"></path><path d="M17 20c-1.3.8-2.8.8-4 1.2"></path><path d="M12 1.2c-1.3.8-2.8.8-4 1.2"></path><path d="M13 21.2c1.3-.8 2.8-.8 4-1.2"></path><path d="M19 3v15h2a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v15H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h2"></path><path d="m9 12 2 2 4-4"></path></svg>`,
@@ -49,6 +61,17 @@ const LoginPage = ({ navigate }) => {
             description: "Go beyond just a score. Understand your strengths and pinpoint your weaknesses with our detailed analysis."
         }
     ];
+
+    const renderBanner = (banner) => {
+        const content = (
+            <div className={`p-3 text-center text-sm font-semibold text-white bg-amber-500 hover:bg-amber-400 transition-colors ${banner.link ? 'cursor-pointer' : ''}`}
+                onClick={() => banner.link && window.open(banner.link, '_blank')}>
+                {banner.imageUrl && <img src={banner.imageUrl} alt="banner" className="h-6 inline-block mr-2" />}
+                {banner.text}
+            </div>
+        );
+        return banner.link ? <a href={banner.link} target="_blank" rel="noopener noreferrer">{content}</a> : content;
+    };
 
     return (
         <div className="bg-gray-950 text-white min-h-screen font-sans antialiased">
@@ -73,6 +96,9 @@ const LoginPage = ({ navigate }) => {
             </style>
             <Navbar navigate={navigate} />
             <main>
+                {/* Banners Section */}
+                {activeBanners.map(banner => renderBanner(banner))}
+
                 {/* Hero Section */}
                 <div className="relative pt-16 pb-32 flex content-center items-center justify-center min-h-[75vh] lg:min-h-[85vh] bg-gray-950">
                     <div className="absolute top-0 w-full h-full bg-grid z-0">
