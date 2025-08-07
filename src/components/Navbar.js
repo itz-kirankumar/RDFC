@@ -1,13 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from '../contexts/AuthContext'; // Corrected import path
 
-const Navbar = ({ navigate }) => {
+// Accept bannerHeight prop
+const Navbar = ({ navigate, bannerHeight = 0 }) => { 
     const { user, userData, signOut } = useAuth();
     const [scrolled, setScrolled] = useState(false);
 
     useEffect(() => {
         const handleScroll = () => {
-            if (window.scrollY > 50) {
+            // Adjust scroll threshold based on banner height
+            if (window.scrollY > (50 + bannerHeight)) { 
                 setScrolled(true);
             } else {
                 setScrolled(false);
@@ -23,21 +25,24 @@ const Navbar = ({ navigate }) => {
                 window.removeEventListener('scroll', handleScroll);
             }
         };
-    }, [user]);
+    }, [user, bannerHeight]); // Add bannerHeight to dependencies
 
     const navbarClasses = `
-        fixed top-0 left-0 right-0 z-50 transition-all duration-300
+        fixed left-0 right-0 z-50 transition-all duration-300
         ${user ? 'bg-gray-800 shadow-lg' : 'bg-transparent'}
         ${!user && scrolled ? '-translate-y-full' : 'translate-y-0'}
     `;
 
     return (
-        <nav className={navbarClasses}>
+        // Dynamically set top based on bannerHeight
+        <nav className={navbarClasses} style={{ top: `${bannerHeight}px` }}>
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                 <div className={`h-16 flex items-center ${user ? 'justify-between' : 'justify-center'}`}>
                     <span 
                         onClick={() => user ? navigate('home') : null} 
-                        className={`text-xl sm:text-2xl font-bold text-white tracking-wider ${user ? 'cursor-pointer' : ''}`}
+                        className={`text-xl sm:text-2xl font-bold tracking-wider ${user ? 'cursor-pointer' : ''}
+                                   bg-gradient-to-r from-amber-300 via-amber-500 to-amber-300 text-transparent bg-clip-text
+                                   animate-shine-pulse`} // Applies the animated gradient
                     >
                         RDFC<span className="text-gray-400"> Test</span>
                     </span>
@@ -52,6 +57,28 @@ const Navbar = ({ navigate }) => {
                     )}
                 </div>
             </div>
+            <style>
+                {`
+                @keyframes shine-pulse {
+                    0% {
+                        background-position: -200% 0;
+                        opacity: 0.8;
+                    }
+                    50% {
+                        background-position: 200% 0;
+                        opacity: 1;
+                    }
+                    100% {
+                        background-position: -200% 0;
+                        opacity: 0.8;
+                    }
+                }
+                .animate-shine-pulse {
+                    background-size: 200% auto;
+                    animation: shine-pulse 4s linear infinite;
+                }
+                `}
+            </style>
         </nav>
     );
 };

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, Fragment } from 'react';
-import { collection, doc, updateDoc, onSnapshot, setDoc, deleteDoc, query, orderBy, serverTimestamp } from 'firebase/firestore';
+import { collection, doc, updateDoc, onSnapshot, setDoc, deleteDoc, query, orderBy, serverTimestamp, Timestamp, addDoc } from 'firebase/firestore'; // addDoc was missing here
 import { db } from '../firebase/config';
 import { Dialog, Transition } from '@headlessui/react';
 import { nanoid } from 'nanoid';
@@ -110,7 +110,7 @@ const PlanManagementModal = ({ isOpen, setIsOpen, planToEdit, handleSavePlan, ha
             hasOffer: hasOffer,
             offerName: hasOffer ? offerName : '',
             offerPrice: hasOffer ? parseInt(offerPrice) : null,
-            offerEndTime: hasOffer && offerEndTime ? new Date(offerEndTime) : null,
+            offerEndTime: hasOffer && offerEndTime ? Timestamp.fromDate(new Date(offerEndTime)) : null,
             features: features.filter(f => f.title.trim() !== ''),
             isActive: planToEdit ? planToEdit.isActive : true, // Keep existing status or set to active
         };
@@ -216,6 +216,8 @@ const BannerManagementModal = ({ isOpen, setIsOpen, bannerToEdit, handleSaveBann
     const [bannerLink, setBannerLink] = useState('');
     const [bannerImageUrl, setBannerImageUrl] = useState('');
     const [isActive, setIsActive] = useState(true);
+    const [startTime, setStartTime] = useState('');
+    const [endTime, setEndTime] = useState('');
 
     useEffect(() => {
         if (bannerToEdit) {
@@ -225,6 +227,8 @@ const BannerManagementModal = ({ isOpen, setIsOpen, bannerToEdit, handleSaveBann
             setBannerLink(bannerToEdit.link);
             setBannerImageUrl(bannerToEdit.imageUrl || '');
             setIsActive(bannerToEdit.isActive);
+            setStartTime(bannerToEdit.startTime?.toDate().toISOString().slice(0, 16) || '');
+            setEndTime(bannerToEdit.endTime?.toDate().toISOString().slice(0, 16) || '');
         } else {
             resetForm();
         }
@@ -235,6 +239,8 @@ const BannerManagementModal = ({ isOpen, setIsOpen, bannerToEdit, handleSaveBann
         setBannerLink('');
         setBannerImageUrl('');
         setIsActive(true);
+        setStartTime('');
+        setEndTime('');
         setEditMode(false);
         setCurrentBannerId(null);
     };
@@ -249,6 +255,8 @@ const BannerManagementModal = ({ isOpen, setIsOpen, bannerToEdit, handleSaveBann
             link: bannerLink,
             imageUrl: bannerImageUrl,
             isActive: isActive,
+            startTime: startTime ? Timestamp.fromDate(new Date(startTime)) : null,
+            endTime: endTime ? Timestamp.fromDate(new Date(endTime)) : null,
             createdAt: serverTimestamp(),
         };
         handleSaveBanner(currentBannerId, bannerData, editMode);
@@ -268,6 +276,10 @@ const BannerManagementModal = ({ isOpen, setIsOpen, bannerToEdit, handleSaveBann
                             <FormInput label="Banner Text" type="text" value={bannerText} onChange={e => setBannerText(e.target.value)} placeholder="e.g., Get 50% OFF! Limited time deal!" />
                             <FormInput label="Banner Link (URL)" type="text" value={bannerLink} onChange={e => setBannerLink(e.target.value)} placeholder="Optional. Link for the banner click." />
                             <FormInput label="Image URL" type="text" value={bannerImageUrl} onChange={e => setBannerImageUrl(e.target.value)} placeholder="Optional. Google Drive URL for banner image" />
+                            
+                            <FormInput label="Start Time" type="datetime-local" value={startTime} onChange={e => setStartTime(e.target.value)} />
+                            <FormInput label="End Time" type="datetime-local" value={endTime} onChange={e => setEndTime(e.target.value)} />
+
                             <div className="flex items-center">
                                 <input type="checkbox" checked={isActive} onChange={e => setIsActive(e.target.checked)} className="rounded text-amber-500 focus:ring-amber-500" />
                                 <label className="ml-2 text-gray-300 text-sm">Active</label>
@@ -368,7 +380,8 @@ export default function AdminSubscriptionManagement() {
                 await updateDoc(doc(db, 'banners', bannerId), bannerData);
                 alert("Banner updated successfully!");
             } else {
-                await setDoc(doc(collection(db, 'banners')), bannerData);
+                // Use addDoc for new documents with auto-generated IDs
+                await addDoc(collection(db, 'banners'), bannerData);
                 alert("Banner added successfully!");
             }
             setIsBannerModalOpen(false);
@@ -477,6 +490,8 @@ export default function AdminSubscriptionManagement() {
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Banner Text</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Link</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Image URL</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Start Time</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">End Time</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Active</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Actions</th>
                             </tr>
@@ -488,6 +503,12 @@ export default function AdminSubscriptionManagement() {
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-white">{banner.text}</td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400">{banner.link || 'N/A'}</td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400 truncate max-w-xs">{banner.imageUrl || 'N/A'}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400">
+                                            {banner.startTime ? banner.startTime.toDate().toLocaleString() : 'N/A'}
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400">
+                                            {banner.endTime ? banner.endTime.toDate().toLocaleString() : 'N/A'}
+                                        </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm">
                                             <label className="relative inline-flex items-center cursor-pointer">
                                                 <input type="checkbox" checked={banner.isActive} onChange={() => handleToggleBannerActiveStatus(banner.id, banner.isActive)} className="sr-only peer" />
@@ -502,7 +523,7 @@ export default function AdminSubscriptionManagement() {
                                 ))
                             ) : (
                                 <tr>
-                                    <td colSpan="5" className="px-6 py-4 text-center text-gray-400">No banners found.</td>
+                                    <td colSpan="7" className="px-6 py-4 text-center text-gray-400">No banners found.</td>
                                 </tr>
                             )}
                         </tbody>

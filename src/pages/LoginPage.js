@@ -5,6 +5,54 @@ import { collection, getDocs, query, where, onSnapshot, orderBy } from 'firebase
 import Navbar from '../components/Navbar';
 import SubscriptionPage from './SubscriptionPage';
 
+// Reusable CountdownTimer for banners
+const CountdownTimer = ({ targetDate, offerName, isFlashing = false }) => {
+    const calculateTimeLeft = () => {
+        const difference = +new Date(targetDate) - +new Date();
+        let timeLeft = {};
+
+        if (difference > 0) {
+            timeLeft = {
+                days: Math.floor(difference / (1000 * 60 * 60 * 24)),
+                hours: Math.floor((difference / (1000 * 60 * 60)) % 24),
+                minutes: Math.floor((difference / 1000 / 60) % 60),
+                seconds: Math.floor((difference / 1000) % 60),
+            };
+        }
+        return timeLeft;
+    };
+
+    const [timeLeft, setTimeLeft] = useState(calculateTimeLeft());
+
+    useEffect(() => {
+        if (!targetDate) return;
+        const timer = setTimeout(() => {
+            setTimeLeft(calculateTimeLeft());
+        }, 1000);
+
+        if (Object.keys(timeLeft).length === 0) {
+            // No full page reload needed, just let the component re-evaluate
+        }
+
+        return () => clearTimeout(timer);
+    }, [targetDate, timeLeft]);
+
+    const formatTime = (time) => String(time || 0).padStart(2, '0');
+
+    if (Object.keys(timeLeft).length === 0) {
+        return null; // Don't render if time is up
+    }
+
+    return (
+        <span className={`ml-4 text-red-300 font-bold text-sm ${isFlashing ? 'animate-flash' : ''}`}>
+            {offerName || 'Ends in'}: {timeLeft.days ? `${timeLeft.days}d ` : ''}
+            {formatTime(timeLeft.hours)}:
+            {formatTime(timeLeft.minutes)}:
+            {formatTime(timeLeft.seconds)}
+        </span>
+    );
+};
+
 const LoginPage = ({ navigate }) => {
     const { signInWithGoogle } = useAuth();
     const [freeTests, setFreeTests] = useState([]);
@@ -33,13 +81,28 @@ const LoginPage = ({ navigate }) => {
         fetchFreeTests();
     }, []);
 
-    // Fetch active banners
+    // Fetch active banners based on isActive, startTime, and endTime
     useEffect(() => {
         const bannersCol = collection(db, 'banners');
-        const qBanners = query(bannersCol, where('isActive', '==', true), orderBy('createdAt', 'desc'));
+        const qBanners = query(
+            bannersCol, 
+            where('isActive', '==', true),
+            orderBy('createdAt', 'desc') // Order by creation time to maintain some consistency
+        );
+
         const unsubscribeBanners = onSnapshot(qBanners, (snapshot) => {
             const fetchedBanners = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            setActiveBanners(fetchedBanners);
+            const now = new Date(); // Define 'now' inside the callback for real-time accuracy
+            const filteredBanners = fetchedBanners.filter(banner => {
+                const startTime = banner.startTime?.toDate();
+                const endTime = banner.endTime?.toDate();
+                
+                const isStarted = !startTime || now >= startTime;
+                const isNotEnded = !endTime || now <= endTime;
+
+                return isStarted && isNotEnded;
+            });
+            setActiveBanners(filteredBanners);
         });
         return () => unsubscribeBanners();
     }, []);
@@ -62,16 +125,35 @@ const LoginPage = ({ navigate }) => {
         }
     ];
 
-    const renderBanner = (banner) => {
-        const content = (
-            <div className={`p-3 text-center text-sm font-semibold text-white bg-amber-500 hover:bg-amber-400 transition-colors ${banner.link ? 'cursor-pointer' : ''}`}
-                onClick={() => banner.link && window.open(banner.link, '_blank')}>
-                {banner.imageUrl && <img src={banner.imageUrl} alt="banner" className="h-6 inline-block mr-2" />}
-                {banner.text}
+    const renderBannerItem = (banner) => {
+        const hasLink = banner.link && banner.link.trim() !== '';
+        const bannerContent = (
+            <div className="flex items-center justify-center p-3 text-center text-sm font-semibold flex-shrink-0">
+                {banner.imageUrl && <img src={banner.imageUrl} alt="banner" className="h-6 inline-block mr-2 object-contain" onError={(e) => e.target.style.display='none'} />}
+                <span className="bg-gradient-to-r from-gray-900 to-gray-700 text-transparent bg-clip-text"> {/* Dark gradient text for banner */}
+                    {banner.text}
+                </span>
+                {banner.endTime && new Date(banner.endTime.toDate()) > new Date() && (
+                    <CountdownTimer targetDate={banner.endTime.toDate()} isFlashing={true} />
+                )}
             </div>
         );
-        return banner.link ? <a href={banner.link} target="_blank" rel="noopener noreferrer">{content}</a> : content;
+
+        return (
+            <div key={banner.id} className="banner-item">
+                {hasLink ? (
+                    <a href={banner.link} target="_blank" rel="noopener noreferrer" className="block">
+                        {bannerContent}
+                    </a>
+                ) : (
+                    bannerContent
+                )}
+            </div>
+        );
     };
+
+    // Calculate banner height (approximate, adjust if needed based on actual banner content)
+    const bannerHeight = activeBanners.length > 0 ? 40 : 0; // p-3 (12px top/bottom) + text height approx 16px = ~40px
 
     return (
         <div className="bg-gray-950 text-white min-h-screen font-sans antialiased">
@@ -92,15 +174,71 @@ const LoginPage = ({ navigate }) => {
                                       linear-gradient(to bottom, #2d3748 1px, transparent 1px);
                     background-size: 20px 20px;
                 }
+
+                /* Banner specific styles */
+                @keyframes slide {
+                    0% { transform: translateX(0%); }
+                    100% { transform: translateX(-100%); }
+                }
+
+                @keyframes flash {
+                    0%, 100% { opacity: 1; }
+                    50% { opacity: 0.5; }
+                }
+
+                .banner-container {
+                    width: 100%;
+                    overflow: hidden;
+                    white-space: nowrap;
+                    background-color: #dc2626; /* Red background */
+                    background-image: repeating-linear-gradient(45deg, #ef4444 0, #ef4444 10px, #dc2626 10px, #dc2626 20px); /* Red checkered background */
+                    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+                    position: fixed; /* Fixed to the viewport */
+                    top: 0;
+                    left: 0;
+                    z-index: 1000; /* Very high z-index to be always on top */
+                    height: 40px; /* Explicit height for the banner */
+                }
+
+                .banner-content-wrapper {
+                    display: inline-block;
+                    animation: slide 30s linear infinite; /* Adjust duration as needed */
+                    padding: 8px 0; /* Add some vertical padding */
+                    min-width: 400%; /* Ensure enough content to scroll seamlessly */
+                    height: 100%; /* Ensure wrapper takes full height of container */
+                    display: flex; /* Use flex to vertically center content */
+                    align-items: center; /* Vertically center content */
+                }
+
+                .banner-item {
+                    display: inline-flex;
+                    align-items: center;
+                    margin-right: 80px; /* Increased space between duplicated banners for better flow */
+                    text-shadow: 1px 1px 2px rgba(0,0,0,0.3);
+                }
+                .banner-item:last-child {
+                    margin-right: 0; /* No margin after the last item in the group */
+                }
                 `}
             </style>
-            <Navbar navigate={navigate} />
-            <main>
-                {/* Banners Section */}
-                {activeBanners.map(banner => renderBanner(banner))}
+            
+            {/* Banners Section - Placed above Navbar, fixed to the top */}
+            {activeBanners.length > 0 && (
+                <div className="banner-container">
+                    <div className="banner-content-wrapper">
+                        {/* Duplicate banners multiple times for seamless infinite scroll */}
+                        {Array(40).fill(null).map((_, i) => ( // Increased duplication to 40 times
+                            activeBanners.map(banner => renderBannerItem(banner))
+                        ))}
+                    </div>
+                </div>
+            )}
 
+            {/* Navbar is now positioned below the banner dynamically */}
+            <Navbar navigate={navigate} bannerHeight={bannerHeight} /> {/* Pass bannerHeight to Navbar */}
+            <main style={{ paddingTop: `${bannerHeight + 64}px` }}> {/* Dynamic padding-top to account for banner and Navbar */}
                 {/* Hero Section */}
-                <div className="relative pt-16 pb-32 flex content-center items-center justify-center min-h-[75vh] lg:min-h-[85vh] bg-gray-950">
+                <div className="relative pb-32 flex content-center items-center justify-center min-h-[75vh] lg:min-h-[85vh] bg-gray-950">
                     <div className="absolute top-0 w-full h-full bg-grid z-0">
                         <div className="absolute inset-0 bg-gradient-to-br from-indigo-950 to-gray-900 opacity-90"></div>
                     </div>
@@ -172,11 +310,11 @@ const LoginPage = ({ navigate }) => {
                 {/* Subscription Section */}
                 <section className="py-20 bg-gray-950">
                     <div className="container mx-auto px-4">
-                        <SubscriptionPage embedded={true} />
+                        <SubscriptionPage embedded={true} /> {/* Pass embedded prop */}
                     </div>
                 </section>
             </main>
-            <footer className="bg-gray-900 pt-8 pb-6">
+            <footer className="bg-gray-900 pt-8 pb-6"> {/* Corrected closing brace here */}
                 <div className="container mx-auto px-4">
                     <div className="flex flex-wrap items-center md:justify-between justify-center">
                         <div className="w-full md:w-4/12 px-4 mx-auto text-center">

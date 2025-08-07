@@ -3,8 +3,8 @@ import { collection, onSnapshot, query, orderBy, where } from 'firebase/firestor
 import { db } from '../firebase/config';
 import { Fragment } from 'react';
 
-// Component to handle countdown timer logic for a single plan
-const CountdownTimer = ({ targetDate, offerName }) => {
+// Component to handle countdown timer logic for a single plan or banner
+const CountdownTimer = ({ targetDate, offerName, isFlashing = false }) => {
     const calculateTimeLeft = () => {
         const difference = +new Date(targetDate) - +new Date();
         let timeLeft = {};
@@ -29,7 +29,7 @@ const CountdownTimer = ({ targetDate, offerName }) => {
         }, 1000);
 
         if (Object.keys(timeLeft).length === 0) {
-            window.location.reload(); 
+            // No full page reload needed, just let the component re-evaluate
         }
 
         return () => clearTimeout(timer);
@@ -38,25 +38,22 @@ const CountdownTimer = ({ targetDate, offerName }) => {
     const formatTime = (time) => String(time || 0).padStart(2, '0');
 
     if (Object.keys(timeLeft).length === 0) {
-        return null;
+        return null; // Don't render if time is up
     }
 
     return (
-        <div className="mt-4 text-center text-red-400 font-bold text-sm animate-pulse">
-            <span className="block">{offerName || 'Limited Time Offer!'} Ends in:</span>
-            <span className="block text-xl font-mono mt-1">
-                {timeLeft.days ? `${timeLeft.days}d ` : ''}
-                {formatTime(timeLeft.hours)}:
-                {formatTime(timeLeft.minutes)}:
-                {formatTime(timeLeft.seconds)}
-            </span>
-        </div>
+        <span className={`ml-4 text-red-300 font-bold text-sm ${isFlashing ? 'animate-flash' : ''}`}>
+            {offerName || 'Ends in'}: {timeLeft.days ? `${timeLeft.days}d ` : ''}
+            {formatTime(timeLeft.hours)}:
+            {formatTime(timeLeft.minutes)}:
+            {formatTime(timeLeft.seconds)}
+        </span>
     );
 };
 
 const SubscriptionPage = ({ navigate, embedded = false }) => {
     const [plans, setPlans] = useState([]);
-    const [activeBanners, setActiveBanners] = useState([]);
+    // Removed activeBanners state and its useEffect hook
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
@@ -88,16 +85,8 @@ const SubscriptionPage = ({ navigate, embedded = false }) => {
         return () => unsubscribe();
     }, []);
     
-    // Fetch active banners
-    useEffect(() => {
-        const bannersCol = collection(db, 'banners');
-        const qBanners = query(bannersCol, where('isActive', '==', true), orderBy('createdAt', 'desc'));
-        const unsubscribeBanners = onSnapshot(qBanners, (snapshot) => {
-            const fetchedBanners = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            setActiveBanners(fetchedBanners);
-        });
-        return () => unsubscribeBanners();
-    }, []);
+    // Removed the useEffect hook for fetching banners from this component
+    // as banners are no longer displayed here.
 
     const handleSubscribeClick = (checkoutLink) => {
         if (checkoutLink) {
@@ -115,18 +104,7 @@ const SubscriptionPage = ({ navigate, embedded = false }) => {
         return Math.round(discount);
     };
 
-    const renderBannerContent = (banner) => {
-        return (
-            <div 
-                key={banner.id} 
-                className="banner-card flex-shrink-0 p-3 text-center text-sm font-semibold text-white bg-gradient-to-r from-purple-600 to-indigo-700 rounded-lg shadow-lg mx-2 flex items-center justify-center"
-                onClick={() => banner.link && window.open(banner.link, '_blank')}
-            >
-                {banner.imageUrl && <img src={banner.imageUrl} alt="banner" className="h-8 w-8 object-contain mr-2 rounded-full" onError={(e) => e.target.style.display='none'} />}
-                <span className="truncate">{banner.text}</span>
-            </div>
-        );
-    };
+    // Removed renderBannerItem function as banners are no longer displayed here.
 
     if (loading) {
         return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-white"></div></div>;
@@ -134,6 +112,14 @@ const SubscriptionPage = ({ navigate, embedded = false }) => {
 
     return (
         <div className={`max-w-7xl mx-auto ${!embedded ? 'mt-10' : ''} font-inter`}>
+            <style>
+                {`
+                /* Removed banner specific styles as banners are no longer displayed here. */
+                `}
+            </style>
+            
+            {/* Removed Banners Section from this component. */}
+
             <div className="text-center mb-10">
                 <h1 className={`font-extrabold text-white ${embedded ? 'text-3xl' : 'text-4xl'} mb-4`}>
                     Unlock Your Full Potential
@@ -143,15 +129,6 @@ const SubscriptionPage = ({ navigate, embedded = false }) => {
                 </p>
             </div>
             
-            {/* Banners Section */}
-            {activeBanners.length > 0 && (
-                <div className="relative w-full py-4 mb-8">
-                    <div className="flex justify-center space-x-4 flex-wrap">
-                        {activeBanners.map((banner, index) => renderBannerContent(banner))}
-                    </div>
-                </div>
-            )}
-
             {/* Subscription Plans Section */}
             <div className="flex flex-col lg:flex-row justify-center items-stretch space-y-8 lg:space-y-0 lg:space-x-8 px-4">
                 {plans.length > 0 ? (
