@@ -65,6 +65,9 @@ export default function Earnings() {
                 const myShare = (data.adminShares || []).find(share => share.uid === userData.uid);
                 if (myShare) {
                     setMySharePercentage(myShare.share);
+                } else {
+                     // FIX: If admin exists but not in shares, add them with 0 share initially
+                    setMySharePercentage(0);
                 }
             } else {
                 setDoc(earningsConfigRef, {
@@ -85,9 +88,17 @@ export default function Earnings() {
     const handleUpdateMyShare = async () => {
         try {
             const earningsConfigRef = doc(db, 'earnings', 'config');
-            const newAdminShares = adminShares.map(share => 
-                share.uid === userData.uid ? { ...share, share: parseInt(mySharePercentage) } : share
-            );
+            let newAdminShares = [...adminShares];
+            const adminIndex = newAdminShares.findIndex(share => share.uid === userData.uid);
+
+            if (adminIndex > -1) {
+                // FIX: Update existing admin's share
+                newAdminShares[adminIndex] = { ...newAdminShares[adminIndex], share: parseInt(mySharePercentage) };
+            } else {
+                // FIX: Add new admin to the shares list
+                newAdminShares.push({ uid: userData.uid, share: parseInt(mySharePercentage) });
+            }
+
             await updateDoc(earningsConfigRef, { adminShares: newAdminShares });
             alert("Your share percentage has been updated.");
             setIsSettingsModalOpen(false);
