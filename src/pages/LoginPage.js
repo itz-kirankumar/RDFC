@@ -259,10 +259,10 @@ const LoginPage = ({ navigate }) => {
                     <div className="container relative mx-auto text-center z-10">
                         <div className="max-w-4xl mx-auto px-4">
                             <h1 className="text-white font-extrabold text-4xl sm:text-5xl lg:text-6xl tracking-tight leading-tight animate-fade-in-up">
-                                Master Reading Comprehension with RDFC.
+                                With RDFC's tests, you'll be a step above the rest.
                             </h1>
                             <p className="mt-6 text-lg sm:text-xl text-zinc-300 max-w-3xl mx-auto animate-fade-in-up delay-200">
-                                RDFC Test is a comprehensive platform designed to sharpen your analytical thinking and critical reading skills through disciplined, daily practice.
+                                Elevate your reading comprehension and analytical skills with a dynamic platform that provides a daily regimen of fresh RDFC articles paired with article-specific RC tests, ensuring disciplined and effective practice.
                             </p>
                             <button onClick={signInWithGoogle} className="mt-12 mx-auto flex items-center justify-center bg-white text-zinc-900 px-8 py-4 rounded-full shadow-md hover:shadow-xl hover:bg-zinc-200 transition-all transform hover:scale-105 group text-lg font-bold animate-fade-in-up delay-400">
                                 <svg className="w-6 h-6 mr-3" viewBox="0 0 48 48"><path fill="#4285F4" d="M43.611 20.083H42V20H24v8h11.303c-1.649 4.657-6.08 8-11.303 8c-6.627 0-12-5.373-12-12s5.373-12 12-12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4C12.955 4 4 12.955 4 24s8.955 20 20 20s20-8.955 20-20c0-1.341-.138-2.65-.389-3.917z"></path><path fill="#34A853" d="M43.611 20.083H24v8h11.303c-1.649 4.657-6.08 8-11.303 8V44c5.268 0 10.046-1.947 13.611-5.657c3.565-3.71 5.789-8.604 5.789-14.343c0-1.341-.138-2.65-.389-3.917z"></path><path fill="#FBBC05" d="M9.961 14.961C11.846 12.154 15.059 10 18 10c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C28.046 2.053 23.268 0 18 0C12.955 0 8 4.955 8 10c0 1.341.138 2.65.389 3.917l1.572 1.044z"></path><path fill="#EA4335" d="M24 44c5.166 0 9.86-1.977 13.409-5.192l-6.19-4.891c-1.543 1.037-3.481 1.663-5.219 1.663c-3.454 0-6.556-1.983-8.163-4.891L4.389 35.083C7.023 40.523 12.866 44 24 44z"></path><path fill="none" d="M0 0h48v48H0z"></path></svg>
