@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { doc, getDoc, onSnapshot } from 'firebase/firestore';
+import { doc, getDoc, onSnapshot, query, collection, where } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -7,8 +7,7 @@ const RDFCArticleViewer = ({ navigate, articleUrl, testId }) => {
     const { user, userData } = useAuth();
     const [test, setTest] = useState(null);
     const [loading, setLoading] = useState(true);
-    const [isTestAttempted, setIsTestAttempted] = useState(false);
-    const [attemptId, setAttemptId] = useState(null);
+    const [userAttempt, setUserAttempt] = useState(null); // FIX: New state for real-time attempt status
     const viewerContainerRef = useRef(null);
 
     const handleFullscreen = useCallback(() => {
@@ -23,12 +22,11 @@ const RDFCArticleViewer = ({ navigate, articleUrl, testId }) => {
         }
     }, []);
 
+    // Effect for fetching static test data
     useEffect(() => {
         const fetchTest = async () => {
-            if (!testId || !user) {
-                setLoading(false);
-                return;
-            }
+            if (!testId) return;
+            setLoading(true);
             try {
                 const testRef = doc(db, 'tests', testId);
                 const testSnap = await getDoc(testRef);
@@ -41,45 +39,33 @@ const RDFCArticleViewer = ({ navigate, articleUrl, testId }) => {
                 setLoading(false);
             }
         };
+        fetchTest();
+    }, [testId]);
 
-        const checkTestAttemptStatus = () => {
-            if (user && userData?.testsAttempted) {
-                const existingAttemptId = userData.testsAttempted[testId];
-                if (existingAttemptId) {
-                    setIsTestAttempted(true);
-                    setAttemptId(existingAttemptId);
-                } else {
-                    setIsTestAttempted(false);
-                    setAttemptId(null);
-                }
-            }
-        };
+    // FIX: New dedicated useEffect to get the real-time status of this specific test attempt
+    useEffect(() => {
+        if (!user?.uid || !testId) {
+            return;
+        }
 
-        // Listen for real-time changes to the user's document
-        const userDocRef = doc(db, 'users', user.uid);
-        const unsubscribe = onSnapshot(userDocRef, (docSnap) => {
-            if (docSnap.exists() && docSnap.data().testsAttempted) {
-                const existingAttemptId = docSnap.data().testsAttempted[testId];
-                if (existingAttemptId) {
-                    setIsTestAttempted(true);
-                    setAttemptId(existingAttemptId);
-                }
+        const attemptsQuery = query(collection(db, "attempts"), where("userId", "==", user.uid), where("testId", "==", testId));
+        const unsubscribe = onSnapshot(attemptsQuery, (querySnapshot) => {
+            if (!querySnapshot.empty) {
+                // An attempt for this test exists
+                const attemptDoc = querySnapshot.docs[0];
+                setUserAttempt({
+                    id: attemptDoc.id,
+                    status: attemptDoc.data().status
+                });
+            } else {
+                // No attempt for this test exists
+                setUserAttempt(null);
             }
         });
 
-        fetchTest();
-        checkTestAttemptStatus();
+        return () => unsubscribe(); // Cleanup the listener
+    }, [testId, user?.uid]);
 
-        return () => unsubscribe();
-    }, [testId, user, userData]);
-
-    const handleButtonClick = () => {
-        if (isTestAttempted) {
-            navigate('results', { attemptId });
-        } else if (test) {
-            navigate('test', { testId: test.id });
-        }
-    };
     
     if (!user || (!userData?.isSubscribed && test && !test.isFree)) {
         return (
@@ -100,8 +86,24 @@ const RDFCArticleViewer = ({ navigate, articleUrl, testId }) => {
         return <div className="text-center text-gray-400 p-8">Loading article and test...</div>;
     }
 
-    const buttonText = isTestAttempted ? "View Analysis" : "Start Test";
-    const buttonClass = isTestAttempted ? "bg-green-600 hover:bg-green-700" : "bg-white text-gray-900 hover:bg-gray-200";
+    // FIX: New logic to determine button text, action, and color based on real-time status
+    let buttonText;
+    let buttonAction;
+    let buttonClass;
+
+    if (userAttempt?.status === 'completed') {
+        buttonText = "View Analysis";
+        buttonAction = () => navigate('results', { attemptId: userAttempt.id });
+        buttonClass = "bg-green-600 hover:bg-green-700 text-white";
+    } else if (userAttempt?.status === 'in-progress') {
+        buttonText = "Continue Test";
+        buttonAction = () => navigate('test', { testId: test.id });
+        buttonClass = "bg-orange-500 hover:bg-orange-600 text-white";
+    } else {
+        buttonText = "Start Test";
+        buttonAction = () => navigate('test', { testId: test.id });
+        buttonClass = "bg-blue-600 hover:bg-blue-700 text-white";
+    }
 
     return (
         <div ref={viewerContainerRef} className="bg-gray-900 text-white min-h-screen p-4 flex flex-col font-sans">
@@ -154,7 +156,7 @@ const RDFCArticleViewer = ({ navigate, articleUrl, testId }) => {
                     {/* Navigation Buttons */}
                     <div className="mt-4 flex flex-col space-y-2">
                         <button
-                            onClick={handleButtonClick}
+                            onClick={buttonAction}
                             className={`w-full px-4 py-3 rounded-md font-bold transition-all transform hover:scale-105 ${buttonClass}`}
                             disabled={!test}
                         >
@@ -176,8 +178,8 @@ const RDFCArticleViewer = ({ navigate, articleUrl, testId }) => {
                     max-height: 100vh;
                     flex-basis: 100% !important;
                     margin: 0;
-                    padding: 0; // Remove padding in fullscreen
-                    border: 2px solid #374151; // Re-add a subtle border in fullscreen
+                    padding: 0;
+                    border: 2px solid #374151;
                 }
                  :fullscreen .full-screen-flex iframe {
                     width: 100%;
