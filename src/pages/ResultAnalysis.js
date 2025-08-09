@@ -5,8 +5,9 @@ import { useAuth } from '../contexts/AuthContext';
 import Scorecard from '../components/Scorecard';
 
 // --- Reusable Button Component ---
-const Button = ({ onClick, children, className = '' }) => (
-    <button onClick={onClick} className={`px-4 py-2 rounded-md font-semibold transition-all ${className}`}>
+// **FIX**: Updated to accept and pass down all button props, including `disabled`.
+const Button = ({ children, className = '', ...props }) => (
+    <button {...props} className={`px-4 py-2 rounded-md font-semibold transition-all ${className}`}>
         {children}
     </button>
 );
@@ -144,8 +145,16 @@ const AnalysisView = ({
                         <div className="space-y-3">
                             <h3 className="text-lg font-semibold text-gray-900 mb-2">Your Answer:</h3>
                             {activeQuestion.type === 'TITA' ? (
-                                 <div className="flex items-start p-3 border-2 rounded-lg border-gray-300">
-                                    <p className="flex-1 text-gray-700">{originalUserAnswer || 'Not Attempted'}</p>
+                                 <div className={`flex items-start p-3 border-2 rounded-lg ${
+                                    showCorrectAnswerHighlight 
+                                        ? (isOriginalCorrect ? 'border-green-500' : 'border-red-500') 
+                                        : (isOriginalUnattempted ? 'border-gray-300' : 'border-blue-500')
+                                 }`}>
+                                    <p className={`flex-1 font-semibold ${
+                                        showCorrectAnswerHighlight
+                                            ? (isOriginalCorrect ? 'text-green-700' : 'text-red-700')
+                                            : (isOriginalUnattempted ? 'text-gray-700' : 'text-gray-900')
+                                    }`}>{originalUserAnswer || 'Not Attempted'}</p>
                                 </div>
                             ) : (
                                 activeQuestion.options.map((option, index) => (
@@ -160,6 +169,15 @@ const AnalysisView = ({
                                 ))
                             )}
                         </div>
+
+                        {showCorrectAnswerHighlight && activeQuestion.type === 'TITA' && (
+                            <div className="mt-4 space-y-3">
+                                <h3 className="text-lg font-semibold text-gray-900 mb-2">Correct Answer:</h3>
+                                <div className="flex items-start p-3 border-2 rounded-lg border-green-500 bg-white">
+                                    <p className="flex-1 text-green-700 font-semibold">{activeQuestion.correctOption}</p>
+                                </div>
+                            </div>
+                        )}
                        
                         <div className="mt-6 border-t border-gray-200 pt-4">
                             {!showCorrectAnswerHighlight ? (

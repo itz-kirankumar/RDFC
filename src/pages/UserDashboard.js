@@ -10,8 +10,9 @@ const UserDashboard = ({ navigate }) => {
     const [linkedArticles, setLinkedArticles] = useState({});
     const [loading, setLoading] = useState(true);
     const [userStatus, setUserStatus] = useState(null);
+    const [userAttempts, setUserAttempts] = useState({}); // FIX: State for real-time attempt statuses
 
-    // FIX: This useEffect now exclusively manages the user's real-time status.
+    // This useEffect hook sets up a real-time listener for the user's data.
     useEffect(() => {
         if (!userData?.uid) {
             setUserStatus(null);
@@ -21,13 +22,35 @@ const UserDashboard = ({ navigate }) => {
         const userDocRef = doc(db, 'users', userData.uid);
         const unsubscribe = onSnapshot(userDocRef, (docSnap) => {
             if (docSnap.exists()) {
-                const fetchedStatus = docSnap.data();
-                setUserStatus(fetchedStatus);
+                setUserStatus(docSnap.data());
             } else {
                 setUserStatus(null);
             }
         });
         
+        return () => unsubscribe();
+    }, [userData?.uid]);
+
+    // FIX: Added a dedicated real-time listener for test attempts to get live status updates.
+    useEffect(() => {
+        if (!userData?.uid) {
+            setUserAttempts({});
+            return;
+        }
+
+        const attemptsQuery = query(collection(db, "attempts"), where("userId", "==", userData.uid));
+        const unsubscribe = onSnapshot(attemptsQuery, (querySnapshot) => {
+            const attemptsMap = {};
+            querySnapshot.forEach((doc) => {
+                const attemptData = doc.data();
+                attemptsMap[attemptData.testId] = {
+                    id: doc.id,
+                    status: attemptData.status
+                };
+            });
+            setUserAttempts(attemptsMap);
+        });
+
         return () => unsubscribe();
     }, [userData?.uid]);
 
@@ -62,27 +85,27 @@ const UserDashboard = ({ navigate }) => {
                 setLoading(false);
             }
         };
-        // FIX: The fetch is now dependent on `userStatus` to ensure it only runs once the status is loaded.
+        
         if (userStatus !== null) { 
             fetchDashboardData();
         }
     }, [userStatus]);
 
-    const testsAttempted = userStatus?.testsAttempted || {};
-
-    const renderTestCard = (test) => {
-        const isLocked = !userStatus?.isSubscribed && !test.isFree;
-        const attemptId = testsAttempted[test.id];
-        const isAttempted = !!attemptId;
+    const renderTestCard = (test, isLocked) => {
+        const attempt = userAttempts[test.id];
 
         let buttonText;
         let buttonAction;
         let buttonClass;
 
-        if (isAttempted) {
+        if (attempt?.status === 'completed') {
             buttonText = "View Analysis";
-            buttonAction = () => navigate('results', { attemptId: attemptId });
+            buttonAction = () => navigate('results', { attemptId: attempt.id });
             buttonClass = "bg-green-600 hover:bg-green-700 text-white";
+        } else if (attempt?.status === 'in-progress') {
+            buttonText = "Continue Test";
+            buttonAction = () => navigate('test', { testId: test.id });
+            buttonClass = "bg-orange-500 hover:bg-orange-600 text-white";
         } else if (isLocked) {
             buttonText = "Subscribe to Unlock";
             buttonAction = () => navigate('subscription');
@@ -90,7 +113,7 @@ const UserDashboard = ({ navigate }) => {
         } else {
             buttonText = "Start Test";
             buttonAction = () => navigate('test', { testId: test.id });
-            buttonClass = "bg-white hover:bg-gray-200 text-gray-900";
+            buttonClass = "bg-blue-600 hover:bg-blue-700 text-white";
         }
 
         return (
@@ -128,12 +151,14 @@ const UserDashboard = ({ navigate }) => {
             }
             
             if (type === 'test' && article) {
-                const attemptId = testsAttempted[test.id];
-                const isAttempted = !!attemptId;
-                if (isAttempted) {
-                    return { text: "View Analysis", action: () => navigate('results', { attemptId: attemptId }), className: "text-green-400 hover:text-green-300" };
+                const attempt = userAttempts[test.id];
+                if (attempt?.status === 'completed') {
+                    return { text: "View Analysis", action: () => navigate('results', { attemptId: attempt.id }), className: "text-green-400 hover:text-green-300" };
                 }
-                return { text: "Start Test", action: () => navigate('test', { testId: test.id }), className: "text-green-400 hover:text-green-300" };
+                if (attempt?.status === 'in-progress') {
+                    return { text: "Continue Test", action: () => navigate('test', { testId: test.id }), className: "text-orange-400 hover:text-orange-300" };
+                }
+                return { text: "Start Test", action: () => navigate('test', { testId: test.id }), className: "text-blue-400 hover:text-blue-300" };
             }
 
             return { text: "N/A", action: null, className: "text-gray-500 cursor-not-allowed" };

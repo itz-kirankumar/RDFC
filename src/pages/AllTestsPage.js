@@ -1,10 +1,55 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { collection, query, where, onSnapshot, doc } from 'firebase/firestore';
+import { db } from '../firebase/config';
 
 const AllTestsPage = ({ navigate, tests, title, contentType }) => {
     const { userData } = useAuth();
-    const testsAttempted = userData?.testsAttempted || {};
+    const [userAttempts, setUserAttempts] = useState({});
+    const [userStatus, setUserStatus] = useState(null); // FIX: Add state for real-time user status
     const [filterType, setFilterType] = useState('All');
+
+    // FIX: Add a real-time listener for the user's document to get live subscription updates.
+    useEffect(() => {
+        if (!userData?.uid) {
+            setUserStatus(null);
+            return;
+        }
+    
+        const userDocRef = doc(db, 'users', userData.uid);
+        const unsubscribe = onSnapshot(userDocRef, (docSnap) => {
+            if (docSnap.exists()) {
+                setUserStatus(docSnap.data());
+            } else {
+                setUserStatus(null);
+            }
+        });
+        
+        return () => unsubscribe();
+    }, [userData?.uid]);
+
+    // This listener correctly keeps the test attempt statuses in sync.
+    useEffect(() => {
+        if (!userData?.uid) {
+            setUserAttempts({});
+            return;
+        }
+
+        const attemptsQuery = query(collection(db, "attempts"), where("userId", "==", userData.uid));
+        const unsubscribe = onSnapshot(attemptsQuery, (querySnapshot) => {
+            const attemptsMap = {};
+            querySnapshot.forEach((doc) => {
+                const attemptData = doc.data();
+                attemptsMap[attemptData.testId] = {
+                    id: doc.id,
+                    status: attemptData.status
+                };
+            });
+            setUserAttempts(attemptsMap);
+        });
+
+        return () => unsubscribe();
+    }, [userData?.uid]);
 
     const renderRDFCArticleRow = (test, isLocked) => {
         const article = test.article;
@@ -19,12 +64,14 @@ const AllTestsPage = ({ navigate, tests, title, contentType }) => {
             }
             
             if (type === 'test' && article) {
-                const attemptId = testsAttempted[test.id];
-                const isAttempted = !!attemptId;
-                if (isAttempted) {
-                    return { text: "View Analysis", action: () => navigate('results', { attemptId: attemptId }), className: "text-green-400 hover:text-green-300" };
+                const attempt = userAttempts[test.id];
+                if (attempt?.status === 'completed') {
+                    return { text: "View Analysis", action: () => navigate('results', { attemptId: attempt.id }), className: "text-green-400 hover:text-green-300" };
                 }
-                return { text: "Start Test", action: () => navigate('test', { testId: test.id }), className: "text-green-400 hover:text-green-300" };
+                if (attempt?.status === 'in-progress') {
+                    return { text: "Continue Test", action: () => navigate('test', { testId: test.id }), className: "text-orange-400 hover:text-orange-300" };
+                }
+                return { text: "Start Test", action: () => navigate('test', { testId: test.id }), className: "text-blue-400 hover:text-blue-300" };
             }
 
             return { text: "N/A", action: null, className: "text-gray-500 cursor-not-allowed" };
@@ -57,17 +104,20 @@ const AllTestsPage = ({ navigate, tests, title, contentType }) => {
     };
 
     const renderAddOnTestRow = (test, isLocked) => {
-        const attemptId = testsAttempted[test.id];
-        const isAttempted = !!attemptId;
+        const attempt = userAttempts[test.id];
 
         let buttonText;
         let buttonAction;
         let buttonClass;
 
-        if (isAttempted) {
+        if (attempt?.status === 'completed') {
             buttonText = "View Analysis";
-            buttonAction = () => navigate('results', { attemptId: attemptId });
+            buttonAction = () => navigate('results', { attemptId: attempt.id });
             buttonClass = "bg-green-600 hover:bg-green-700 text-white";
+        } else if (attempt?.status === 'in-progress') {
+            buttonText = "Continue Test";
+            buttonAction = () => navigate('test', { testId: test.id });
+            buttonClass = "bg-orange-500 hover:bg-orange-600 text-white";
         } else if (isLocked) {
             buttonText = "Subscribe to Unlock";
             buttonAction = () => navigate('subscription');
@@ -75,7 +125,7 @@ const AllTestsPage = ({ navigate, tests, title, contentType }) => {
         } else {
             buttonText = "Start Test";
             buttonAction = () => navigate('test', { testId: test.id });
-            buttonClass = "bg-white hover:bg-gray-200 text-gray-900";
+            buttonClass = "bg-blue-600 hover:bg-blue-700 text-white";
         }
 
         return (
@@ -95,9 +145,14 @@ const AllTestsPage = ({ navigate, tests, title, contentType }) => {
         );
     };
 
+    if (!userStatus) {
+        return <div className="text-center text-gray-400">Loading...</div>;
+    }
+
     const filteredTests = filterType === 'All' ? tests : tests.filter(test => test.type === filterType.toUpperCase());
     const isPaidContent = tests[0] ? !tests[0].isFree : false;
-    const showUnlockButton = !userData?.isSubscribed && isPaidContent;
+    // FIX: Use the real-time userStatus state instead of the stale userData from context.
+    const showUnlockButton = !userStatus.isSubscribed && isPaidContent;
     
     return (
         <div className="max-w-7xl mx-auto">
@@ -120,7 +175,6 @@ const AllTestsPage = ({ navigate, tests, title, contentType }) => {
                 </div>
             )}
             
-            {/* Conditional Rendering for RDFC or Add-on Tests */}
             {contentType === 'rdfc' ? (
                 <div className="bg-gray-800 shadow-md rounded-lg overflow-hidden">
                     <div className="overflow-x-auto">
@@ -142,7 +196,6 @@ const AllTestsPage = ({ navigate, tests, title, contentType }) => {
                 </div>
             ) : (
                 <>
-                    {/* Filter for Add-On Tests */}
                     <div className="flex space-x-2 mb-4">
                         {['All', 'Test', 'Sectional', 'Mock'].map(type => (
                             <button
