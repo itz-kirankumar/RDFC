@@ -45,7 +45,7 @@ const UserDashboard = ({ navigate }) => {
 
     useEffect(() => {
         const fetchDashboardData = async () => {
-            if (!userStatus) return; // Wait until user status is loaded
+            if (!userStatus) return;
             setLoading(true);
             try {
                 const testsQuery = query(collection(db, 'tests'), where("isPublished", "==", true));
@@ -124,30 +124,17 @@ const UserDashboard = ({ navigate }) => {
         const isArticleRead = userStatus?.readArticles?.[test.id];
         
         const getButtonState = (type) => {
-            let text, action, className, disabled = false;
-
-            if (isLocked) {
-                return { text: "Unlock", action: () => navigate('subscription'), className: "bg-amber-500 hover:bg-amber-400 text-gray-900", disabled: false };
-            }
-
+            if (isLocked) return { text: "Unlock", action: () => navigate('subscription'), className: "bg-amber-500 hover:bg-amber-400 text-gray-900", disabled: false };
             if (type === 'article' && article) {
-                if (isArticleRead) {
-                    return { text: "Read", action: () => navigate('rdfcArticleViewer', { articleUrl: article.url, testId: test.id }), className: "bg-gray-600 hover:bg-gray-700 text-gray-300", disabled: false };
-                }
+                if (isArticleRead) return { text: "Read", action: () => navigate('rdfcArticleViewer', { articleUrl: article.url, testId: test.id }), className: "bg-gray-600 hover:bg-gray-700 text-gray-300", disabled: false };
                 return { text: "View Article", action: () => handleViewArticle(article.url, test.id), className: "bg-blue-600 hover:bg-blue-700 text-white", disabled: false };
             }
-            
             if (type === 'test' && article) {
                 const attempt = userAttempts[test.id];
-                if (attempt?.status === 'completed') {
-                    return { text: "View Analysis", action: () => navigate('results', { attemptId: attempt.id }), className: "bg-green-600 hover:bg-green-700 text-white", disabled: false };
-                }
-                if (attempt?.status === 'in-progress') {
-                    return { text: "Continue Test", action: () => navigate('test', { testId: test.id }), className: "bg-orange-500 hover:bg-orange-600 text-white", disabled: false };
-                }
+                if (attempt?.status === 'completed') return { text: "View Analysis", action: () => navigate('results', { attemptId: attempt.id }), className: "bg-green-600 hover:bg-green-700 text-white", disabled: false };
+                if (attempt?.status === 'in-progress') return { text: "Continue Test", action: () => navigate('test', { testId: test.id }), className: "bg-orange-500 hover:bg-orange-600 text-white", disabled: false };
                 return { text: "Start Test", action: () => navigate('test', { testId: test.id }), className: "bg-blue-600 hover:bg-blue-700 text-white", disabled: false };
             }
-
             return { text: "N/A", action: null, className: "bg-gray-700 text-gray-500 cursor-not-allowed", disabled: true };
         };
 
@@ -155,7 +142,6 @@ const UserDashboard = ({ navigate }) => {
         const testButton = getButtonState('test');
 
         return (
-            // Mobile Card View
             <div key={test.id} className={`md:hidden bg-gray-800 rounded-lg p-4 mb-4 ${isLocked ? 'opacity-50' : ''}`}>
                 <h4 className="text-lg font-semibold text-white">{test.title}</h4>
                 <p className="text-sm text-gray-400 mt-1 mb-2">{article ? article.name : 'N/A'}</p>
@@ -189,6 +175,8 @@ const UserDashboard = ({ navigate }) => {
 
     const freeRdfcTests = rdfcTests.filter(t => t.isFree);
     const paidRdfcTests = rdfcTests.filter(t => !t.isFree);
+
+    // **FIX**: Separate free and paid add-on tests for display logic
     const freeAddOnTests = addOnTests.filter(t => t.isFree);
     const paidAddOnTests = addOnTests.filter(t => !t.isFree);
 
@@ -199,7 +187,6 @@ const UserDashboard = ({ navigate }) => {
                  {renderUserStatus()}
             </div>
 
-            {/* RDFC Sections */}
             {[
                 { title: "Free RDFC Articles & Tests", tests: freeRdfcTests, isLocked: false },
                 { title: "Premium RDFC Articles & Tests", tests: paidRdfcTests, isLocked: !userStatus.isSubscribed }
@@ -209,7 +196,6 @@ const UserDashboard = ({ navigate }) => {
                         <h3 className="text-xl md:text-2xl font-bold text-white mb-2 md:mb-0">{section.title}</h3>
                         {section.isLocked && <button onClick={() => navigate('subscription')} className="bg-amber-500 text-gray-900 px-6 py-2 rounded-md font-semibold hover:bg-amber-400 shadow transition-all transform hover:scale-105 self-start md:self-center">Subscribe Now to Unlock</button>}
                     </div>
-                    {/* Desktop Table */}
                     <div className="hidden md:block bg-gray-800 shadow-md rounded-lg overflow-hidden">
                         <table className="min-w-full divide-y divide-gray-700">
                             <thead className="bg-gray-700">
@@ -236,7 +222,7 @@ const UserDashboard = ({ navigate }) => {
                                             return { text: "Start Test", action: () => navigate('test', { testId: test.id }), className: "bg-blue-600 hover:bg-blue-700 text-white text-xs px-3 py-1 rounded-full" };
                                         }
                                     };
-                                    const articleBtn = getButton( 'article');
+                                    const articleBtn = getButton('article');
                                     const testBtn = getButton('test');
                                     return (
                                         <tr key={test.id} className={`${section.isLocked ? 'opacity-50' : ''}`}>
@@ -250,7 +236,6 @@ const UserDashboard = ({ navigate }) => {
                             </tbody>
                         </table>
                     </div>
-                    {/* Mobile Cards */}
                     <div className="md:hidden">
                         {section.tests.slice(0, 3).map(test => renderRDFCArticleRow(test, section.isLocked))}
                     </div>
@@ -266,14 +251,16 @@ const UserDashboard = ({ navigate }) => {
             <div className="border-t border-gray-700 pt-8">
                  <div className="flex items-center justify-between mb-4">
                     <h2 className="text-xl md:text-2xl font-bold text-white">Add-On Tests</h2>
-                    {addOnTests.length > 3 && (
+                    {addOnTests.length > 6 && ( // Show "View All" if there are more than 3 free AND 3 paid
                         <button onClick={() => navigate('allTests', { tests: addOnTests, title: "All Add-On Tests", contentType: 'addon' })} className="text-sm font-semibold text-gray-400 hover:text-white">View All &rarr;</button>
                     )}
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {/* FIX: Render up to 3 free tests, then up to 3 paid tests */}
                     {freeAddOnTests.slice(0, 3).map(test => renderTestCard(test, false))}
                     {paidAddOnTests.slice(0, 3).map(test => renderTestCard(test, !userStatus?.isSubscribed))}
-                    {(freeAddOnTests.length === 0 && paidAddOnTests.length === 0) && (
+                    
+                    {addOnTests.length === 0 && (
                         <div className="col-span-full bg-gray-800 text-center p-12 rounded-lg shadow-md">
                             <h3 className="text-xl font-semibold text-gray-200">No Add-On Tests Available.</h3>
                             <p className="text-gray-500 mt-2">Please check back later!</p>
