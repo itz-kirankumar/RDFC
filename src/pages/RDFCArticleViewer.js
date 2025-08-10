@@ -7,22 +7,31 @@ const RDFCArticleViewer = ({ navigate, articleUrl, testId }) => {
     const { user, userData } = useAuth();
     const [test, setTest] = useState(null);
     const [loading, setLoading] = useState(true);
-    const [userAttempt, setUserAttempt] = useState(null); // FIX: New state for real-time attempt status
+    const [userAttempt, setUserAttempt] = useState(null);
+    const [mobileView, setMobileView] = useState('article');
+    const [isDetailsVisible, setIsDetailsVisible] = useState(true);
+    const [isFullScreen, setIsFullScreen] = useState(false);
     const viewerContainerRef = useRef(null);
 
     const handleFullscreen = useCallback(() => {
-        if (viewerContainerRef.current) {
-            if (!document.fullscreenElement) {
-                viewerContainerRef.current.requestFullscreen().catch(err => {
-                    console.error(`Fullscreen Error: ${err.message} (${err.name})`);
-                });
-            } else {
-                document.exitFullscreen();
-            }
+        const elem = viewerContainerRef.current;
+        if (!elem) return;
+
+        if (!document.fullscreenElement) {
+            elem.requestFullscreen().catch(err => {
+                console.error(`Error attempting to enable full-screen mode: ${err.message} (${err.name})`);
+            });
+        } else {
+            document.exitFullscreen();
         }
     }, []);
 
-    // Effect for fetching static test data
+    useEffect(() => {
+        const onFullscreenChange = () => setIsFullScreen(!!document.fullscreenElement);
+        document.addEventListener('fullscreenchange', onFullscreenChange);
+        return () => document.removeEventListener('fullscreenchange', onFullscreenChange);
+    }, []);
+
     useEffect(() => {
         const fetchTest = async () => {
             if (!testId) return;
@@ -42,55 +51,38 @@ const RDFCArticleViewer = ({ navigate, articleUrl, testId }) => {
         fetchTest();
     }, [testId]);
 
-    // FIX: New dedicated useEffect to get the real-time status of this specific test attempt
     useEffect(() => {
         if (!user?.uid || !testId) {
+            setUserAttempt(null);
             return;
         }
-
         const attemptsQuery = query(collection(db, "attempts"), where("userId", "==", user.uid), where("testId", "==", testId));
         const unsubscribe = onSnapshot(attemptsQuery, (querySnapshot) => {
             if (!querySnapshot.empty) {
-                // An attempt for this test exists
                 const attemptDoc = querySnapshot.docs[0];
-                setUserAttempt({
-                    id: attemptDoc.id,
-                    status: attemptDoc.data().status
-                });
+                setUserAttempt({ id: attemptDoc.id, status: attemptDoc.data().status });
             } else {
-                // No attempt for this test exists
                 setUserAttempt(null);
             }
         });
-
-        return () => unsubscribe(); // Cleanup the listener
+        return () => unsubscribe();
     }, [testId, user?.uid]);
-
-    
-    if (!user || (!userData?.isSubscribed && test && !test.isFree)) {
-        return (
-            <div className="text-center text-gray-400 p-8 flex flex-col items-center justify-center min-h-[50vh]">
-                <h1 className="text-2xl font-bold mb-4">Access Denied</h1>
-                <p className="text-lg mb-4">This content is for premium users only.</p>
-                <button
-                    onClick={() => navigate('subscription')}
-                    className="bg-amber-500 text-gray-900 px-6 py-2 rounded-md font-semibold hover:bg-amber-400 transition-all transform hover:scale-105"
-                >
-                    Subscribe Now
-                </button>
-            </div>
-        );
-    }
 
     if (loading) {
         return <div className="text-center text-gray-400 p-8">Loading article and test...</div>;
     }
 
-    // FIX: New logic to determine button text, action, and color based on real-time status
-    let buttonText;
-    let buttonAction;
-    let buttonClass;
+    if (!user || (!userData?.isSubscribed && test && !test.isFree)) {
+        return (
+            <div className="text-center text-gray-400 p-8 flex flex-col items-center justify-center min-h-[50vh]">
+                <h1 className="text-2xl font-bold mb-4">Access Denied</h1>
+                <p className="text-lg mb-4">This content is for premium users only.</p>
+                <button onClick={() => navigate('subscription')} className="bg-amber-500 text-gray-900 px-6 py-2 rounded-md font-semibold hover:bg-amber-400">Subscribe Now</button>
+            </div>
+        );
+    }
 
+    let buttonText, buttonAction, buttonClass;
     if (userAttempt?.status === 'completed') {
         buttonText = "View Analysis";
         buttonAction = () => navigate('results', { attemptId: userAttempt.id });
@@ -105,28 +97,40 @@ const RDFCArticleViewer = ({ navigate, articleUrl, testId }) => {
         buttonClass = "bg-blue-600 hover:bg-blue-700 text-white";
     }
 
+    const actionButton = (
+        <button onClick={buttonAction} className={`w-full px-4 py-3 rounded-md font-bold transition-all transform hover:scale-105 ${buttonClass}`} disabled={!test}>{buttonText}</button>
+    );
+
     return (
-        <div ref={viewerContainerRef} className="bg-gray-900 text-white min-h-screen p-4 flex flex-col font-sans">
-            <div className="flex-1 flex flex-col md:flex-row gap-4 max-w-7xl mx-auto w-full">
-                {/* PDF Viewer Panel */}
-                <div className="md:w-2/3 bg-gray-800 shadow-md rounded-lg p-4 flex flex-col full-screen-flex max-h-[calc(100vh-120px)]">
-                    <div className="flex justify-between items-center mb-2">
-                        <h2 className="text-xl font-bold">RDFC Article</h2>
+        <div 
+            ref={viewerContainerRef} 
+            className={`bg-gray-900 text-white h-screen flex flex-col font-sans ${!isFullScreen ? '-mt-4 md:-mt-6' : ''}`}
+        >
+            <div className={`flex-shrink-0 bg-gray-800 shadow-md z-20 ${isFullScreen && 'hidden'}`}>
+                 <div className="max-w-full mx-auto px-2 sm:px-4 flex justify-between items-center h-12">
+                    <h1 className="text-lg md:text-xl font-bold truncate">{test?.title || 'RDFC Article'}</h1>
+                    <div className="flex items-center space-x-4">
+                        <button 
+                            onClick={() => setIsDetailsVisible(!isDetailsVisible)} 
+                            title="Toggle Details Panel" 
+                            className="hidden md:inline-flex items-center justify-center px-3 py-1 text-sm font-semibold text-gray-300 bg-gray-700 rounded-md hover:bg-gray-600 hover:text-white"
+                        >
+                            {isDetailsVisible ? 'Hide Details' : 'Show Details'}
+                        </button>
                         <button onClick={handleFullscreen} title="Toggle Fullscreen" className="text-gray-400 hover:text-white">
                             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 8V4m0 0h4M4 4l5 5m11-5h-4m0 0v4m0-4l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5h-4m0 0v-4m0 4l-5-5"></path></svg>
                         </button>
+                         <button onClick={() => navigate('home')} className="text-sm font-semibold text-gray-300 hover:text-white">&larr; Dashboard</button>
                     </div>
-                    <iframe
-                        src={articleUrl.replace('/view', '/preview')}
-                        className="w-full flex-1"
-                        style={{ minHeight: '500px' }}
-                        frameBorder="0"
-                        allowFullScreen
-                    ></iframe>
+                </div>
+            </div>
+            
+            <div className="flex-1 flex flex-col md:flex-row gap-4 max-w-full mx-auto w-full overflow-hidden p-2 md:p-4 md:pt-2">
+                <div className={`bg-gray-800 shadow-md rounded-lg flex-1 flex flex-col ${isFullScreen ? 'w-full p-0' : 'md:w-2/3 lg:w-[70%] p-2 md:p-4'} ${mobileView === 'article' ? 'flex' : 'hidden md:flex'}`}>
+                    <iframe src={articleUrl.replace('/view', '/preview')} className="w-full h-full rounded-md" frameBorder="0" allowFullScreen></iframe>
                 </div>
 
-                {/* Test Details and Navigation Panel */}
-                <div className="md:w-1/3 bg-gray-800 text-white shadow-md rounded-lg p-4 flex flex-col full-screen-hide max-h-[calc(100vh-120px)] overflow-y-auto">
+                <div className={`w-full md:w-1/3 lg:w-[30%] bg-gray-800 text-white shadow-md rounded-lg p-4 flex-col overflow-y-auto ${isFullScreen && 'md:hidden'} ${mobileView === 'details' ? 'flex' : 'hidden'} ${isDetailsVisible ? 'md:flex' : 'md:hidden'}`}>
                     <div className="flex-1">
                         <h2 className="text-xl font-bold mb-2">Test Details</h2>
                         {test ? (
@@ -137,13 +141,9 @@ const RDFCArticleViewer = ({ navigate, articleUrl, testId }) => {
                                     {test.sections && (
                                         <>
                                             {test.sections.map((section, index) => (
-                                                <p key={index} className="text-gray-300">
-                                                    <span className="font-semibold">{section.name}:</span> {section.duration} minutes ({section.questions.length} questions)
-                                                </p>
+                                                <p key={index} className="text-gray-300"><span className="font-semibold">{section.name}:</span> {section.duration} mins ({section.questions.length} Qs)</p>
                                             ))}
-                                            <p className="text-gray-300">
-                                                <span className="font-semibold">Test Duration:</span> {test.sections.reduce((acc, sec) => acc + sec.duration, 0)} minutes
-                                            </p>
+                                            <p className="text-gray-300 font-bold mt-2">Total Duration: {test.sections.reduce((acc, sec) => acc + sec.duration, 0)} minutes</p>
                                         </>
                                     )}
                                 </div>
@@ -153,43 +153,25 @@ const RDFCArticleViewer = ({ navigate, articleUrl, testId }) => {
                         )}
                     </div>
                     
-                    {/* Navigation Buttons */}
-                    <div className="mt-4 flex flex-col space-y-2">
-                        <button
-                            onClick={buttonAction}
-                            className={`w-full px-4 py-3 rounded-md font-bold transition-all transform hover:scale-105 ${buttonClass}`}
-                            disabled={!test}
-                        >
-                            {buttonText}
-                        </button>
-                        <button
-                            onClick={() => navigate('home')}
-                            className="w-full bg-gray-700 text-white px-4 py-3 rounded-md font-semibold hover:bg-gray-600 transition-all transform hover:scale-105"
-                        >
-                            &larr; Back to Dashboard
-                        </button>
+                    <div className="mt-4 hidden md:flex flex-col space-y-2">
+                        {actionButton}
+                    </div>
+
+                    <div className={`mt-4 md:hidden ${isFullScreen ? 'block' : 'hidden'}`}>
+                        {actionButton}
                     </div>
                 </div>
             </div>
-             <style jsx>{`
-                :fullscreen .full-screen-flex {
-                    width: 100% !important;
-                    height: 100vh;
-                    max-height: 100vh;
-                    flex-basis: 100% !important;
-                    margin: 0;
-                    padding: 0;
-                    border: 2px solid #374151;
-                }
-                 :fullscreen .full-screen-flex iframe {
-                    width: 100%;
-                    height: 100%;
-                    min-height: 100vh;
-                }
-                :fullscreen .full-screen-hide {
-                    display: none;
-                }
-            `}</style>
+            
+            <div className={`md:hidden flex-shrink-0`}>
+                 <div className={`p-2 bg-gray-800 border-t border-gray-700 ${isFullScreen && 'hidden'}`}>
+                    {actionButton}
+                </div>
+                <div className="flex justify-around bg-black text-white shadow-inner">
+                    <button onClick={() => setMobileView('article')} className={`flex-1 py-3 text-sm font-semibold ${mobileView === 'article' ? 'bg-gray-700' : ''}`}>Article</button>
+                    <button onClick={() => setMobileView('details')} className={`flex-1 py-3 text-sm font-semibold ${mobileView === 'details' ? 'bg-gray-700' : ''}`}>Test Details</button>
+                </div>
+            </div>
         </div>
     );
 };
