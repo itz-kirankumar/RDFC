@@ -228,8 +228,9 @@ const TestInterfacePage = ({ navigate, testId }) => {
                         newTimers[currentSectionIndex] -= 1;
                         return newTimers;
                     } else {
-                        recordTimeTaken();
+                        // **FIX**: Moved recordTimeTaken inside the conditional to prevent double-counting on final submit.
                         if (currentSectionIndex < test.sections.length - 1) {
+                            recordTimeTaken(); // Record time before switching section.
                             const nextSectionIndex = currentSectionIndex + 1;
                             setSectionTransitionMessage(`Submitting ${test.sections[currentSectionIndex].name} section... Loading next section: ${test.sections[nextSectionIndex].name}`);
                             setCurrentSectionIndex(nextSectionIndex); 
@@ -239,7 +240,7 @@ const TestInterfacePage = ({ navigate, testId }) => {
                             return newTimers; 
                         } else {
                             if (document.fullscreenElement) document.exitFullscreen();
-                            submitTest(); 
+                            submitTest(); // This function will handle the final time recording.
                             return newTimers; 
                         }
                     }
