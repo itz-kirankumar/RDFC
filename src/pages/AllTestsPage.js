@@ -54,7 +54,7 @@ const AllTestsPage = ({ navigate, tests, title, contentType }) => {
         const isArticleRead = userStatus?.readArticles?.[test.id];
         if (isLocked) return { text: "Unlock", action: () => navigate('subscription'), className: "bg-amber-500 hover:bg-amber-400 text-gray-900", disabled: false };
         if (type === 'article' && article) {
-            if (isArticleRead) return { text: "Read", action: () => navigate('rdfcArticleViewer', { articleUrl: article.url, testId: test.id }), className: "bg-gray-600 hover:bg-gray-700 text-gray-300", disabled: false };
+            if (isArticleRead) return { text: "Article Read", action: () => navigate('rdfcArticleViewer', { articleUrl: article.url, testId: test.id }), className: "bg-gray-600 hover:bg-gray-700 text-gray-300", disabled: false };
             return { text: "View Article", action: () => handleViewArticle(article.url, test.id), className: "bg-blue-600 hover:bg-blue-700 text-white", disabled: false };
         }
         if (type === 'test') {
