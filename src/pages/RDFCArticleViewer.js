@@ -6,6 +6,7 @@ import { useAuth } from '../contexts/AuthContext';
 const RDFCArticleViewer = ({ navigate, articleUrl, testId }) => {
     const { user, userData } = useAuth();
     const [test, setTest] = useState(null);
+    const [article, setArticle] = useState(null); // MODIFIED: Added state for article data
     const [loading, setLoading] = useState(true);
     const [userAttempt, setUserAttempt] = useState(null);
     const [mobileView, setMobileView] = useState('article');
@@ -32,23 +33,33 @@ const RDFCArticleViewer = ({ navigate, articleUrl, testId }) => {
         return () => document.removeEventListener('fullscreenchange', onFullscreenChange);
     }, []);
 
+    // MODIFIED: Fetches both test and article data
     useEffect(() => {
-        const fetchTest = async () => {
+        const fetchData = async () => {
             if (!testId) return;
             setLoading(true);
             try {
+                // Fetch test details
                 const testRef = doc(db, 'tests', testId);
                 const testSnap = await getDoc(testRef);
                 if (testSnap.exists()) {
                     setTest({ id: testSnap.id, ...testSnap.data() });
                 }
+
+                // Fetch article details
+                const articleRef = doc(db, 'rdfcArticles', testId);
+                const articleSnap = await getDoc(articleRef);
+                if (articleSnap.exists()) {
+                    setArticle(articleSnap.data());
+                }
+
             } catch (error) {
-                console.error("Error fetching test details:", error);
+                console.error("Error fetching component data:", error);
             } finally {
                 setLoading(false);
             }
         };
-        fetchTest();
+        fetchData();
     }, [testId]);
 
     useEffect(() => {
@@ -69,7 +80,7 @@ const RDFCArticleViewer = ({ navigate, articleUrl, testId }) => {
     }, [testId, user?.uid]);
 
     if (loading) {
-        return <div className="text-center text-gray-400 p-8">Loading article and test...</div>;
+        return <div className="text-center text-gray-400 p-8">Loading...</div>;
     }
 
     if (!user || (!userData?.isSubscribed && test && !test.isFree)) {
@@ -108,7 +119,8 @@ const RDFCArticleViewer = ({ navigate, articleUrl, testId }) => {
         >
             <div className={`flex-shrink-0 bg-gray-800 shadow-md z-20 ${isFullScreen && 'hidden'}`}>
                  <div className="max-w-full mx-auto px-2 sm:px-4 flex justify-between items-center h-12">
-                    <h1 className="text-lg md:text-xl font-bold truncate">{test?.title || 'RDFC Article'}</h1>
+                    {/* MODIFIED: Displays article.name */}
+                    <h1 className="text-lg md:text-xl font-bold truncate">{article?.name || test?.title || 'Article'}</h1>
                     <div className="flex items-center space-x-4">
                         <button 
                             onClick={() => setIsDetailsVisible(!isDetailsVisible)} 
