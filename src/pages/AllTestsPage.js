@@ -3,11 +3,57 @@ import { useAuth } from '../contexts/AuthContext';
 import { collection, query, where, onSnapshot, doc, updateDoc } from 'firebase/firestore';
 import { db } from '../firebase/config';
 
+const CountdownTimer = ({ targetDate, onComplete }) => {
+    const calculateTimeLeft = () => {
+        const difference = +new Date(targetDate) - +new Date();
+        let timeLeft = {};
+        if (difference > 0) {
+            timeLeft = {
+                Days: Math.floor(difference / (1000 * 60 * 60 * 24)),
+                Hours: Math.floor((difference / (1000 * 60 * 60)) % 24),
+                Minutes: Math.floor((difference / 1000 / 60) % 60),
+                Seconds: Math.floor((difference / 1000) % 60)
+            };
+        }
+        return timeLeft;
+    };
+
+    const [timeLeft, setTimeLeft] = useState(calculateTimeLeft());
+
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            const newTimeLeft = calculateTimeLeft();
+            setTimeLeft(newTimeLeft);
+            if (!Object.keys(newTimeLeft).length) {
+                onComplete();
+            }
+        }, 1000);
+        return () => clearTimeout(timer);
+    });
+
+    const timerComponents = Object.entries(timeLeft).map(([interval, value]) => {
+        return (
+          <span key={interval} className="text-center p-1">
+            <span className="font-mono text-base sm:text-lg font-semibold">{String(value).padStart(2, '0')}</span>
+            <span className="text-xs uppercase block opacity-70">{interval}</span>
+          </span>
+        );
+      });
+
+    return (
+        <div className="flex justify-around items-center text-white w-full h-full bg-gray-700/50 rounded-md">
+            {timerComponents.length ? timerComponents : <span>Loading...</span>}
+        </div>
+    );
+};
+
+
 const AllTestsPage = ({ navigate, tests, title, contentType }) => {
     const { userData } = useAuth();
     const [userAttempts, setUserAttempts] = useState({});
     const [userStatus, setUserStatus] = useState(null);
     const [filterType, setFilterType] = useState('All');
+    const [liveTests, setLiveTests] = useState({});
 
     useEffect(() => {
         if (!userData?.uid) {
@@ -38,22 +84,20 @@ const AllTestsPage = ({ navigate, tests, title, contentType }) => {
         return () => unsubscribe();
     }, [userData?.uid]);
 
-    // --- MODIFICATION: Simplified lock logic based on test type ---
     const getIsLocked = (test, itemType) => {
         if (test.isFree) return false;
         if (!userStatus?.isSubscribed) return true;
+    
         const access = userStatus.accessControl;
         if (!access) return true;
-
+    
         if (itemType === 'rdfc_article') return !access.rdfc_articles;
-
-        // For all test types
+        if (itemType === 'rdfc_test') return !access.rdfc_tests;
+    
         switch (test.type?.toUpperCase()) {
             case 'MOCK': return !access.mock;
             case 'SECTIONAL': return !access.sectional;
-            case 'TEST':
-                 if (contentType === 'rdfc') return !access.rdfc_tests;
-                 return !access.test;
+            case 'TEST': return !access.test;
             default: return true;
         }
     };
@@ -68,94 +112,224 @@ const AllTestsPage = ({ navigate, tests, title, contentType }) => {
             console.error("Error marking article as read:", error);
         }
     };
-
-    const getButtonState = (test, type) => {
-        const itemType = contentType === 'rdfc' ? `rdfc_${type}` : type;
-        const isLocked = getIsLocked(test, itemType);
-        const article = test.article;
-        const isArticleRead = userStatus?.readArticles?.[test.id];
-
-        if (isLocked) return { text: "Unlock", action: () => navigate('subscription'), className: "bg-amber-500 hover:bg-amber-400 text-gray-900", disabled: false };
-        if (type === 'article' && article) {
-            if (isArticleRead) return { text: "Article Read", action: () => navigate('rdfcArticleViewer', { articleUrl: article.url, testId: test.id }), className: "bg-gray-600 hover:bg-gray-700 text-gray-300", disabled: false };
-            return { text: "View Article", action: () => handleViewArticle(article.url, test.id), className: "bg-blue-600 hover:bg-blue-700 text-white", disabled: false };
-        }
-        if (type === 'test') {
-            const attempt = userAttempts[test.id];
-            if (attempt?.status === 'completed') return { text: "View Analysis", action: () => navigate('results', { attemptId: attempt.id }), className: "bg-green-600 hover:bg-green-700 text-white", disabled: false };
-            if (attempt?.status === 'in-progress') return { text: "Continue Test", action: () => navigate('test', { testId: test.id }), className: "bg-orange-500 hover:bg-orange-600 text-white", disabled: false };
-            return { text: "Start Test", action: () => navigate('test', { testId: test.id }), className: "bg-blue-600 hover:bg-blue-700 text-white", disabled: false };
-        }
-        return { text: "N/A", action: null, className: "bg-gray-700 text-gray-500 cursor-not-allowed", disabled: true };
-    };
-
+    
+    // --- MODIFICATION: Refactored RDFC desktop row logic ---
     const renderRDFCDesktopRow = (test) => {
         const article = test.article;
-        const getDesktopButton = (type) => {
-            const state = getButtonState(test, type);
-            state.className += " text-xs px-3 py-1 rounded-full";
-            return state;
+        const isScheduled = test.liveAt && test.liveAt.toDate() > new Date() && !liveTests[test.id];
+
+        const renderCellContent = (type) => {
+            if (isScheduled) {
+                return <div className="w-full h-10 flex items-center justify-center"><CountdownTimer targetDate={test.liveAt.toDate()} onComplete={() => setLiveTests(prev => ({...prev, [test.id]: true}))} /></div>;
+            }
+            const isLocked = getIsLocked(test, `rdfc_${type}`);
+            const isArticleRead = userStatus?.readArticles?.[test.id];
+
+            let text, action, className, disabled = !article;
+            if(isLocked) {
+                text = "Unlock";
+                action = () => navigate('subscription');
+                className = "bg-amber-500 hover:bg-amber-400 text-gray-900";
+            } else if(type === 'article') {
+                if(isArticleRead) {
+                    text = "Article Read";
+                    action = () => navigate('rdfcArticleViewer', { articleUrl: article.url, testId: test.id });
+                    className = "bg-gray-600 hover:bg-gray-700 text-gray-300";
+                } else {
+                    text = "View Article";
+                    action = () => handleViewArticle(article.url, test.id);
+                    className = "bg-blue-600 hover:bg-blue-700 text-white";
+                }
+            } else { // type === 'test'
+                const attempt = userAttempts[test.id];
+                if (attempt?.status === 'completed') {
+                    text = "View Analysis";
+                    action = () => navigate('results', { attemptId: attempt.id });
+                    className = "bg-green-600 hover:bg-green-700 text-white";
+                } else if (attempt?.status === 'in-progress') {
+                    text = "Continue Test";
+                    action = () => navigate('test', { testId: test.id });
+                    className = "bg-orange-500 hover:bg-orange-600 text-white";
+                } else {
+                    text = "Start Test";
+                    action = () => navigate('test', { testId: test.id });
+                    className = "bg-blue-600 hover:bg-blue-700 text-white";
+                }
+            }
+            return <button onClick={action} disabled={disabled} className={`text-xs px-3 py-1 rounded-full w-40 h-10 flex items-center justify-center ${className} ${isLocked ? 'opacity-60' : ''}`}>{text}</button>;
         };
-        const articleButton = getDesktopButton('article');
-        const testButton = getDesktopButton('test');
-        const articleIsLocked = getIsLocked(test, 'rdfc_article');
-        const testIsLocked = getIsLocked(test, 'rdfc_test');
 
         return (
             <tr key={test.id}>
-                <td className="px-6 py-4 text-sm font-medium text-white">{test.title}</td>
+                <td className="px-6 py-4 text-sm font-medium text-white">
+                    <div className="flex items-center">
+                        <span>{test.title}</span>
+                        {isScheduled && <span className="ml-2 flex-shrink-0 text-xs font-semibold rounded-full bg-cyan-700 text-cyan-200 px-2 py-1">Coming Soon</span>}
+                    </div>
+                </td>
                 <td className="px-6 py-4 text-sm text-gray-400">{article ? article.name : 'N/A'}</td>
                 <td className="px-6 py-4 text-sm text-gray-400 max-w-xs truncate">{article ? article.description : 'N/A'}</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm"><button onClick={articleButton.action} disabled={!article} className={`${articleIsLocked ? 'opacity-60' : ''} ${articleButton.className}`}>{articleButton.text}</button></td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm"><button onClick={testButton.action} disabled={!article} className={`${testIsLocked ? 'opacity-60' : ''} ${testButton.className}`}>{testButton.text}</button></td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm">{renderCellContent('article')}</td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm">{renderCellContent('test')}</td>
             </tr>
         );
     };
-
+    
     const renderRDFCMobileCard = (test) => {
         const article = test.article;
-        const articleButton = getButtonState(test, 'article');
-        const testButton = getButtonState(test, 'test');
-        const articleIsLocked = getIsLocked(test, 'rdfc_article');
-        const testIsLocked = getIsLocked(test, 'rdfc_test');
+        const isScheduled = test.liveAt && test.liveAt.toDate() > new Date() && !liveTests[test.id];
 
+        const getButtonState = (type) => {
+            const itemType = `rdfc_${type}`;
+            const isLocked = getIsLocked(test, itemType);
+            const isArticleRead = userStatus?.readArticles?.[test.id];
+
+            let text, action, className, disabled = false;
+            if (isLocked) {
+                text = "Unlock";
+                action = () => navigate('subscription');
+                className = "bg-amber-500 hover:bg-amber-400 text-gray-900";
+            } else if (type === 'article') {
+                if (isArticleRead) {
+                    text = "Article Read";
+                    action = () => navigate('rdfcArticleViewer', { articleUrl: article.url, testId: test.id });
+                    className = "bg-gray-600 hover:bg-gray-700 text-gray-300";
+                } else {
+                    text = "View Article";
+                    action = () => handleViewArticle(article.url, test.id);
+                    className = "bg-blue-600 hover:bg-blue-700 text-white";
+                }
+            } else { // type === 'test'
+                const attempt = userAttempts[test.id];
+                if (attempt?.status === 'completed') {
+                    text = "View Analysis";
+                    action = () => navigate('results', { attemptId: attempt.id });
+                    className = "bg-green-600 hover:bg-green-700 text-white";
+                } else if (attempt?.status === 'in-progress') {
+                    text = "Continue Test";
+                    action = () => navigate('test', { testId: test.id });
+                    className = "bg-orange-500 hover:bg-orange-600 text-white";
+                } else {
+                    text = "Start Test";
+                    action = () => navigate('test', { testId: test.id });
+                    className = "bg-blue-600 hover:bg-blue-700 text-white";
+                }
+            }
+            return { text, action, className, disabled };
+        };
+
+        const renderButtons = () => {
+            const articleButton = getButtonState('article');
+            const testButton = getButtonState('test');
+            return (
+                <div className="flex space-x-2">
+                    <button onClick={articleButton.action} disabled={articleButton.disabled || !article} className={`flex-1 text-sm font-semibold px-3 py-2 rounded-md transition-colors ${getIsLocked(test, 'rdfc_article') ? 'opacity-60' : ''} ${articleButton.className}`}>{articleButton.text}</button>
+                    <button onClick={testButton.action} disabled={testButton.disabled || !article} className={`flex-1 text-sm font-semibold px-3 py-2 rounded-md transition-colors ${getIsLocked(test, 'rdfc_test') ? 'opacity-60' : ''} ${testButton.className}`}>{testButton.text}</button>
+                </div>
+            );
+        };
+        
         return (
             <div key={test.id} className={`bg-gray-800 rounded-lg p-4 mb-4`}>
-                <h4 className="text-lg font-semibold text-white">{test.title}</h4>
+                <h4 className="text-lg font-semibold text-white">{test.title} {isScheduled && <span className="ml-2 text-xs font-semibold rounded-full bg-cyan-700 text-cyan-200 px-2 py-1">Coming Soon</span>}</h4>
                 <p className="text-sm text-gray-400 mt-1 mb-2">{article ? article.name : 'N/A'}</p>
                 <p className="text-xs text-gray-500 mb-4 h-8 overflow-hidden">{article ? article.description : 'N/A'}</p>
-                <div className="flex space-x-2">
-                    <button onClick={articleButton.action} disabled={articleButton.disabled} className={`flex-1 text-sm font-semibold px-3 py-2 rounded-md transition-colors ${articleIsLocked ? 'opacity-60' : ''} ${articleButton.className}`}>{articleButton.text}</button>
-                    <button onClick={testButton.action} disabled={testButton.disabled} className={`flex-1 text-sm font-semibold px-3 py-2 rounded-md transition-colors ${testIsLocked ? 'opacity-60' : ''} ${testButton.className}`}>{testButton.text}</button>
-                </div>
+                {isScheduled 
+                    ? <div className="mt-2"><CountdownTimer targetDate={test.liveAt.toDate()} onComplete={() => setLiveTests(prev => ({...prev, [test.id]: true}))} /></div>
+                    : renderButtons()
+                }
             </div>
         );
     };
 
     const renderAddOnTestRow = (test) => {
-        const isLocked = getIsLocked(test, 'test');
-        const testButton = getButtonState(test, 'test');
+        const isScheduled = test.liveAt && test.liveAt.toDate() > new Date() && !liveTests[test.id];
+
+        const renderCellContent = () => {
+            if (isScheduled) {
+                return <div className="w-full h-10 flex items-center justify-center"><CountdownTimer targetDate={test.liveAt.toDate()} onComplete={() => setLiveTests(prev => ({...prev, [test.id]: true}))} /></div>;
+            }
+            const isLocked = getIsLocked(test, 'test');
+            let text, action, className;
+            if (isLocked) {
+                text = "Unlock";
+                action = () => navigate('subscription');
+                className = "bg-amber-500 hover:bg-amber-400 text-gray-900";
+            } else {
+                const attempt = userAttempts[test.id];
+                if (attempt?.status === 'completed') {
+                    text = "View Analysis";
+                    action = () => navigate('results', { attemptId: attempt.id });
+                    className = "bg-green-600 hover:bg-green-700 text-white";
+                } else if (attempt?.status === 'in-progress') {
+                    text = "Continue Test";
+                    action = () => navigate('test', { testId: test.id });
+                    className = "bg-orange-500 hover:bg-orange-600 text-white";
+                } else {
+                    text = "Start Test";
+                    action = () => navigate('test', { testId: test.id });
+                    className = "bg-blue-600 hover:bg-blue-700 text-white";
+                }
+            }
+            return <button onClick={action} className={`px-4 py-2 rounded-md font-semibold transition-colors ${className}`}>{text}</button>;
+        };
+        
         return (
-            <tr key={test.id} className={`${isLocked ? 'opacity-50' : ''}`}>
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">{test.title}</td>
+            <tr key={test.id} className={`${getIsLocked(test, 'test') && !isScheduled ? 'opacity-50' : ''}`}>
+                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">
+                    <div className="flex items-center">
+                        <span>{test.title}</span>
+                        {isScheduled && <span className="ml-2 flex-shrink-0 text-xs font-semibold rounded-full bg-cyan-700 text-cyan-200 px-2 py-1">Coming Soon</span>}
+                    </div>
+                </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400">{test.type}</td>
                 <td className="px-6 py-4 text-sm text-gray-400">{test.description}</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm"><button onClick={testButton.action} disabled={testButton.disabled} className={`px-4 py-2 rounded-md font-semibold transition-colors ${testButton.className}`}>{testButton.text}</button></td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm">{renderCellContent()}</td>
             </tr>
         );
     };
 
     const renderAddOnMobileCard = (test) => {
+        const isScheduled = test.liveAt && test.liveAt.toDate() > new Date() && !liveTests[test.id];
         const isLocked = getIsLocked(test, 'test');
-        const testButton = getButtonState(test, 'test');
+
+        const renderButton = () => {
+             let text, action, className;
+             if (isLocked) {
+                 text = "Unlock";
+                 action = () => navigate('subscription');
+                 className = "bg-amber-500 hover:bg-amber-400 text-gray-900";
+             } else {
+                 const attempt = userAttempts[test.id];
+                 if (attempt?.status === 'completed') {
+                     text = "View Analysis";
+                     action = () => navigate('results', { attemptId: attempt.id });
+                     className = "bg-green-600 hover:bg-green-700 text-white";
+                 } else if (attempt?.status === 'in-progress') {
+                     text = "Continue Test";
+                     action = () => navigate('test', { testId: test.id });
+                     className = "bg-orange-500 hover:bg-orange-600 text-white";
+                 } else {
+                     text = "Start Test";
+                     action = () => navigate('test', { testId: test.id });
+                     className = "bg-blue-600 hover:bg-blue-700 text-white";
+                 }
+             }
+             return <button onClick={action} className={`w-full text-sm font-semibold px-3 py-2 rounded-md transition-colors ${className}`}>{text}</button>;
+        };
+
         return (
-            <div key={test.id} className={`bg-gray-800 rounded-lg p-4 mb-4 ${isLocked ? 'opacity-50' : ''}`}>
+            <div key={test.id} className={`bg-gray-800 rounded-lg p-4 mb-4 ${isLocked && !isScheduled ? 'opacity-50' : ''}`}>
                 <div className="flex justify-between items-start">
                     <h4 className="text-lg font-semibold text-white">{test.title}</h4>
                     <span className="bg-gray-700 text-gray-300 text-xs font-semibold px-2 py-1 rounded-full">{test.type}</span>
                 </div>
+                {isScheduled && <span className="mt-2 inline-block text-xs font-semibold rounded-full bg-cyan-700 text-cyan-200 px-2 py-1">Coming Soon</span>}
                 <p className="text-sm text-gray-400 mt-2 mb-4">{test.description}</p>
-                <button onClick={testButton.action} disabled={testButton.disabled} className={`w-full text-sm font-semibold px-3 py-2 rounded-md transition-colors ${testButton.className}`}>{testButton.text}</button>
+                {isScheduled
+                    ? <div className="mt-2"><CountdownTimer targetDate={test.liveAt.toDate()} onComplete={() => setLiveTests(prev => ({...prev, [test.id]: true}))} /></div>
+                    : renderButton()
+                }
             </div>
         );
     };
@@ -168,7 +342,6 @@ const AllTestsPage = ({ navigate, tests, title, contentType }) => {
         return (b.createdAt?.toDate() || 0) - (a.createdAt?.toDate() || 0);
     });
     
-    // --- MODIFICATION: Simplified filtering logic ---
     const filteredTests = filterType === 'All' || contentType !== 'test' 
         ? sortedTests 
         : sortedTests.filter(test => test.type === filterType.toUpperCase());
@@ -206,7 +379,6 @@ const AllTestsPage = ({ navigate, tests, title, contentType }) => {
                 </>
             ) : (
                 <>
-                    {/* --- MODIFICATION: Conditionally render filters only for "Add-On Tests" --- */}
                     {contentType === 'test' && (
                         <div className="flex space-x-2 mb-4 overflow-x-auto">
                             {['All', 'Test'].map(type => <button key={type} onClick={() => setFilterType(type)} className={`flex-shrink-0 px-4 py-2 rounded-md font-semibold text-sm transition-colors ${filterType === type ? 'bg-gray-700 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`}>{type}</button>)}

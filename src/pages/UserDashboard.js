@@ -3,6 +3,51 @@ import { collection, getDocs, query, where, doc, onSnapshot, updateDoc } from 'f
 import { db } from '../firebase/config';
 import { useAuth } from '../contexts/AuthContext';
 
+const CountdownTimer = ({ targetDate, onComplete }) => {
+    const calculateTimeLeft = () => {
+        const difference = +new Date(targetDate) - +new Date();
+        let timeLeft = {};
+        if (difference > 0) {
+            timeLeft = {
+                Days: Math.floor(difference / (1000 * 60 * 60 * 24)),
+                Hours: Math.floor((difference / (1000 * 60 * 60)) % 24),
+                Minutes: Math.floor((difference / 1000 / 60) % 60),
+                Seconds: Math.floor((difference / 1000) % 60)
+            };
+        }
+        return timeLeft;
+    };
+
+    const [timeLeft, setTimeLeft] = useState(calculateTimeLeft());
+
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            const newTimeLeft = calculateTimeLeft();
+            setTimeLeft(newTimeLeft);
+            if (!Object.keys(newTimeLeft).length) {
+                onComplete();
+            }
+        }, 1000);
+        return () => clearTimeout(timer);
+    });
+
+    const timerComponents = Object.entries(timeLeft).map(([interval, value]) => {
+        return (
+          <span key={interval} className="text-center p-1">
+            <span className="font-mono text-base sm:text-lg font-semibold">{String(value).padStart(2, '0')}</span>
+            <span className="text-xs uppercase block opacity-70">{interval}</span>
+          </span>
+        );
+      });
+
+    return (
+        <div className="flex justify-around items-center text-white w-full h-full bg-gray-700/50 rounded-md">
+            {timerComponents.length ? timerComponents : <span className="font-semibold">Loading...</span>}
+        </div>
+    );
+};
+
+
 const UserDashboard = ({ navigate }) => {
     const { userData } = useAuth();
     const [rdfcTests, setRdfcTests] = useState([]);
@@ -13,6 +58,7 @@ const UserDashboard = ({ navigate }) => {
     const [loading, setLoading] = useState(true);
     const [userStatus, setUserStatus] = useState(null);
     const [userAttempts, setUserAttempts] = useState({});
+    const [liveTests, setLiveTests] = useState({});
 
     useEffect(() => {
         if (!userData?.uid) {
@@ -115,74 +161,96 @@ const UserDashboard = ({ navigate }) => {
     };
 
     const renderTestCard = (test) => {
-        const isLocked = getIsLocked(test, test.type); // Pass the test's own type
+        const isScheduled = test.liveAt && test.liveAt.toDate() > new Date() && !liveTests[test.id];
+        const isLocked = getIsLocked(test, test.type);
         const attempt = userAttempts[test.id];
-        let buttonText, buttonAction, buttonClass;
+        let buttonContent, buttonClass;
 
-        if (isLocked) {
-            buttonText = "Subscribe to Unlock";
-            buttonAction = () => navigate('subscription');
+        if (isScheduled) {
+            buttonContent = <CountdownTimer targetDate={test.liveAt.toDate()} onComplete={() => setLiveTests(prev => ({...prev, [test.id]: true}))} />;
+            buttonClass = "bg-gray-700 cursor-default";
+        } else if (isLocked) {
+            buttonContent = "Subscribe to Unlock";
             buttonClass = "bg-amber-500 hover:bg-amber-400 text-gray-900";
         } else if (attempt?.status === 'completed') {
-            buttonText = "View Analysis";
-            buttonAction = () => navigate('results', { attemptId: attempt.id });
+            buttonContent = "View Analysis";
             buttonClass = "bg-green-600 hover:bg-green-700 text-white";
         } else if (attempt?.status === 'in-progress') {
-            buttonText = "Continue Test";
-            buttonAction = () => navigate('test', { testId: test.id });
+            buttonContent = "Continue Test";
             buttonClass = "bg-orange-500 hover:bg-orange-600 text-white";
         } else {
-            buttonText = "Start Test";
-            buttonAction = () => navigate('test', { testId: test.id });
+            buttonContent = "Start Test";
             buttonClass = "bg-blue-600 hover:bg-blue-700 text-white";
         }
 
+        const handleButtonClick = () => {
+            if (isScheduled) return;
+            if (isLocked) navigate('subscription');
+            else if (attempt?.status === 'completed') navigate('results', { attemptId: attempt.id });
+            else if (attempt?.status === 'in-progress') navigate('test', { testId: test.id });
+            else navigate('test', { testId: test.id });
+        };
+
         return (
-            <div key={test.id} className={`bg-gray-800 rounded-lg shadow-md p-6 flex flex-col justify-between transition-all ${isLocked ? 'opacity-50' : 'hover:shadow-xl hover:-translate-y-1'}`}>
+            <div key={test.id} className={`bg-gray-800 rounded-lg shadow-md p-6 flex flex-col justify-between transition-all ${isLocked && !isScheduled ? 'opacity-50' : 'hover:shadow-xl hover:-translate-y-1'}`}>
                 <div>
                     <h3 className="text-xl font-semibold text-white">{test.title}</h3>
-                    <span className={`inline-block px-2 py-1 text-xs font-semibold rounded-full mt-2 ${test.type === 'MOCK' ? 'bg-purple-700 text-purple-200' : test.type === 'SECTIONAL' ? 'bg-teal-700 text-teal-200' : 'bg-gray-600 text-gray-400'}`}>{test.type}</span>
+                    <div className="flex items-center mt-2">
+                        <span className={`inline-block px-2 py-1 text-xs font-semibold rounded-full ${test.type === 'MOCK' ? 'bg-purple-700 text-purple-200' : test.type === 'SECTIONAL' ? 'bg-teal-700 text-teal-200' : 'bg-gray-600 text-gray-400'}`}>{test.type}</span>
+                        {isScheduled && <span className="ml-2 inline-block px-2 py-1 text-xs font-semibold rounded-full bg-cyan-700 text-cyan-200">Coming Soon</span>}
+                    </div>
                     <p className="text-gray-400 mt-2">{test.description}</p>
                 </div>
-                {/* --- MODIFICATION: Removed incorrect "disabled" attribute --- */}
-                <button onClick={buttonAction} className={`mt-4 w-full px-4 py-2 rounded-md font-semibold transition-colors ${buttonClass}`}>{buttonText}</button>
+                <button onClick={handleButtonClick} className={`mt-4 w-full px-4 py-2 rounded-md font-semibold transition-colors ${buttonClass}`}>
+                    {buttonContent}
+                </button>
             </div>
         );
     };
     
     const renderRDFCArticleRow = (test) => {
-        const articleIsLocked = getIsLocked(test, 'rdfc_article');
-        const testIsLocked = getIsLocked(test, 'rdfc_test');
         const article = linkedArticles[test.id];
-        const isArticleRead = userStatus?.readArticles?.[test.id];
-        
-        const getButtonState = (type, isLocked) => {
-            if (isLocked) return { text: "Unlock", action: () => navigate('subscription'), className: "bg-amber-500 hover:bg-amber-400 text-gray-900", disabled: false };
-            if (type === 'article' && article) {
-                if (isArticleRead) return { text: "Article Read", action: () => navigate('rdfcArticleViewer', { articleUrl: article.url, testId: test.id }), className: "bg-gray-600 hover:bg-gray-700 text-gray-300", disabled: false };
-                return { text: "View Article", action: () => handleViewArticle(article.url, test.id), className: "bg-blue-600 hover:bg-blue-700 text-white", disabled: false };
-            }
-            if (type === 'test' && article) {
-                const attempt = userAttempts[test.id];
-                if (attempt?.status === 'completed') return { text: "View Analysis", action: () => navigate('results', { attemptId: attempt.id }), className: "bg-green-600 hover:bg-green-700 text-white", disabled: false };
-                if (attempt?.status === 'in-progress') return { text: "Continue Test", action: () => navigate('test', { testId: test.id }), className: "bg-orange-500 hover:bg-orange-600 text-white", disabled: false };
-                return { text: "Start Test", action: () => navigate('test', { testId: test.id }), className: "bg-blue-600 hover:bg-blue-700 text-white", disabled: false };
-            }
-            return { text: "N/A", action: null, className: "bg-gray-700 text-gray-500 cursor-not-allowed", disabled: true };
-        };
+        const isScheduled = test.liveAt && test.liveAt.toDate() > new Date() && !liveTests[test.id];
 
-        const articleButton = getButtonState('article', articleIsLocked);
-        const testButton = getButtonState('test', testIsLocked);
+        const renderButtons = () => {
+            const articleIsLocked = getIsLocked(test, 'rdfc_article');
+            const testIsLocked = getIsLocked(test, 'rdfc_test');
+            const isArticleRead = userStatus?.readArticles?.[test.id];
+
+            const getButtonState = (type, isLocked) => {
+                if (isLocked) return { text: "Unlock", action: () => navigate('subscription'), className: "bg-amber-500 hover:bg-amber-400 text-gray-900", disabled: false };
+                if (type === 'article' && article) {
+                    if (isArticleRead) return { text: "Article Read", action: () => navigate('rdfcArticleViewer', { articleUrl: article.url, testId: test.id }), className: "bg-gray-600 hover:bg-gray-700 text-gray-300", disabled: false };
+                    return { text: "View Article", action: () => handleViewArticle(article.url, test.id), className: "bg-blue-600 hover:bg-blue-700 text-white", disabled: false };
+                }
+                if (type === 'test' && article) {
+                    const attempt = userAttempts[test.id];
+                    if (attempt?.status === 'completed') return { text: "View Analysis", action: () => navigate('results', { attemptId: attempt.id }), className: "bg-green-600 hover:bg-green-700 text-white", disabled: false };
+                    if (attempt?.status === 'in-progress') return { text: "Continue Test", action: () => navigate('test', { testId: test.id }), className: "bg-orange-500 hover:bg-orange-600 text-white", disabled: false };
+                    return { text: "Start Test", action: () => navigate('test', { testId: test.id }), className: "bg-blue-600 hover:bg-blue-700 text-white", disabled: false };
+                }
+                return { text: "N/A", action: null, className: "bg-gray-700 text-gray-500 cursor-not-allowed", disabled: true };
+            };
+            const articleButton = getButtonState('article', articleIsLocked);
+            const testButton = getButtonState('test', testIsLocked);
+
+            return (
+                <div className="flex space-x-2">
+                    <button onClick={articleButton.action} disabled={articleButton.disabled} className={`flex-1 text-sm font-semibold px-3 py-2 rounded-md transition-colors ${articleIsLocked ? 'opacity-60' : ''} ${articleButton.className}`}>{articleButton.text}</button>
+                    <button onClick={testButton.action} disabled={testButton.disabled} className={`flex-1 text-sm font-semibold px-3 py-2 rounded-md transition-colors ${testIsLocked ? 'opacity-60' : ''} ${testButton.className}`}>{testButton.text}</button>
+                </div>
+            );
+        };
 
         return (
             <div key={test.id} className={`md:hidden bg-gray-800 rounded-lg p-4 mb-4`}>
                 <h4 className="text-lg font-semibold text-white">{test.title}</h4>
                 <p className="text-sm text-gray-400 mt-1 mb-2">{article ? article.name : 'N/A'}</p>
                 <p className="text-xs text-gray-500 mb-4 h-8 overflow-hidden">{article ? article.description : 'N/A'}</p>
-                <div className="flex space-x-2">
-                    <button onClick={articleButton.action} disabled={articleButton.disabled} className={`flex-1 text-sm font-semibold px-3 py-2 rounded-md transition-colors ${articleIsLocked ? 'opacity-60' : ''} ${articleButton.className}`}>{articleButton.text}</button>
-                    <button onClick={testButton.action} disabled={testButton.disabled} className={`flex-1 text-sm font-semibold px-3 py-2 rounded-md transition-colors ${testIsLocked ? 'opacity-60' : ''} ${testButton.className}`}>{testButton.text}</button>
-                </div>
+                {isScheduled 
+                    ? <div className="mt-2"><CountdownTimer targetDate={test.liveAt.toDate()} onComplete={() => setLiveTests(prev => ({...prev, [test.id]: true}))} /></div>
+                    : renderButtons()
+                }
             </div>
         );
     };
@@ -255,30 +323,56 @@ const UserDashboard = ({ navigate }) => {
                             <tbody className="bg-gray-800 divide-y divide-gray-700">
                                 {section.tests.slice(0, 3).map(test => {
                                     const article = linkedArticles[test.id];
-                                    const isArticleRead = userStatus?.readArticles?.[test.id];
-                                    const articleIsLocked = getIsLocked(test, 'rdfc_article');
-                                    const testIsLocked = getIsLocked(test, 'rdfc_test');
+                                    const isScheduled = test.liveAt && test.liveAt.toDate() > new Date() && !liveTests[test.id];
 
-                                    const getButton = (type, isLocked) => {
-                                        if (isLocked) return { text: "Unlock", action: () => navigate('subscription'), className: "bg-amber-500 hover:bg-amber-400 text-gray-900 text-xs px-3 py-1 rounded-full" };
-                                        if (type === 'article') {
-                                            if (isArticleRead) return { text: "Article Read", action: () => navigate('rdfcArticleViewer', { articleUrl: article.url, testId: test.id }), className: "bg-gray-600 hover:bg-gray-700 text-gray-300 text-xs px-3 py-1 rounded-full" };
-                                            return { text: "View Article", action: () => handleViewArticle(article.url, test.id), className: "bg-blue-600 hover:bg-blue-700 text-white text-xs px-3 py-1 rounded-full" };
-                                        } else {
-                                            const attempt = userAttempts[test.id];
-                                            if (attempt?.status === 'completed') return { text: "View Analysis", action: () => navigate('results', { attemptId: attempt.id }), className: "bg-green-600 hover:bg-green-700 text-white text-xs px-3 py-1 rounded-full" };
-                                            if (attempt?.status === 'in-progress') return { text: "Continue Test", action: () => navigate('test', { testId: test.id }), className: "bg-orange-500 hover:bg-orange-600 text-white text-xs px-3 py-1 rounded-full" };
-                                            return { text: "Start Test", action: () => navigate('test', { testId: test.id }), className: "bg-blue-600 hover:bg-blue-700 text-white text-xs px-3 py-1 rounded-full" };
+                                    // --- MODIFICATION: Refactored RDFC desktop row logic ---
+                                    const renderCellContent = (type) => {
+                                        if (isScheduled) {
+                                            return <div className="w-full h-10 flex items-center justify-center"><CountdownTimer targetDate={test.liveAt.toDate()} onComplete={() => setLiveTests(prev => ({...prev, [test.id]: true}))} /></div>;
                                         }
+                                        const isLocked = getIsLocked(test, `rdfc_${type}`);
+                                        const isArticleRead = userStatus?.readArticles?.[test.id];
+
+                                        let text, action, className, disabled = !article;
+                                        if(isLocked) {
+                                            text = "Unlock";
+                                            action = () => navigate('subscription');
+                                            className = "bg-amber-500 hover:bg-amber-400 text-gray-900";
+                                        } else if(type === 'article') {
+                                            if(isArticleRead) {
+                                                text = "Article Read";
+                                                action = () => navigate('rdfcArticleViewer', { articleUrl: article.url, testId: test.id });
+                                                className = "bg-gray-600 hover:bg-gray-700 text-gray-300";
+                                            } else {
+                                                text = "View Article";
+                                                action = () => handleViewArticle(article.url, test.id);
+                                                className = "bg-blue-600 hover:bg-blue-700 text-white";
+                                            }
+                                        } else { // type === 'test'
+                                            const attempt = userAttempts[test.id];
+                                            if (attempt?.status === 'completed') {
+                                                text = "View Analysis";
+                                                action = () => navigate('results', { attemptId: attempt.id });
+                                                className = "bg-green-600 hover:bg-green-700 text-white";
+                                            } else if (attempt?.status === 'in-progress') {
+                                                text = "Continue Test";
+                                                action = () => navigate('test', { testId: test.id });
+                                                className = "bg-orange-500 hover:bg-orange-600 text-white";
+                                            } else {
+                                                text = "Start Test";
+                                                action = () => navigate('test', { testId: test.id });
+                                                className = "bg-blue-600 hover:bg-blue-700 text-white";
+                                            }
+                                        }
+                                        return <button onClick={action} disabled={disabled} className={`text-xs px-3 py-1 rounded-full w-40 h-10 flex items-center justify-center ${className} ${isLocked ? 'opacity-60' : ''}`}>{text}</button>;
                                     };
-                                    const articleBtn = getButton('article', articleIsLocked);
-                                    const testBtn = getButton('test', testIsLocked);
+
                                     return (
                                         <tr key={test.id}>
-                                            <td className="px-6 py-4 text-sm font-medium text-white">{test.title}</td>
+                                            <td className="px-6 py-4 text-sm font-medium text-white"><div className="flex items-center"><span>{test.title}</span> {isScheduled && <span className="ml-2 text-xs font-semibold rounded-full bg-cyan-700 text-cyan-200 px-2 py-1">Coming Soon</span>}</div></td>
                                             <td className="px-6 py-4 text-sm text-gray-400">{article ? article.name : 'N/A'}</td>
-                                            <td className="px-6 py-4 text-sm"><button onClick={articleBtn.action} disabled={!article} className={`${articleIsLocked ? 'opacity-60' : ''} ${articleBtn.className}`}>{articleBtn.text}</button></td>
-                                            <td className="px-6 py-4 text-sm"><button onClick={testBtn.action} disabled={!article} className={`${testIsLocked ? 'opacity-60' : ''} ${testBtn.className}`}>{testBtn.text}</button></td>
+                                            <td className="px-6 py-4 text-sm">{renderCellContent('article')}</td>
+                                            <td className="px-6 py-4 text-sm">{renderCellContent('test')}</td>
                                         </tr>
                                     );
                                 })}
@@ -295,8 +389,8 @@ const UserDashboard = ({ navigate }) => {
                     )}
                 </div>
             ))}
+
             {renderTestSection("Add-On Tests", otherAddOnTests, 'test')}
-            
             {renderTestSection("Sectional Tests", sectionalTests, 'sectional')}
             {renderTestSection("Mock Tests", mockTests, 'mock')}
             
