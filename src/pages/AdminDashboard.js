@@ -13,19 +13,20 @@ const AdminDashboard = ({ navigate }) => {
                     <p className="mt-2 text-gray-400">Create, edit, publish, and delete all Sectionals and Mock Tests.</p>
                 </button>
                 <button 
-                    onClick={() => navigate('userManagement')} 
-                    className="bg-gray-800 p-6 rounded-lg shadow-md hover:shadow-xl hover:-translate-y-1 transition-all text-left"
-                >
-                    <h2 className="text-2xl font-bold text-white">User Management</h2>
-                    <p className="mt-2 text-gray-400">View all users and manually grant premium subscription access.</p>
-                </button>
-                <button 
                     onClick={() => navigate('manageRDFCArticles')} 
                     className="bg-gray-800 p-6 rounded-lg shadow-md hover:shadow-xl hover:-translate-y-1 transition-all text-left"
                 >
                     <h2 className="text-2xl font-bold text-white">RDFC Articles</h2>
                     <p className="mt-2 text-gray-400">Link Google Drive articles to specific tests.</p>
                 </button>
+                <button 
+                    onClick={() => navigate('userManagement')} 
+                    className="bg-gray-800 p-6 rounded-lg shadow-md hover:shadow-xl hover:-translate-y-1 transition-all text-left"
+                >
+                    <h2 className="text-2xl font-bold text-white">User Management</h2>
+                    <p className="mt-2 text-gray-400">View all users and manually grant premium subscription access.</p>
+                </button>
+                
                  <button 
                     onClick={() => navigate('earnings')} 
                     className="bg-gray-800 p-6 rounded-lg shadow-md hover:shadow-xl hover:-translate-y-1 transition-all text-left"
