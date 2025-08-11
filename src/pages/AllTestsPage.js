@@ -38,6 +38,26 @@ const AllTestsPage = ({ navigate, tests, title, contentType }) => {
         return () => unsubscribe();
     }, [userData?.uid]);
 
+    // --- MODIFICATION: Simplified lock logic based on test type ---
+    const getIsLocked = (test, itemType) => {
+        if (test.isFree) return false;
+        if (!userStatus?.isSubscribed) return true;
+        const access = userStatus.accessControl;
+        if (!access) return true;
+
+        if (itemType === 'rdfc_article') return !access.rdfc_articles;
+
+        // For all test types
+        switch (test.type?.toUpperCase()) {
+            case 'MOCK': return !access.mock;
+            case 'SECTIONAL': return !access.sectional;
+            case 'TEST':
+                 if (contentType === 'rdfc') return !access.rdfc_tests;
+                 return !access.test;
+            default: return true;
+        }
+    };
+
     const handleViewArticle = async (articleUrl, testId) => {
         if (!userData?.uid) return;
         try {
@@ -49,9 +69,12 @@ const AllTestsPage = ({ navigate, tests, title, contentType }) => {
         }
     };
 
-    const getButtonState = (test, type, isLocked) => {
+    const getButtonState = (test, type) => {
+        const itemType = contentType === 'rdfc' ? `rdfc_${type}` : type;
+        const isLocked = getIsLocked(test, itemType);
         const article = test.article;
         const isArticleRead = userStatus?.readArticles?.[test.id];
+
         if (isLocked) return { text: "Unlock", action: () => navigate('subscription'), className: "bg-amber-500 hover:bg-amber-400 text-gray-900", disabled: false };
         if (type === 'article' && article) {
             if (isArticleRead) return { text: "Article Read", action: () => navigate('rdfcArticleViewer', { articleUrl: article.url, testId: test.id }), className: "bg-gray-600 hover:bg-gray-700 text-gray-300", disabled: false };
@@ -66,45 +89,52 @@ const AllTestsPage = ({ navigate, tests, title, contentType }) => {
         return { text: "N/A", action: null, className: "bg-gray-700 text-gray-500 cursor-not-allowed", disabled: true };
     };
 
-    const renderRDFCDesktopRow = (test, isLocked) => {
+    const renderRDFCDesktopRow = (test) => {
         const article = test.article;
         const getDesktopButton = (type) => {
-            const state = getButtonState(test, type, isLocked);
+            const state = getButtonState(test, type);
             state.className += " text-xs px-3 py-1 rounded-full";
             return state;
         };
         const articleButton = getDesktopButton('article');
         const testButton = getDesktopButton('test');
+        const articleIsLocked = getIsLocked(test, 'rdfc_article');
+        const testIsLocked = getIsLocked(test, 'rdfc_test');
+
         return (
-            <tr key={test.id} className={`${isLocked ? 'opacity-50' : ''}`}>
+            <tr key={test.id}>
                 <td className="px-6 py-4 text-sm font-medium text-white">{test.title}</td>
                 <td className="px-6 py-4 text-sm text-gray-400">{article ? article.name : 'N/A'}</td>
                 <td className="px-6 py-4 text-sm text-gray-400 max-w-xs truncate">{article ? article.description : 'N/A'}</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm"><button onClick={articleButton.action} disabled={isLocked || !article} className={articleButton.className}>{articleButton.text}</button></td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm"><button onClick={testButton.action} disabled={isLocked || !article} className={testButton.className}>{testButton.text}</button></td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm"><button onClick={articleButton.action} disabled={!article} className={`${articleIsLocked ? 'opacity-60' : ''} ${articleButton.className}`}>{articleButton.text}</button></td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm"><button onClick={testButton.action} disabled={!article} className={`${testIsLocked ? 'opacity-60' : ''} ${testButton.className}`}>{testButton.text}</button></td>
             </tr>
         );
     };
 
-    const renderRDFCMobileCard = (test, isLocked) => {
+    const renderRDFCMobileCard = (test) => {
         const article = test.article;
-        const articleButton = getButtonState(test, 'article', isLocked);
-        const testButton = getButtonState(test, 'test', isLocked);
+        const articleButton = getButtonState(test, 'article');
+        const testButton = getButtonState(test, 'test');
+        const articleIsLocked = getIsLocked(test, 'rdfc_article');
+        const testIsLocked = getIsLocked(test, 'rdfc_test');
+
         return (
-            <div key={test.id} className={`bg-gray-800 rounded-lg p-4 mb-4 ${isLocked ? 'opacity-50' : ''}`}>
+            <div key={test.id} className={`bg-gray-800 rounded-lg p-4 mb-4`}>
                 <h4 className="text-lg font-semibold text-white">{test.title}</h4>
                 <p className="text-sm text-gray-400 mt-1 mb-2">{article ? article.name : 'N/A'}</p>
                 <p className="text-xs text-gray-500 mb-4 h-8 overflow-hidden">{article ? article.description : 'N/A'}</p>
                 <div className="flex space-x-2">
-                    <button onClick={articleButton.action} disabled={articleButton.disabled} className={`flex-1 text-sm font-semibold px-3 py-2 rounded-md transition-colors ${articleButton.className}`}>{articleButton.text}</button>
-                    <button onClick={testButton.action} disabled={testButton.disabled} className={`flex-1 text-sm font-semibold px-3 py-2 rounded-md transition-colors ${testButton.className}`}>{testButton.text}</button>
+                    <button onClick={articleButton.action} disabled={articleButton.disabled} className={`flex-1 text-sm font-semibold px-3 py-2 rounded-md transition-colors ${articleIsLocked ? 'opacity-60' : ''} ${articleButton.className}`}>{articleButton.text}</button>
+                    <button onClick={testButton.action} disabled={testButton.disabled} className={`flex-1 text-sm font-semibold px-3 py-2 rounded-md transition-colors ${testIsLocked ? 'opacity-60' : ''} ${testButton.className}`}>{testButton.text}</button>
                 </div>
             </div>
         );
     };
 
-    const renderAddOnTestRow = (test, isLocked) => {
-        const testButton = getButtonState(test, 'test', isLocked);
+    const renderAddOnTestRow = (test) => {
+        const isLocked = getIsLocked(test, 'test');
+        const testButton = getButtonState(test, 'test');
         return (
             <tr key={test.id} className={`${isLocked ? 'opacity-50' : ''}`}>
                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">{test.title}</td>
@@ -115,8 +145,9 @@ const AllTestsPage = ({ navigate, tests, title, contentType }) => {
         );
     };
 
-    const renderAddOnMobileCard = (test, isLocked) => {
-        const testButton = getButtonState(test, 'test', isLocked);
+    const renderAddOnMobileCard = (test) => {
+        const isLocked = getIsLocked(test, 'test');
+        const testButton = getButtonState(test, 'test');
         return (
             <div key={test.id} className={`bg-gray-800 rounded-lg p-4 mb-4 ${isLocked ? 'opacity-50' : ''}`}>
                 <div className="flex justify-between items-start">
@@ -134,11 +165,14 @@ const AllTestsPage = ({ navigate, tests, title, contentType }) => {
     const sortedTests = [...tests].sort((a, b) => {
         if (a.isFree && !b.isFree) return -1;
         if (!a.isFree && b.isFree) return 1;
-        return 0;
+        return (b.createdAt?.toDate() || 0) - (a.createdAt?.toDate() || 0);
     });
-    const filteredTests = filterType === 'All' ? sortedTests : sortedTests.filter(test => test.type === filterType.toUpperCase());
     
-    // **FIX**: The banner now only shows if there is paid content AND the user is not subscribed.
+    // --- MODIFICATION: Simplified filtering logic ---
+    const filteredTests = filterType === 'All' || contentType !== 'test' 
+        ? sortedTests 
+        : sortedTests.filter(test => test.type === filterType.toUpperCase());
+    
     const isPaidContentPresent = tests.some(test => !test.isFree);
     const showUnlockBanner = !userStatus.isSubscribed && isPaidContentPresent;
     
@@ -160,59 +194,34 @@ const AllTestsPage = ({ navigate, tests, title, contentType }) => {
                 <>
                     <div className="hidden md:block bg-gray-800 shadow-md rounded-lg overflow-hidden">
                         <table className="min-w-full divide-y divide-gray-700">
-                            <thead className="bg-gray-700">
-                                <tr>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Test Title</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Article Name</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Article Description</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Article Link</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Test Link</th>
-                                </tr>
-                            </thead>
+                           <thead className="bg-gray-700"><tr><th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Test Title</th><th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Article Name</th><th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Article Description</th><th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Article Link</th><th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Test Link</th></tr></thead>
                             <tbody className="bg-gray-800 divide-y divide-gray-700">
-                                {tests.map(test => {
-                                    // **FIX**: Lock status is now determined on a per-test basis.
-                                    const isLocked = !userStatus.isSubscribed && !test.isFree;
-                                    return renderRDFCDesktopRow(test, isLocked);
-                                })}
+                                {tests.map(test => renderRDFCDesktopRow(test))}
                             </tbody>
                         </table>
                     </div>
                     <div className="md:hidden">
-                        {tests.map(test => {
-                            const isLocked = !userStatus.isSubscribed && !test.isFree;
-                            return renderRDFCMobileCard(test, isLocked);
-                        })}
+                        {tests.map(test => renderRDFCMobileCard(test))}
                     </div>
                 </>
             ) : (
                 <>
-                    <div className="flex space-x-2 mb-4 overflow-x-auto">
-                        {['All', 'Test', 'Sectional', 'Mock'].map(type => <button key={type} onClick={() => setFilterType(type)} className={`flex-shrink-0 px-4 py-2 rounded-md font-semibold text-sm transition-colors ${filterType === type ? 'bg-gray-700 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`}>{type}</button>)}
-                    </div>
+                    {/* --- MODIFICATION: Conditionally render filters only for "Add-On Tests" --- */}
+                    {contentType === 'test' && (
+                        <div className="flex space-x-2 mb-4 overflow-x-auto">
+                            {['All', 'Test'].map(type => <button key={type} onClick={() => setFilterType(type)} className={`flex-shrink-0 px-4 py-2 rounded-md font-semibold text-sm transition-colors ${filterType === type ? 'bg-gray-700 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`}>{type}</button>)}
+                        </div>
+                    )}
                     <div className="hidden md:block bg-gray-800 shadow-md rounded-lg overflow-hidden">
                         <table className="min-w-full divide-y divide-gray-700">
-                            <thead className="bg-gray-700">
-                                <tr>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Test Title</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Test Type</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Test Description</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Test Link</th>
-                                </tr>
-                            </thead>
+                           <thead className="bg-gray-700"><tr><th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Test Title</th><th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Test Type</th><th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Test Description</th><th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Test Link</th></tr></thead>
                             <tbody className="bg-gray-800 divide-y divide-gray-700">
-                                {filteredTests.map(test => {
-                                    const isLocked = !userStatus.isSubscribed && !test.isFree;
-                                    return renderAddOnTestRow(test, isLocked);
-                                })}
+                                {filteredTests.map(test => renderAddOnTestRow(test))}
                             </tbody>
                         </table>
                     </div>
                      <div className="md:hidden">
-                        {filteredTests.map(test => {
-                            const isLocked = !userStatus.isSubscribed && !test.isFree;
-                            return renderAddOnMobileCard(test, isLocked);
-                        })}
+                        {filteredTests.map(test => renderAddOnMobileCard(test))}
                     </div>
                 </>
             )}
