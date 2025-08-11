@@ -2,6 +2,7 @@ import React, { useState, useEffect, Fragment } from 'react';
 import { collection, getDocs, query, where, doc, onSnapshot, updateDoc } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { useAuth } from '../contexts/AuthContext';
+import FeedbackForm from '../components/FeedbackForm';
 
 const CountdownTimer = ({ targetDate, onComplete }) => {
     const calculateTimeLeft = () => {
@@ -59,6 +60,7 @@ const UserDashboard = ({ navigate }) => {
     const [userStatus, setUserStatus] = useState(null);
     const [userAttempts, setUserAttempts] = useState({});
     const [liveTests, setLiveTests] = useState({});
+    const [showFeedbackThanks, setShowFeedbackThanks] = useState(false);
 
     useEffect(() => {
         if (!userData?.uid) {
@@ -136,7 +138,7 @@ const UserDashboard = ({ navigate }) => {
             await updateDoc(userRef, {
                 [`readArticles.${testId}`]: true
             });
-            navigate('rdfcArticleViewer', { articleUrl, testId });
+            navigate('rdfcArticleViewer', { articleUrl, testId: testId });
         } catch (error) {
             console.error("Error marking article as read:", error);
         }
@@ -220,6 +222,7 @@ const UserDashboard = ({ navigate }) => {
             const getButtonState = (type, isLocked) => {
                 if (isLocked) return { text: "Unlock", action: () => navigate('subscription'), className: "bg-amber-500 hover:bg-amber-400 text-gray-900", disabled: false };
                 if (type === 'article' && article) {
+                    // FIX: Pass test.id to the navigation and handler functions
                     if (isArticleRead) return { text: "Article Read", action: () => navigate('rdfcArticleViewer', { articleUrl: article.url, testId: test.id }), className: "bg-gray-600 hover:bg-gray-700 text-gray-300", disabled: false };
                     return { text: "View Article", action: () => handleViewArticle(article.url, test.id), className: "bg-blue-600 hover:bg-blue-700 text-white", disabled: false };
                 }
@@ -292,6 +295,10 @@ const UserDashboard = ({ navigate }) => {
         );
     };
 
+    const handleFeedbackSuccess = () => {
+        setShowFeedbackThanks(true);
+    };
+
     if (loading || !userStatus) {
         return <div className="text-center text-gray-400 p-8">Loading Dashboard...</div>;
     }
@@ -325,7 +332,6 @@ const UserDashboard = ({ navigate }) => {
                                     const article = linkedArticles[test.id];
                                     const isScheduled = test.liveAt && test.liveAt.toDate() > new Date() && !liveTests[test.id];
 
-                                    // --- MODIFICATION: Refactored RDFC desktop row logic ---
                                     const renderCellContent = (type) => {
                                         if (isScheduled) {
                                             return <div className="w-full h-10 flex items-center justify-center"><CountdownTimer targetDate={test.liveAt.toDate()} onComplete={() => setLiveTests(prev => ({...prev, [test.id]: true}))} /></div>;
@@ -341,6 +347,7 @@ const UserDashboard = ({ navigate }) => {
                                         } else if(type === 'article') {
                                             if(isArticleRead) {
                                                 text = "Article Read";
+                                                // FIX: Pass test.id to the navigation and handler functions
                                                 action = () => navigate('rdfcArticleViewer', { articleUrl: article.url, testId: test.id });
                                                 className = "bg-gray-600 hover:bg-gray-700 text-gray-300";
                                             } else {
@@ -393,8 +400,17 @@ const UserDashboard = ({ navigate }) => {
             {renderTestSection("Add-On Tests", otherAddOnTests, 'test')}
             {renderTestSection("Sectional Tests", sectionalTests, 'sectional')}
             {renderTestSection("Mock Tests", mockTests, 'mock')}
-            
 
+            <div className="border-t border-gray-700 pt-8 mb-12">
+                {showFeedbackThanks ? (
+                    <div className="bg-gray-800 border-l-4 border-green-500 text-white p-6 rounded-lg shadow-lg my-8 text-center">
+                        <h3 className="text-xl font-bold">Thank You!</h3>
+                        <p className="text-gray-300 mt-2">Your feedback is valuable to us and helps improve the platform for everyone.</p>
+                    </div>
+                ) : (
+                    <FeedbackForm userStatus={userStatus} onSuccessfulSubmit={handleFeedbackSuccess} />
+                )}
+            </div>
         </div>
     );
 };
