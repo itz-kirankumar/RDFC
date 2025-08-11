@@ -256,6 +256,33 @@ export default function AdminUserManagement() {
 
         const usersCol = collection(db, 'users');
         const unsubscribeUsers = onSnapshot(usersCol, (snapshot) => {
+            const now = new Date();
+            // --- MODIFICATION START: Automatic Subscription Revocation ---
+            // This logic checks for expired subscriptions and revokes them.
+            // Note: This check runs on the client-side whenever an admin loads this page.
+            // For a more robust solution, a scheduled backend function (e.g., Cloud Function) is recommended.
+            snapshot.docs.forEach(docSnap => {
+                const user = docSnap.data();
+                if (user.isSubscribed && user.expiryDate && user.expiryDate.toDate() < now) {
+                    console.log(`Subscription for ${user.email} has expired. Automatically revoking...`);
+                    const userRef = doc(db, 'users', docSnap.id);
+                    const updatedData = {
+                        isSubscribed: false,
+                        expiryDate: null,
+                        subscribedAt: null,
+                        planId: null,
+                        planName: null,
+                        planPrice: null,
+                    };
+                    // Perform the update. We don't need to wait for it to complete.
+                    // The onSnapshot listener will pick up the change and re-render the UI.
+                    updateDoc(userRef, updatedData)
+                        .then(() => console.log(`Successfully auto-revoked subscription for ${user.email}.`))
+                        .catch(error => console.error(`Failed to auto-revoke subscription for ${user.email}:`, error));
+                }
+            });
+            // --- MODIFICATION END ---
+
             const fetchedUsers = snapshot.docs.map(processUserData).filter(u => !u.isAdmin);
             setUsers(fetchedUsers);
             setTotalUsersCount(snapshot.docs.length-3);
