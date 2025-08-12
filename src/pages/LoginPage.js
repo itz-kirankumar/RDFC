@@ -403,6 +403,9 @@ const LoginPage = ({ navigate }) => {
                             <ul className="space-y-3">
                                 <li><button onClick={() => navigate('legal', { section: 'terms' })} className="text-zinc-400 hover:text-yellow-400 transition-colors text-sm text-left">Terms & Conditions</button></li>
                                 <li><button onClick={() => navigate('legal', { section: 'privacy' })} className="text-zinc-400 hover:text-yellow-400 transition-colors text-sm text-left">Privacy Policy</button></li>
+                                {/* ++ NEW: Add links to the new legal sections ++ */}
+                                <li><button onClick={() => navigate('legal', { section: 'cancellation' })} className="text-zinc-400 hover:text-yellow-400 transition-colors text-sm text-left">Cancellation & Refund</button></li>
+                                <li><button onClick={() => navigate('legal', { section: 'shipping' })} className="text-zinc-400 hover:text-yellow-400 transition-colors text-sm text-left">Shipping & Delivery</button></li>
                             </ul>
                         </div>
 
