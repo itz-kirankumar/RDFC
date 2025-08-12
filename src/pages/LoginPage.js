@@ -58,7 +58,7 @@ const FaqSection = () => {
         },
         {
             question: "Do I receive new tests and articles every day?",
-            answer: "Yes! Our core program is built on a daily regimen. You will receive a fresh RDFC (Reading-Derived Factual Comprehension) article paired with a specific RC test every single day to ensure consistent practice and skill development."
+            answer: "Yes! Our core program is built on a daily regimen. You will receive a fresh RDFC (Read Daily for CAT) article paired with a specific RC test every single day to ensure consistent practice and skill development."
         },
         {
             question: "Are the reading comprehension articles from reputable sources?",
