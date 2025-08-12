@@ -19,7 +19,8 @@ import AdminSubscriptionManagement from './pages/AdminSubscriptionManagement';
 import ReviewsPage from './pages/ReviewsPageTemp';
 import AdminReviewsManager from './pages/AdminReviewsManager';
 import AllTestimonialsPage from './pages/AllTestimonialsPage';
-import LegalPage from './pages/LegalPage'; // This import should now work correctly
+import LegalPage from './pages/LegalPage';
+import AdminVocabManager from './pages/AdminVocabManager'; // New Import
 
 const MainRouter = () => {
     const { user, userData, loading } = useAuth();
@@ -35,19 +36,13 @@ const MainRouter = () => {
         setPageData(data);
     };
 
-    // For logged-out users
     if (!user) {
         switch (currentPage) {
-            case 'subscription':
-                return <SubscriptionPage navigate={navigate} />;
-            case 'reviews':
-                return <ReviewsPage navigate={navigate} />;
-            case 'allTestimonials':
-                return <AllTestimonialsPage navigate={navigate} />;
-            case 'legal':
-                return <LegalPage navigate={navigate} pageData={pageData} />;
-            default:
-                return <LoginPage navigate={navigate} />;
+            case 'subscription': return <SubscriptionPage navigate={navigate} />;
+            case 'reviews': return <ReviewsPage navigate={navigate} />;
+            case 'allTestimonials': return <AllTestimonialsPage navigate={navigate} />;
+            case 'legal': return <LegalPage navigate={navigate} pageData={pageData} />;
+            default: return <LoginPage navigate={navigate} />;
         }
     }
 
@@ -55,7 +50,6 @@ const MainRouter = () => {
     let mainPaddingClass = "p-4 sm:p-6 md:p-8";
     let showNavbar = true;
 
-    // For Admin users
     if (userData?.isAdmin) {
         switch (currentPage) {
             case 'home': pageComponent = <AdminDashboard navigate={navigate} />; break;
@@ -68,13 +62,13 @@ const MainRouter = () => {
             case 'reviews': pageComponent = <ReviewsPage navigate={navigate} />; break;
             case 'manageReviews': pageComponent = <AdminReviewsManager navigate={navigate} />; break;
             case 'allTestimonials': pageComponent = <AllTestimonialsPage navigate={navigate} />; break;
+            case 'manageVocab': pageComponent = <AdminVocabManager navigate={navigate} />; break; // New Route
             case 'legal': 
                 pageComponent = <LegalPage navigate={navigate} pageData={pageData} />; 
                 showNavbar = false;
                 break;
             default: pageComponent = <AdminDashboard navigate={navigate} />;
         }
-    // For regular logged-in users
     } else {
         switch (currentPage) {
             case 'home': pageComponent = <UserDashboard navigate={navigate} />; break;
