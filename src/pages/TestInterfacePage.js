@@ -3,6 +3,8 @@ import { doc, getDoc, updateDoc, addDoc, collection, serverTimestamp, query, whe
 import { db } from '../firebase/config';
 import { useAuth } from '../contexts/AuthContext';
 import ConfirmModal from '../components/ConfirmModal';
+import { motion, AnimatePresence } from 'framer-motion';
+import { FaBook, FaTimes } from 'react-icons/fa';
 
 // --- Helper Hook for reliable intervals ---
 function useInterval(callback, delay) {
@@ -37,11 +39,52 @@ const OfflineModal = () => (
     </div>
 );
 
+// --- Question Paper Modal Component ---
+const QuestionPaperModal = ({ isOpen, onClose, section }) => {
+    if (!section) return null;
+    return (
+        <AnimatePresence>
+            {isOpen && (
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose} className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4">
+                    <motion.div initial={{ y: '-100vh', opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: '-100vh', opacity: 0 }} transition={{ type: 'spring', stiffness: 300, damping: 30 }} onClick={(e) => e.stopPropagation()} className="bg-gray-100 rounded-lg shadow-xl w-full max-w-5xl h-full max-h-[90vh] flex flex-col">
+                        <header className="flex items-center justify-between p-4 bg-white border-b sticky top-0">
+                            <h2 className="text-lg font-bold text-gray-800">Question Paper: {section.name}</h2>
+                            <button onClick={onClose} className="text-gray-500 hover:text-gray-800"><FaTimes size={24} /></button>
+                        </header>
+                        <div className="p-6 overflow-y-auto">
+                            {section.questions.map((q, index) => (
+                                <div key={index} className="mb-6 pb-6 border-b last:border-b-0">
+                                    {(q.passage || q.passageImageUrl) && (
+                                        <div className="mb-4 p-3 bg-gray-200 rounded">
+                                            <h3 className="font-bold mb-2 text-gray-900">Directions for Question {index + 1}:</h3>
+                                            {q.passageImageUrl && <img src={q.passageImageUrl} alt={`Passage for Q${index + 1}`} className="max-w-full h-auto mb-2 rounded"/>}
+                                            {q.passage && <div className="prose max-w-none text-gray-800 whitespace-pre-wrap">{q.passage}</div>}
+                                        </div>
+                                    )}
+                                    <p className="font-semibold text-gray-900 mb-2">Question {index + 1}:</p>
+                                    {q.questionImageUrl && <img src={q.questionImageUrl} alt={`Question ${index + 1}`} className="max-w-full h-auto mb-4 rounded"/>}
+                                    <p className="text-gray-800 whitespace-pre-wrap mb-4">{q.questionText}</p>
+                                    {q.type !== 'TITA' && q.options && (<div className="space-y-2 text-sm">{q.options.map((option, optIndex) => (<p key={optIndex} className="text-gray-600 ml-4">{String.fromCharCode(97 + optIndex)}) {option}</p>))}</div>)}
+                                </div>
+                            ))}
+                        </div>
+                    </motion.div>
+                </motion.div>
+            )}
+        </AnimatePresence>
+    );
+};
 
-// --- Draggable Calculator Component ---
+// --- UPDATED Calculator Component to match the reference image ---
 const Calculator = ({ setIsCalculatorOpen }) => {
-    const [input, setInput] = useState('');
+    const [currentValue, setCurrentValue] = useState('0');
+    const [previousValue, setPreviousValue] = useState(null);
+    const [operator, setOperator] = useState(null);
+    const [expression, setExpression] = useState('');
+    const [memory, setMemory] = useState(null);
+    const [isNewEntry, setIsNewEntry] = useState(true);
     const calculatorRef = useRef(null);
+
     useEffect(() => {
         const el = calculatorRef.current;
         let pos1 = 0, pos2 = 0, pos3 = 0, pos4 = 0;
@@ -51,17 +94,144 @@ const Calculator = ({ setIsCalculatorOpen }) => {
         const header = el.querySelector(".calculator-header");
         if(header) header.onmousedown = dragMouseDown;
     }, []);
-    const handleClick = (value) => setInput(input + value);
-    const handleClear = () => setInput('');
-    const handleCalculate = () => { try { const result = new Function('return ' + input)(); setInput(result.toString()); } catch (error) { setInput('Error'); } };
+
+    const clear = () => {
+        setCurrentValue('0');
+        setPreviousValue(null);
+        setOperator(null);
+        setExpression('');
+        setIsNewEntry(true);
+    };
+
+    const handleNumber = (num) => {
+        if (isNewEntry) {
+            setCurrentValue(num);
+            setIsNewEntry(false);
+        } else {
+            if (num === '.' && currentValue.includes('.')) return;
+            setCurrentValue(prev => prev + num);
+        }
+    };
+
+    const handleOperator = (op) => {
+        if (operator && !isNewEntry) {
+            const result = calculate(previousValue, currentValue, operator);
+            setPreviousValue(result);
+            setCurrentValue(result);
+            setExpression(`${result} ${op}`);
+        } else {
+            setPreviousValue(currentValue);
+            setExpression(`${currentValue} ${op}`);
+        }
+        setOperator(op);
+        setIsNewEntry(true);
+    };
+
+    const calculate = (val1, val2, op) => {
+        const prev = parseFloat(val1);
+        const current = parseFloat(val2);
+        if (isNaN(prev) || isNaN(current)) return 'Error';
+        let result;
+        switch (op) {
+            case '+': result = prev + current; break;
+            case '-': result = prev - current; break;
+            case '*': result = prev * current; break;
+            case '/': result = current === 0 ? 'Error' : prev / current; break;
+            default: return current;
+        }
+        return String(result);
+    };
+
+    const handleEquals = () => {
+        if (!operator || previousValue === null) return;
+        const result = calculate(previousValue, currentValue, operator);
+        setExpression(`${previousValue} ${operator} ${currentValue} =`);
+        setCurrentValue(result);
+        setPreviousValue(null);
+        setOperator(null);
+        setIsNewEntry(true);
+    };
+
+    const handleUnaryOperator = (op) => {
+        const current = parseFloat(currentValue);
+        if (isNaN(current)) return;
+        let result;
+        switch(op) {
+            case '+/-': result = current * -1; break;
+            case '√': result = current < 0 ? 'Error' : Math.sqrt(current); break;
+            case '%': result = current / 100; break;
+            case '1/x': result = current === 0 ? 'Error' : 1 / current; break;
+            default: return;
+        }
+        setCurrentValue(String(result));
+    };
+
+    const handleMemory = (memOp) => {
+        const current = parseFloat(currentValue);
+        if (isNaN(current) && memOp !== 'MR' && memOp !== 'MC') return;
+        
+        switch (memOp) {
+            case 'MC': setMemory(null); break;
+            case 'MR': if (memory !== null) { setCurrentValue(String(memory)); setIsNewEntry(true); } break;
+            case 'MS': setMemory(current); break;
+            case 'M+': setMemory((memory || 0) + current); break;
+            case 'M-': setMemory((memory || 0) - current); break;
+            default: break;
+        }
+    };
+
+    const handleBackspace = () => {
+        if (isNewEntry) return;
+        setCurrentValue(prev => prev.slice(0, -1) || '0');
+    };
+
+    const Button = ({ value, onClick, className, gridClass }) => (
+        <button onClick={() => onClick(value)} className={`h-10 rounded shadow-sm font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-blue-400 ${className} ${gridClass}`}>
+            {value}
+        </button>
+    );
+
+    const buttonConfig = [
+        { value: 'MC', type: 'mem', onClick: handleMemory, className: "bg-gray-300 hover:bg-gray-400" },
+        { value: 'MR', type: 'mem', onClick: handleMemory, className: "bg-gray-300 hover:bg-gray-400" },
+        { value: 'MS', type: 'mem', onClick: handleMemory, className: "bg-gray-300 hover:bg-gray-400" },
+        { value: 'M+', type: 'mem', onClick: handleMemory, className: "bg-gray-300 hover:bg-gray-400" },
+        { value: 'M-', type: 'mem', onClick: handleMemory, className: "bg-gray-300 hover:bg-gray-400" },
+        { value: '←', type: 'op', onClick: handleBackspace, className: "bg-red-500 hover:bg-red-600 text-white" },
+        { value: 'C', type: 'op', onClick: clear, className: "bg-red-500 hover:bg-red-600 text-white" },
+        { value: '+/-', type: 'op', onClick: handleUnaryOperator, className: "bg-red-500 hover:bg-red-600 text-white" },
+        { value: '√', type: 'op', onClick: handleUnaryOperator, className: "bg-gray-300 hover:bg-gray-400" },
+        { value: '%', type: 'op', onClick: handleUnaryOperator, className: "bg-gray-300 hover:bg-gray-400" },
+        { value: '7', type: 'num', onClick: handleNumber, className: "bg-gray-200 hover:bg-gray-300 font-bold text-lg" },
+        { value: '8', type: 'num', onClick: handleNumber, className: "bg-gray-200 hover:bg-gray-300 font-bold text-lg" },
+        { value: '9', type: 'num', onClick: handleNumber, className: "bg-gray-200 hover:bg-gray-300 font-bold text-lg" },
+        { value: '/', type: 'op', onClick: handleOperator, className: "bg-gray-300 hover:bg-gray-400" },
+        { value: '1/x', type: 'op', onClick: handleUnaryOperator, className: "bg-gray-300 hover:bg-gray-400" },
+        { value: '4', type: 'num', onClick: handleNumber, className: "bg-gray-200 hover:bg-gray-300 font-bold text-lg" },
+        { value: '5', type: 'num', onClick: handleNumber, className: "bg-gray-200 hover:bg-gray-300 font-bold text-lg" },
+        { value: '6', type: 'num', onClick: handleNumber, className: "bg-gray-200 hover:bg-gray-300 font-bold text-lg" },
+        { value: '*', type: 'op', onClick: handleOperator, className: "bg-gray-300 hover:bg-gray-400" },
+        { value: '=', type: 'eq', onClick: handleEquals, className: "bg-green-500 hover:bg-green-600 text-white row-span-2 !h-auto" },
+        { value: '1', type: 'num', onClick: handleNumber, className: "bg-gray-200 hover:bg-gray-300 font-bold text-lg" },
+        { value: '2', type: 'num', onClick: handleNumber, className: "bg-gray-200 hover:bg-gray-300 font-bold text-lg" },
+        { value: '3', type: 'num', onClick: handleNumber, className: "bg-gray-200 hover:bg-gray-300 font-bold text-lg" },
+        { value: '-', type: 'op', onClick: handleOperator, className: "bg-gray-300 hover:bg-gray-400" },
+        { value: '0', type: 'num', onClick: handleNumber, className: "bg-gray-200 hover:bg-gray-300 font-bold text-lg col-span-2" },
+        { value: '.', type: 'num', onClick: handleNumber, className: "bg-gray-200 hover:bg-gray-300 font-bold text-lg" },
+        { value: '+', type: 'op', onClick: handleOperator, className: "bg-gray-300 hover:bg-gray-400" },
+    ];
+
     return (
-        <div ref={calculatorRef} className="fixed top-1/4 left-1/4 w-64 bg-gray-200 border-2 border-gray-400 rounded-lg shadow-2xl z-50 select-none">
-            <div className="calculator-header bg-gray-300 p-2 flex justify-between items-center cursor-move"><span className="font-bold text-gray-700">Calculator</span><button onClick={() => setIsCalculatorOpen(false)} className="text-red-500 font-bold">X</button></div>
-            <div className="p-4">
-                <input type="text" value={input} readOnly className="w-full mb-4 p-2 text-right bg-white rounded border border-gray-300" />
-                <div className="grid grid-cols-4 gap-2">
-                    {['7','8','9','/','4','5','6','*','1','2','3','-','0','.','=','+'].map(btn => (<button key={btn} onClick={() => btn === '=' ? handleCalculate() : handleClick(btn)} className="bg-white p-2 rounded shadow text-xl font-bold hover:bg-gray-100">{btn}</button>))}
-                    <button onClick={handleClear} className="col-span-4 bg-red-500 text-white p-2 rounded shadow hover:bg-red-600">Clear</button>
+        <div ref={calculatorRef} className="fixed top-1/4 left-1/4 w-80 bg-gray-100 border-2 border-gray-400 rounded-lg shadow-2xl z-50 select-none">
+            <div className="calculator-header bg-blue-600 text-white p-2 flex justify-between items-center cursor-move">
+                <span className="font-bold">Calculator</span>
+                <button onClick={() => setIsCalculatorOpen(false)} className="font-bold">X</button>
+            </div>
+            <div className="p-4 space-y-2">
+                <input type="text" value={expression} readOnly className="w-full p-1 text-right bg-gray-100 text-gray-500 text-sm h-6 truncate" />
+                <input type="text" value={currentValue} readOnly className="w-full p-2 text-right bg-white rounded border border-gray-300 text-2xl font-semibold h-12" />
+                <div className="grid grid-cols-5 gap-1">
+                    {buttonConfig.map(btn => <Button key={btn.value} {...btn} />)}
                 </div>
             </div>
         </div>
@@ -101,6 +271,7 @@ const TestInterfacePage = ({ navigate, testId }) => {
     const [questionStatuses, setQuestionStatuses] = useState({}); 
     const [timeTaken, setTimeTaken] = useState({});
     const [isCalculatorOpen, setIsCalculatorOpen] = useState(false);
+    const [isQuestionPaperOpen, setIsQuestionPaperOpen] = useState(false);
     const [sectionTransitionMessage, setSectionTransitionMessage] = useState(''); 
     const [showNavigatorPanel, setShowNavigatorPanel] = useState(true); 
     const [attemptDocId, setAttemptDocId] = useState(null);
@@ -123,6 +294,7 @@ const TestInterfacePage = ({ navigate, testId }) => {
     const currentQuestion = currentSection ? currentSection.questions[currentQuestionIndex] : null;
     const showPassagePanel = currentSection && currentQuestion && (currentQuestion.passage || currentQuestion.passageImageUrl) && currentSection.name !== 'QA';
 
+    // All logic functions below are unchanged
     const getLocalStorageKey = useCallback(() => {
         if (!user || !testId) return null;
         return `test_progress_${user.uid}_${testId}`;
@@ -558,6 +730,11 @@ const TestInterfacePage = ({ navigate, testId }) => {
 
     return (
         <div ref={testContainerRef} className="bg-gray-200 h-screen flex flex-col text-gray-800 font-sans">
+            <QuestionPaperModal
+                isOpen={isQuestionPaperOpen}
+                onClose={() => setIsQuestionPaperOpen(false)}
+                section={currentSection}
+            />
             {showOfflineModal && <OfflineModal />}
             <ConfirmModal isOpen={isConfirmOpen} setIsOpen={(val) => { setIsConfirmOpen(val); if (!val && submittingTestRef.current) { submittingTestRef.current = false; handleFullscreen(); } }} onConfirm={submitTest} title="Submit Test?">Are you sure you want to end the test? This action is final.</ConfirmModal>
             <ConfirmModal isOpen={isExitConfirmOpen} setIsOpen={(val) => { setIsExitConfirmOpen(val); if (!val && !navigateOnExitRef.current) { exitingToDashboardRef.current = false; handleFullscreen(); } }} onConfirm={saveProgressAndExit} title="Exit Test?">You are attempting to exit the test. Your progress will be saved. Do you wish to continue?</ConfirmModal>
@@ -569,8 +746,30 @@ const TestInterfacePage = ({ navigate, testId }) => {
                 <div className="flex flex-1 items-center justify-center text-center p-4"><div className="bg-white shadow-lg rounded-lg p-8 max-w-md w-full"><h2 className="text-2xl font-bold mb-4 text-gray-800">Test Requires Fullscreen</h2><p className="text-gray-600 mb-6">Please enter fullscreen mode to begin or continue the test.</p><button onClick={handleFullscreen} className="bg-blue-600 text-white px-6 py-3 rounded-md font-bold text-lg hover:bg-blue-700 transition-colors">Enter Fullscreen</button></div></div>
             ) : (
                 <>
-                    <div className="bg-white shadow-md flex-shrink-0 h-16"><div className="max-w-full mx-auto px-4 flex justify-between items-center h-full"><h1 className="text-lg md:text-xl font-bold">{test.title}</h1><div className="flex space-x-4 items-center"><button onClick={handleFullscreen} title="Toggle Fullscreen" className="text-gray-600 hover:text-black"><svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 8V4m0 0h4M4 4l5 5m11-5h-4m0 0v4m0-4l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5h-4m0 0v-4m0 4l-5-5"></path></svg></button><button onClick={handleBackToDashboardClick} className="font-semibold px-4 py-2 rounded-md bg-gray-200 hover:bg-gray-300 text-sm">Back to Dashboard</button></div></div></div>
-                    <div className="bg-gray-100 border-b border-t border-gray-300 flex-shrink-0 h-12"><div className="max-w-full mx-auto px-4 flex justify-between items-center h-full"><div className="flex overflow-x-auto"><div className="flex">{test.sections.map((section, index) => (<button key={section.name} disabled={true} className={`py-2 px-4 text-sm whitespace-nowrap ${index === currentSectionIndex ? 'bg-white border-b-2 border-blue-600 text-blue-600 font-semibold' : 'text-gray-500 bg-gray-200'}`}>{section.name}</button>))}</div></div><div className="text-right flex-shrink-0 ml-4"><div className="text-xs text-gray-500">Time Left</div><div className="text-lg md:text-xl font-bold text-black">{String(minutes).padStart(2, '0')}:{String(seconds).padStart(2, '0')}</div></div></div></div>
+                    <div className="bg-white shadow-md flex-shrink-0 h-16"><div className="max-w-full mx-auto px-4 flex justify-between items-center h-full">
+                        <h1 className="text-lg md:text-xl font-bold">{test.title}</h1>
+                        <div className="flex space-x-4 items-center">
+                            <button onClick={handleFullscreen} title="Toggle Fullscreen" className="text-gray-600 hover:text-black"><svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 8V4m0 0h4M4 4l5 5m11-5h-4m0 0v4m0-4l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5h-4m0 0v-4m0 4l-5-5"></path></svg></button>
+                            <button onClick={handleBackToDashboardClick} className="font-semibold px-4 py-2 rounded-md bg-gray-200 hover:bg-gray-300 text-sm">Back to Dashboard</button>
+                        </div>
+                    </div></div>
+                    <div className="bg-gray-100 border-b border-t border-gray-300 flex-shrink-0 h-12"><div className="max-w-full mx-auto px-4 flex justify-between items-center h-full">
+                        <div className="flex overflow-x-auto">
+                            <div className="flex">
+                                {test.sections.map((section, index) => (<button key={section.name} disabled={true} className={`py-2 px-4 text-sm whitespace-nowrap ${index === currentSectionIndex ? 'bg-white border-b-2 border-blue-600 text-blue-600 font-semibold' : 'text-gray-500 bg-gray-200'}`}>{section.name}</button>))}
+                            </div>
+                        </div>
+                        <div className="flex items-center space-x-4">
+                            <button onClick={() => setIsQuestionPaperOpen(true)} className="font-semibold px-4 py-1.5 rounded-md bg-green-600 text-white hover:bg-green-700 text-sm flex items-center space-x-2 transition-colors">
+                                <FaBook />
+                                <span>Question Paper</span>
+                            </button>
+                            <div className="text-right flex-shrink-0">
+                                <div className="text-xs text-gray-500">Time Left</div>
+                                <div className="text-lg md:text-xl font-bold text-black">{String(minutes).padStart(2, '0')}:{String(seconds).padStart(2, '0')}</div>
+                            </div>
+                        </div>
+                    </div></div>
 
                     <div className="flex-1 overflow-hidden flex flex-col md:flex-row max-w-full p-2 md:p-4 gap-4">
                         {showPassagePanel && (
