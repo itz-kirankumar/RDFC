@@ -2,3 +2,18 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Add these styles to the bottom of your main CSS file */
+
+@keyframes shine {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.premium-badge {
+  background: linear-gradient(90deg, #ffde5e, #ffef97, #ffde5e);
+  background-size: 200% 100%;
+  animation: shine 4s linear infinite;
+  color: #2d3748;
+  font-weight: 700;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}

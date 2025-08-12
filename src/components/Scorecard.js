@@ -1,103 +1,109 @@
 import React from 'react';
+import { FaTrophy, FaBullseye, FaClock, FaCheckSquare, FaTimes, FaChartLine } from 'react-icons/fa';
 
-// Reusable Button Component
-const Button = ({ onClick, children, className = '' }) => (
-    <button onClick={onClick} className={`px-4 py-2 rounded-md font-semibold transition-all ${className}`}>
-        {children}
-    </button>
+const PerformanceMetric = ({ icon, value, label, textColor }) => (
+    <div className="p-4 rounded-lg text-center bg-white/5">
+        <div className={`text-3xl mx-auto ${textColor}`}>{icon}</div>
+        <div className={`text-3xl font-bold mt-2 ${textColor}`}>{value}</div>
+        <div className="text-xs text-gray-400 mt-1 uppercase tracking-wider">{label}</div>
+    </div>
 );
 
 const Scorecard = ({ test, sectionWiseResults, totalScore, totalAccuracy, totalTime, totalAttempted, totalQuestions, setView, handleCloseToDashboard }) => {
     return (
-        // FIX: Main container now has a white background on mobile and dark on desktop.
-        // It fills the screen on mobile and centers on desktop.
-        <div className="bg-white md:bg-gray-900 text-gray-800 md:text-white min-h-screen md:p-8 md:flex md:flex-col md:justify-center md:items-center">
-            {/* FIX: Inner container is responsive, full-width on mobile, max-width on desktop */}
-            <div className="w-full max-w-4xl mx-auto relative bg-white md:bg-gray-800 md:rounded-lg md:shadow-2xl p-4 md:p-8">
-                <button onClick={handleCloseToDashboard} title="Back to Dashboard" className="absolute top-4 right-4 text-gray-400 hover:text-gray-800 md:hover:text-white transition-colors">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 md:h-8 md:w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
+            <div className="w-full max-w-3xl bg-gray-800 rounded-xl shadow-2xl p-6 md:p-8 relative animate-fade-in-up">
+                <button onClick={handleCloseToDashboard} title="Close" className="absolute top-4 right-4 text-gray-500 hover:text-white transition-colors">
+                    <FaTimes className="h-5 w-5" />
                 </button>
-                <h1 className="text-2xl md:text-3xl font-extrabold text-gray-900 md:text-white text-center mb-6 md:mb-8">Scorecard: {test.title}</h1>
+                <h1 className="text-2xl md:text-3xl font-bold text-purple-400 text-center mb-6">Scorecard: {test.title}</h1>
                 
-                <h2 className="text-lg md:text-xl font-semibold p-4 text-center border-b border-gray-200 md:border-gray-600">Overall Performance</h2>
-                {/* FIX: Grid is 2 columns on mobile, 4 on desktop for better readability */}
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 text-center mt-4">
-                    <div className="p-4 md:p-6 bg-gray-100 md:bg-gray-700 rounded-xl shadow-inner border border-gray-200 md:border-gray-600">
-                        <div className="text-3xl md:text-4xl font-bold text-gray-900 md:text-white">{totalScore}</div>
-                        <div className="text-xs md:text-sm text-gray-500 md:text-gray-300 mt-1">Total Score</div>
-                    </div>
-                    <div className="p-4 md:p-6 bg-gray-100 md:bg-gray-700 rounded-xl shadow-inner border border-gray-200 md:border-gray-600">
-                        <div className="text-3xl md:text-4xl font-bold text-gray-900 md:text-white">{totalAccuracy.toFixed(2)}%</div>
-                        <div className="text-xs md:text-sm text-gray-500 md:text-gray-300 mt-1">Accuracy</div>
-                    </div>
-                    <div className="p-4 md:p-6 bg-gray-100 md:bg-gray-700 rounded-xl shadow-inner border border-gray-200 md:border-gray-600">
-                        <div className="text-3xl md:text-4xl font-bold text-gray-900 md:text-white">{Math.floor(totalTime / 60)}m {Math.round(totalTime % 60)}s</div>
-                        <div className="text-xs md:text-sm text-gray-500 md:text-gray-300 mt-1">Time Taken</div>
-                    </div>
-                    <div className="p-4 md:p-6 bg-gray-100 md:bg-gray-700 rounded-xl shadow-inner border border-gray-200 md:border-gray-600">
-                        <div className="text-3xl md:text-4xl font-bold text-gray-900 md:text-white">{totalAttempted}/{totalQuestions}</div>
-                        <div className="text-xs md:text-sm text-gray-500 md:text-gray-300 mt-1">Attempted</div>
-                    </div>
+                <h2 className="text-sm font-semibold text-center text-gray-400 uppercase tracking-widest mb-4">Overall Performance</h2>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <PerformanceMetric 
+                        icon={<FaTrophy />} 
+                        value={totalScore} 
+                        label="Total Score"
+                        textColor="text-amber-400"
+                    />
+                     <PerformanceMetric 
+                        icon={<FaBullseye />} 
+                        value={`${totalAccuracy.toFixed(2)}%`} 
+                        label="Accuracy"
+                        textColor="text-green-400"
+                    />
+                    <PerformanceMetric 
+                        icon={<FaClock />} 
+                        value={`${Math.floor(totalTime / 60)}m ${Math.round(totalTime % 60)}s`}
+                        label="Time Taken"
+                        textColor="text-sky-400"
+                    />
+                    <PerformanceMetric 
+                        icon={<FaCheckSquare />} 
+                        value={`${totalAttempted}/${totalQuestions}`}
+                        label="Attempted"
+                        textColor="text-violet-400"
+                    />
                 </div>
 
-                <h2 className="text-lg md:text-xl font-semibold p-4 text-center border-b border-gray-200 md:border-gray-600 mt-6 md:mt-8">Sectional Breakdown</h2>
+                <h2 className="text-sm font-semibold text-center text-gray-400 uppercase tracking-widest mt-8 mb-4">Sectional Breakdown</h2>
                 
-                {/* FIX: Desktop Table View (hidden on mobile) */}
-                <div className="bg-gray-700 rounded-lg shadow-inner overflow-hidden mt-4 hidden md:block">
+                <div className="bg-gray-900/50 rounded-lg shadow-inner overflow-hidden">
                     <div className="overflow-x-auto">
-                        <table className="min-w-full text-center divide-y divide-gray-600">
-                            <thead className="bg-gray-600">
+                        <table className="min-w-full text-center">
+                            <thead>
                                 <tr>
-                                    <th className="py-2 px-3 font-semibold text-xs text-white">Section</th>
-                                    <th className="py-2 px-3 font-semibold text-xs text-white">Score</th>
-                                    <th className="py-2 px-3 font-semibold text-xs text-white">Correct</th>
-                                    <th className="py-2 px-3 font-semibold text-xs text-white">Incorrect</th>
-                                    <th className="py-2 px-3 font-semibold text-xs text-white">Unattempted</th>
+                                    <th className="py-3 px-4 font-semibold text-xs text-gray-400 uppercase">Section</th>
+                                    <th className="py-3 px-4 font-semibold text-xs text-gray-400 uppercase">Score</th>
+                                    <th className="py-3 px-4 font-semibold text-xs text-gray-400 uppercase">Correct</th>
+                                    <th className="py-3 px-4 font-semibold text-xs text-gray-400 uppercase">Incorrect</th>
+                                    <th className="py-3 px-4 font-semibold text-xs text-gray-400 uppercase">Unattempted</th>
                                 </tr>
                             </thead>
-                            <tbody className="divide-y divide-gray-700">
+                            <tbody className="divide-y divide-gray-700/50">
                                 {sectionWiseResults.map(sec => (
                                     <tr key={sec.name}>
-                                        <td className="py-2 px-3 font-bold text-sm text-white">{sec.name}</td>
-                                        <td className="py-2 px-3 text-sm text-white">{sec.score}</td>
-                                        <td className="py-2 px-3 text-sm text-green-400">{sec.correct}</td>
-                                        <td className="py-2 px-3 text-sm text-red-400">{sec.incorrect}</td>
-                                        <td className="py-2 px-3 text-sm text-gray-400">{sec.unattempted}</td>
+                                        <td className="py-3 px-4 text-sm text-white">
+                                            <span className="bg-gray-600 px-3 py-1 rounded-full font-semibold">{sec.name}</span>
+                                        </td>
+                                        <td className="py-3 px-4 text-sm text-white font-bold">{sec.score}</td>
+                                        <td className="py-3 px-4 text-sm text-green-400">{sec.correct}</td>
+                                        <td className="py-3 px-4 text-sm text-red-400">{sec.incorrect}</td>
+                                        <td className="py-3 px-4 text-sm text-gray-400">{sec.unattempted}</td>
                                     </tr>
                                 ))}
                             </tbody>
                         </table>
                     </div>
                 </div>
-
-                {/* FIX: Mobile Card View (visible only on mobile) */}
-                <div className="md:hidden mt-4 space-y-4">
-                    {sectionWiseResults.map(sec => (
-                        <div key={sec.name} className="bg-gray-100 rounded-lg shadow-inner p-4 border border-gray-200">
-                            <h3 className="text-lg font-bold text-center mb-3 text-gray-900">{sec.name}</h3>
-                            <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-                                <div className="font-semibold text-gray-600">Score:</div>
-                                <div className="text-right font-bold text-gray-900">{sec.score}</div>
-
-                                <div className="font-semibold text-gray-600">Correct:</div>
-                                <div className="text-right text-green-600 font-bold">{sec.correct}</div>
-
-                                <div className="font-semibold text-gray-600">Incorrect:</div>
-                                <div className="text-right text-red-600 font-bold">{sec.incorrect}</div>
-
-                                <div className="font-semibold text-gray-600">Unattempted:</div>
-                                <div className="text-right text-gray-500 font-bold">{sec.unattempted}</div>
-                            </div>
-                        </div>
-                    ))}
-                </div>
                 
-                <div className="text-center mt-8">
-                    <Button onClick={() => setView('analysis')} className="bg-gray-800 text-white hover:bg-gray-700 md:bg-white md:text-gray-900 md:hover:bg-gray-200 shadow-xl transform hover:scale-105">
-                        Analyze Questions &rarr;
-                    </Button>
+                {/* UPDATED: This div now uses flexbox to perfectly center the button */}
+                <div className="mt-8 flex justify-center">
+                    <button 
+                        onClick={() => setView('analysis')} 
+                        className="bg-blue-600 text-white font-semibold px-5 py-2.5 rounded-lg hover:bg-blue-700 transition-all flex items-center space-x-2 shadow-lg"
+                    >
+                        <FaChartLine />
+                        <span>Analyze Questions</span>
+                    </button>
                 </div>
             </div>
+            {/* A simple animation class for the modal appearing */}
+            <style jsx global>{`
+                @keyframes fade-in-up {
+                    0% {
+                        opacity: 0;
+                        transform: translateY(20px);
+                    }
+                    100% {
+                        opacity: 1;
+                        transform: translateY(0);
+                    }
+                }
+                .animate-fade-in-up {
+                    animation: fade-in-up 0.3s ease-out forwards;
+                }
+            `}</style>
         </div>
     );
 };

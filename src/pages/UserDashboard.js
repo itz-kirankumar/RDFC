@@ -4,6 +4,8 @@ import { db } from '../firebase/config';
 import { useAuth } from '../contexts/AuthContext';
 import FeedbackForm from '../components/FeedbackForm';
 import { motion, AnimatePresence } from 'framer-motion';
+import { FaEye, FaLock, FaPlay, FaRedo, FaCheckCircle, FaHourglassHalf, FaBookOpen } from 'react-icons/fa';
+
 
 // --- WIDGETS AND HELPERS START ---
 
@@ -73,13 +75,13 @@ const ExamCountdownWidget = ({ title, targetDate }) => {
     );
 
     return (
-        <div className="bg-gray-800 p-4 md:p-6 rounded-lg shadow-lg border border-gray-700 flex flex-col items-center justify-center h-full">
-            <h3 className="text-lg font-bold text-white mb-4">{title}</h3>
+        <div className="bg-gradient-to-br from-gray-800 to-gray-900 p-4 md:p-6 rounded-lg shadow-lg border border-gray-700 flex flex-col items-center justify-center h-full">
+            <h3 className="text-lg font-bold text-cyan-300 mb-4">{title}</h3>
             <div className="grid grid-cols-4 gap-2 md:gap-4 w-full">
-                <TimeBlock value={timeLeft.days} label="Days" colorClass="bg-red-500/20" />
-                <TimeBlock value={timeLeft.hours} label="Hours" colorClass="bg-blue-500/20" />
-                <TimeBlock value={timeLeft.minutes} label="Mins" colorClass="bg-green-500/20" />
-                <TimeBlock value={timeLeft.seconds} label="Secs" colorClass="bg-yellow-500/20" />
+                <TimeBlock value={timeLeft.days} label="Days" colorClass="bg-red-500/30" />
+                <TimeBlock value={timeLeft.hours} label="Hours" colorClass="bg-blue-500/30" />
+                <TimeBlock value={timeLeft.minutes} label="Mins" colorClass="bg-green-500/30" />
+                <TimeBlock value={timeLeft.seconds} label="Secs" colorClass="bg-yellow-500/30" />
             </div>
         </div>
     );
@@ -125,8 +127,8 @@ const VocabCardWidget = () => {
     
     if (vocabList.length === 0) {
         return (
-            <div className="bg-gray-800 p-6 rounded-lg flex flex-col items-center justify-center h-full text-center">
-                 <h3 className="text-lg font-bold text-white mb-2">Vocab Card of the Day</h3>
+            <div className="bg-gradient-to-br from-gray-800 to-gray-900 p-6 rounded-lg flex flex-col items-center justify-center h-full text-center">
+                 <h3 className="text-lg font-bold text-purple-300 mb-2">Vocab Card of the Day</h3>
                  <p className="text-gray-400">No active wordlist set by admin.</p>
             </div>
         );
@@ -135,8 +137,8 @@ const VocabCardWidget = () => {
     const currentWord = vocabList[wordIndex];
 
     return (
-        <div className="bg-gray-800 p-4 md:p-6 rounded-lg shadow-lg border border-gray-700 flex flex-col h-full">
-            <h3 className="text-lg font-bold text-white mb-4 text-center">Vocab Card of the Day</h3>
+        <div className="bg-gradient-to-br from-gray-800 to-gray-900 p-4 md:p-6 rounded-lg shadow-lg border border-gray-700 flex flex-col h-full">
+            <h3 className="text-lg font-bold text-purple-300 mb-4 text-center">Vocab Card of the Day</h3>
             <div className="flex-grow flex items-center justify-center cursor-pointer" style={{ perspective: '1000px' }} onClick={() => setIsFlipped(!isFlipped)}>
                 <motion.div
                     className="relative w-full h-40"
@@ -144,11 +146,11 @@ const VocabCardWidget = () => {
                     transition={{ duration: 0.6 }}
                     style={{ transformStyle: 'preserve-3d' }}
                 >
-                    <div className="absolute w-full h-full bg-gray-700 rounded-lg flex items-center justify-center p-4 text-center" style={{ backfaceVisibility: 'hidden' }}>
-                        <h2 className="text-3xl font-bold text-cyan-300">{currentWord.word}</h2>
+                    <div className="absolute w-full h-full bg-gradient-to-br from-purple-500 to-indigo-600 rounded-lg flex items-center justify-center p-4 text-center shadow-lg" style={{ backfaceVisibility: 'hidden' }}>
+                        <h2 className="text-3xl font-bold text-white">{currentWord.word}</h2>
                     </div>
-                    <div className="absolute w-full h-full bg-gray-600 rounded-lg p-4 flex flex-col justify-center text-center" style={{ backfaceVisibility: 'hidden', transform: 'rotateY(180deg)' }}>
-                        <p className="font-semibold text-white">{currentWord.meaning}</p>
+                    <div className="absolute w-full h-full bg-gradient-to-br from-gray-600 to-gray-700 rounded-lg p-4 flex flex-col justify-center text-center shadow-lg" style={{ backfaceVisibility: 'hidden', transform: 'rotateY(180deg)' }}>
+                        <p className="font-semibold text-white text-lg">{currentWord.meaning}</p>
                         <p className="text-sm text-gray-300 italic mt-2">"{currentWord.example}"</p>
                     </div>
                 </motion.div>
@@ -260,23 +262,30 @@ const UserDashboard = ({ navigate }) => {
         const isScheduled = test.liveAt && test.liveAt.toDate() > new Date() && !liveTests[test.id];
         const isLocked = getIsLocked(test, test.type);
         const attempt = userAttempts[test.id];
-        let buttonContent, buttonClass;
+        let buttonContent, buttonClass, buttonIcon;
+
         if (isScheduled) {
             buttonContent = <CountdownTimer targetDate={test.liveAt.toDate()} onComplete={() => setLiveTests(prev => ({...prev, [test.id]: true}))} />;
             buttonClass = "bg-gray-700 cursor-default";
+            buttonIcon = <FaHourglassHalf />;
         } else if (isLocked) {
             buttonContent = "Subscribe to Unlock";
             buttonClass = "bg-amber-500 hover:bg-amber-400 text-gray-900";
+            buttonIcon = <FaLock />;
         } else if (attempt?.status === 'completed') {
             buttonContent = "View Analysis";
             buttonClass = "bg-green-600 hover:bg-green-700 text-white";
+            buttonIcon = <FaEye />;
         } else if (attempt?.status === 'in-progress') {
             buttonContent = "Continue Test";
             buttonClass = "bg-orange-500 hover:bg-orange-600 text-white";
+            buttonIcon = <FaPlay />;
         } else {
             buttonContent = "Start Test";
             buttonClass = "bg-blue-600 hover:bg-blue-700 text-white";
+            buttonIcon = <FaPlay />;
         }
+
         const handleButtonClick = () => {
             if (isScheduled) return;
             if (isLocked) navigate('subscription');
@@ -285,17 +294,18 @@ const UserDashboard = ({ navigate }) => {
             else navigate('test', { testId: test.id });
         };
         return (
-            <div key={test.id} className={`bg-gray-800 rounded-lg shadow-md p-6 flex flex-col justify-between transition-all ${isLocked && !isScheduled ? 'opacity-50' : 'hover:shadow-xl hover:-translate-y-1'}`}>
+            <div key={test.id} className={`bg-gray-800 rounded-lg shadow-md p-6 flex flex-col justify-between transition-all duration-300 border-l-4 ${isLocked ? 'border-amber-500' : 'border-blue-500'} ${isLocked && !isScheduled ? 'opacity-60' : 'hover:shadow-xl hover:-translate-y-1'}`}>
                 <div>
                     <h3 className="text-xl font-semibold text-white">{test.title}</h3>
                     <div className="flex items-center mt-2">
                         <span className={`inline-block px-2 py-1 text-xs font-semibold rounded-full ${test.type === 'MOCK' ? 'bg-purple-700 text-purple-200' : test.type === 'SECTIONAL' ? 'bg-teal-700 text-teal-200' : 'bg-gray-600 text-gray-400'}`}>{test.type}</span>
                         {isScheduled && <span className="ml-2 inline-block px-2 py-1 text-xs font-semibold rounded-full bg-cyan-700 text-cyan-200">Coming Soon</span>}
                     </div>
-                    <p className="text-gray-400 mt-2">{test.description}</p>
+                    <p className="text-gray-400 mt-2 text-sm">{test.description}</p>
                 </div>
-                <button onClick={handleButtonClick} className={`mt-4 w-full px-4 py-2 rounded-md font-semibold transition-colors ${buttonClass}`}>
-                    {buttonContent}
+                <button onClick={handleButtonClick} className={`mt-4 w-full px-4 py-3 rounded-md font-semibold transition-colors flex items-center justify-center space-x-2 ${buttonClass}`}>
+                    {buttonIcon}
+                    <span>{buttonContent}</span>
                 </button>
             </div>
         );
@@ -309,30 +319,30 @@ const UserDashboard = ({ navigate }) => {
             const testIsLocked = getIsLocked(test, 'rdfc_test');
             const isArticleRead = userStatus?.readArticles?.[test.id];
             const getButtonState = (type, isLocked) => {
-                if (isLocked) return { text: "Unlock", action: () => navigate('subscription'), className: "bg-amber-500 hover:bg-amber-400 text-gray-900", disabled: false };
-                if (type === 'article' && article) {
-                    if (isArticleRead) return { text: "Article Read", action: () => navigate('rdfcArticleViewer', { articleUrl: article.url, testId: test.id }), className: "bg-gray-600 hover:bg-gray-700 text-gray-300", disabled: false };
-                    return { text: "View Article", action: () => handleViewArticle(article.url, test.id), className: "bg-blue-600 hover:bg-blue-700 text-white", disabled: false };
+                 if (isLocked) return { text: "Unlock", action: () => navigate('subscription'), className: "bg-amber-500 hover:bg-amber-400 text-gray-900", disabled: false, icon: <FaLock /> };
+                 if (type === 'article' && article) {
+                    if (isArticleRead) return { text: "Article Read", action: () => navigate('rdfcArticleViewer', { articleUrl: article.url, testId: test.id }), className: "bg-gray-600 hover:bg-gray-700 text-gray-300", disabled: false, icon: <FaCheckCircle /> };
+                    return { text: "View Article", action: () => handleViewArticle(article.url, test.id), className: "bg-blue-600 hover:bg-blue-700 text-white", disabled: false, icon: <FaBookOpen /> };
                 }
                 if (type === 'test' && article) {
                     const attempt = userAttempts[test.id];
-                    if (attempt?.status === 'completed') return { text: "View Analysis", action: () => navigate('results', { attemptId: attempt.id }), className: "bg-green-600 hover:bg-green-700 text-white", disabled: false };
-                    if (attempt?.status === 'in-progress') return { text: "Continue Test", action: () => navigate('test', { testId: test.id }), className: "bg-orange-500 hover:bg-orange-600 text-white", disabled: false };
-                    return { text: "Start Test", action: () => navigate('test', { testId: test.id }), className: "bg-blue-600 hover:bg-blue-700 text-white", disabled: false };
+                    if (attempt?.status === 'completed') return { text: "View Analysis", action: () => navigate('results', { attemptId: attempt.id }), className: "bg-green-600 hover:bg-green-700 text-white", disabled: false, icon: <FaEye /> };
+                    if (attempt?.status === 'in-progress') return { text: "Continue Test", action: () => navigate('test', { testId: test.id }), className: "bg-orange-500 hover:bg-orange-600 text-white", disabled: false, icon: <FaPlay /> };
+                    return { text: "Start Test", action: () => navigate('test', { testId: test.id }), className: "bg-blue-600 hover:bg-blue-700 text-white", disabled: false, icon: <FaPlay /> };
                 }
-                return { text: "N/A", action: null, className: "bg-gray-700 text-gray-500 cursor-not-allowed", disabled: true };
+                return { text: "N/A", action: null, className: "bg-gray-700 text-gray-500 cursor-not-allowed", disabled: true, icon: null };
             };
             const articleButton = getButtonState('article', articleIsLocked);
             const testButton = getButtonState('test', testIsLocked);
             return (
                 <div className="flex space-x-2">
-                    <button onClick={articleButton.action} disabled={articleButton.disabled} className={`flex-1 text-sm font-semibold px-3 py-2 rounded-md transition-colors ${articleIsLocked ? 'opacity-60' : ''} ${articleButton.className}`}>{articleButton.text}</button>
-                    <button onClick={testButton.action} disabled={testButton.disabled} className={`flex-1 text-sm font-semibold px-3 py-2 rounded-md transition-colors ${testIsLocked ? 'opacity-60' : ''} ${testButton.className}`}>{testButton.text}</button>
+                    <button onClick={articleButton.action} disabled={articleButton.disabled} className={`flex-1 text-sm font-semibold px-3 py-2 rounded-md transition-colors flex items-center justify-center space-x-2 ${articleIsLocked ? 'opacity-60' : ''} ${articleButton.className}`}>{articleButton.icon} <span>{articleButton.text}</span></button>
+                    <button onClick={testButton.action} disabled={testButton.disabled} className={`flex-1 text-sm font-semibold px-3 py-2 rounded-md transition-colors flex items-center justify-center space-x-2 ${testIsLocked ? 'opacity-60' : ''} ${testButton.className}`}>{testButton.icon} <span>{testButton.text}</span></button>
                 </div>
             );
         };
         return (
-            <div key={test.id} className={`md:hidden bg-gray-800 rounded-lg p-4 mb-4`}>
+            <div key={test.id} className={`bg-gray-800 rounded-lg p-4 mb-4 border-l-4 border-purple-500`}>
                 <h4 className="text-lg font-semibold text-white">{test.title}</h4>
                 <p className="text-sm text-gray-400 mt-1 mb-2">{article ? article.name : 'N/A'}</p>
                 <p className="text-xs text-gray-500 mb-4 h-8 overflow-hidden">{article ? article.description : 'N/A'}</p>
@@ -363,7 +373,7 @@ const UserDashboard = ({ navigate }) => {
         return (
             <div className="border-t border-gray-700 pt-8 mb-12">
                 <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-xl md:text-2xl font-bold text-white">{title}</h2>
+                    <h2 className="text-xl md:text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-teal-300 to-blue-400">{title}</h2>
                     {tests.length > 6 && (<button onClick={() => navigate('allTests', { tests, title: `All ${title}`, contentType })} className="text-sm font-semibold text-gray-400 hover:text-white">View All &rarr;</button>)}
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -408,12 +418,12 @@ const UserDashboard = ({ navigate }) => {
                 section.tests.length > 0 && 
                 <div key={section.title} className={`${index > 0 ? 'border-t border-gray-700 pt-8' : ''} mb-12`}>
                     <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-4">
-                        <h3 className="text-xl md:text-2xl font-bold text-white mb-2 md:mb-0">{section.title}</h3>
+                        <h3 className="text-xl md:text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-300 to-pink-400 mb-2 md:mb-0">{section.title}</h3>
                         {section.sectionLocked && <button onClick={() => navigate('subscription')} className="bg-amber-500 text-gray-900 px-6 py-2 rounded-md font-semibold hover:bg-amber-400 shadow transition-all transform hover:scale-105 self-start md:self-center">Subscribe Now to Unlock</button>}
                     </div>
-                    <div className="hidden md:block bg-gray-800 shadow-md rounded-lg overflow-hidden">
+                    <div className="hidden md:block bg-gray-800 shadow-md rounded-lg overflow-hidden border border-gray-700">
                         <table className="min-w-full divide-y divide-gray-700">
-                           <thead className="bg-gray-700"><tr><th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Test Title</th><th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Article Name</th><th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Article Link</th><th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Test Link</th></tr></thead>
+                           <thead className="bg-gray-700/50"><tr><th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Test Title</th><th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Article Name</th><th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Article Link</th><th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Test Link</th></tr></thead>
                             <tbody className="bg-gray-800 divide-y divide-gray-700">
                                 {section.tests.slice(0, 3).map(test => {
                                     const article = linkedArticles[test.id];
@@ -424,20 +434,23 @@ const UserDashboard = ({ navigate }) => {
                                         }
                                         const isLocked = getIsLocked(test, `rdfc_${type}`);
                                         const isArticleRead = userStatus?.readArticles?.[test.id];
-                                        let text, action, className, disabled = !article;
+                                        let text, action, className, disabled = !article, icon;
                                         if(isLocked) {
                                             text = "Unlock";
                                             action = () => navigate('subscription');
                                             className = "bg-amber-500 hover:bg-amber-400 text-gray-900";
+                                            icon = <FaLock />;
                                         } else if(type === 'article') {
                                             if(isArticleRead) {
                                                 text = "Article Read";
                                                 action = () => navigate('rdfcArticleViewer', { articleUrl: article.url, testId: test.id });
                                                 className = "bg-gray-600 hover:bg-gray-700 text-gray-300";
+                                                icon = <FaCheckCircle />;
                                             } else {
                                                 text = "View Article";
                                                 action = () => handleViewArticle(article.url, test.id);
                                                 className = "bg-blue-600 hover:bg-blue-700 text-white";
+                                                icon = <FaBookOpen />;
                                             }
                                         } else { // type === 'test'
                                             const attempt = userAttempts[test.id];
@@ -445,20 +458,23 @@ const UserDashboard = ({ navigate }) => {
                                                 text = "View Analysis";
                                                 action = () => navigate('results', { attemptId: attempt.id });
                                                 className = "bg-green-600 hover:bg-green-700 text-white";
+                                                icon = <FaEye />;
                                             } else if (attempt?.status === 'in-progress') {
                                                 text = "Continue Test";
                                                 action = () => navigate('test', { testId: test.id });
                                                 className = "bg-orange-500 hover:bg-orange-600 text-white";
+                                                icon = <FaPlay />;
                                             } else {
                                                 text = "Start Test";
                                                 action = () => navigate('test', { testId: test.id });
                                                 className = "bg-blue-600 hover:bg-blue-700 text-white";
+                                                icon = <FaPlay />;
                                             }
                                         }
-                                        return <button onClick={action} disabled={disabled} className={`text-xs px-3 py-1 rounded-full w-40 h-10 flex items-center justify-center ${className} ${isLocked ? 'opacity-60' : ''}`}>{text}</button>;
+                                        return <button onClick={action} disabled={disabled} className={`text-xs px-3 py-1 rounded-full w-40 h-10 flex items-center justify-center space-x-2 ${className} ${isLocked ? 'opacity-60' : ''}`}>{icon} <span>{text}</span></button>;
                                     };
                                     return (
-                                        <tr key={test.id}>
+                                        <tr key={test.id} className="hover:bg-gray-700/50">
                                             <td className="px-6 py-4 text-sm font-medium text-white"><div className="flex items-center"><span>{test.title}</span> {isScheduled && <span className="ml-2 text-xs font-semibold rounded-full bg-cyan-700 text-cyan-200 px-2 py-1">Coming Soon</span>}</div></td>
                                             <td className="px-6 py-4 text-sm text-gray-400">{article ? article.name : 'N/A'}</td>
                                             <td className="px-6 py-4 text-sm">{renderCellContent('article')}</td>
