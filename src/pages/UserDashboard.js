@@ -1,10 +1,10 @@
-import React, { useState, useEffect, Fragment } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { collection, getDocs, query, where, doc, onSnapshot, updateDoc, orderBy, limit } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { useAuth } from '../contexts/AuthContext';
 import FeedbackForm from '../components/FeedbackForm';
-import { motion, AnimatePresence } from 'framer-motion';
-import { FaEye, FaLock, FaPlay, FaRedo, FaCheckCircle, FaHourglassHalf, FaBookOpen } from 'react-icons/fa';
+import { motion } from 'framer-motion';
+import { FaEye, FaLock, FaPlay, FaCheckCircle, FaHourglassHalf, FaBookOpen } from 'react-icons/fa';
 
 
 // --- WIDGETS AND HELPERS START ---
@@ -162,75 +162,112 @@ const VocabCardWidget = () => {
 
 // --- WIDGETS END ---
 
-const UserDashboard = ({ navigate }) => {
-    const { userData } = useAuth();
-    const [rdfcTests, setRdfcTests] = useState([]);
-    const [mockTests, setMockTests] = useState([]);
-    const [sectionalTests, setSectionalTests] = useState([]);
-    const [otherAddOnTests, setOtherAddOnTests] = useState([]);
-    const [linkedArticles, setLinkedArticles] = useState({});
-    const [loading, setLoading] = useState(true);
-    const [userStatus, setUserStatus] = useState(null);
-    const [userAttempts, setUserAttempts] = useState({});
-    const [liveTests, setLiveTests] = useState({});
-    const [showFeedbackThanks, setShowFeedbackThanks] = useState(false);
+
+// --- CUSTOM HOOKS FOR CLEAN DATA FETCHING ---
+
+// Hook to fetch static master data (all tests, all articles) once
+const useMasterData = () => {
+    const [masterData, setMasterData] = useState({ allTests: [], linkedArticles: {}, loading: true });
 
     useEffect(() => {
-        if (!userData?.uid) {
+        const fetch = async () => {
+            try {
+                const testsQuery = query(collection(db, 'tests'), where("isPublished", "==", true));
+                const articlesQuery = collection(db, 'rdfcArticles');
+
+                const [testsSnapshot, articlesSnapshot] = await Promise.all([
+                    getDocs(testsQuery),
+                    getDocs(articlesQuery)
+                ]);
+
+                const fetchedTests = testsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                const fetchedArticles = {};
+                articlesSnapshot.forEach(doc => { fetchedArticles[doc.id] = doc.data(); });
+                
+                setMasterData({ allTests: fetchedTests, linkedArticles: fetchedArticles, loading: false });
+            } catch (error) {
+                console.error("Error fetching master data:", error);
+                setMasterData(prev => ({ ...prev, loading: false }));
+            }
+        };
+        fetch();
+    }, []); // Empty dependency array ensures this runs only once
+
+    return masterData;
+};
+
+// Hook to get the user's status in real-time
+const useUserStatus = (uid) => {
+    const [userStatus, setUserStatus] = useState(null);
+    useEffect(() => {
+        if (!uid) {
             setUserStatus(null);
+            return;
+        }
+        const userDocRef = doc(db, 'users', uid);
+        const unsubscribe = onSnapshot(userDocRef, (docSnap) => {
+            setUserStatus(docSnap.exists() ? docSnap.data() : null);
+        });
+        return () => unsubscribe();
+    }, [uid]);
+    return userStatus;
+};
+
+// Hook to get the user's test attempts in real-time
+const useUserAttempts = (uid) => {
+    const [userAttempts, setUserAttempts] = useState({});
+    useEffect(() => {
+        if (!uid) {
             setUserAttempts({});
             return;
         }
-        const userDocRef = doc(db, 'users', userData.uid);
-        const userUnsubscribe = onSnapshot(userDocRef, (docSnap) => {
-            setUserStatus(docSnap.exists() ? docSnap.data() : null);
-        });
-        const attemptsQuery = query(collection(db, "attempts"), where("userId", "==", userData.uid));
-        const attemptsUnsubscribe = onSnapshot(attemptsQuery, (querySnapshot) => {
+        const attemptsQuery = query(collection(db, "attempts"), where("userId", "==", uid));
+        const unsubscribe = onSnapshot(attemptsQuery, (snapshot) => {
             const attemptsMap = {};
-            querySnapshot.forEach((doc) => {
-                const attemptData = doc.data();
-                attemptsMap[attemptData.testId] = { id: doc.id, status: attemptData.status };
+            snapshot.forEach((doc) => {
+                const data = doc.data();
+                attemptsMap[data.testId] = { id: doc.id, status: data.status };
             });
             setUserAttempts(attemptsMap);
         });
-        return () => {
-            userUnsubscribe();
-            attemptsUnsubscribe();
-        };
-    }, [userData?.uid]);
+        return () => unsubscribe();
+    }, [uid]);
+    return userAttempts;
+};
 
-    useEffect(() => {
-        const fetchDashboardData = async () => {
-            if (!userStatus) return;
-            setLoading(true);
-            try {
-                const testsQuery = query(collection(db, 'tests'), where("isPublished", "==", true));
-                const testsSnapshot = await getDocs(testsQuery);
-                const allPublishedTests = testsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                const articlesQuery = collection(db, 'rdfcArticles');
-                const articlesSnapshot = await getDocs(articlesQuery);
-                const fetchedArticles = {};
-                articlesSnapshot.forEach(doc => { fetchedArticles[doc.id] = doc.data(); });
-                setLinkedArticles(fetchedArticles);
-                const rdfc = allPublishedTests.filter(test => fetchedArticles[test.id]);
-                const nonRdfcTests = allPublishedTests.filter(test => !fetchedArticles[test.id]);
-                const mocks = nonRdfcTests.filter(t => t.type?.toUpperCase() === 'MOCK');
-                const sectionals = nonRdfcTests.filter(t => t.type?.toUpperCase() === 'SECTIONAL');
-                const others = nonRdfcTests.filter(t => t.type?.toUpperCase() === 'TEST');
-                const sortByDate = (a, b) => (b.createdAt?.toDate() || 0) - (a.createdAt?.toDate() || 0);
-                setRdfcTests(rdfc.sort(sortByDate));
-                setMockTests(mocks.sort(sortByDate));
-                setSectionalTests(sectionals.sort(sortByDate));
-                setOtherAddOnTests(others.sort(sortByDate));
-            } catch (error) {
-                console.error("Error fetching dashboard data: ", error);
-            } finally {
-                setLoading(false);
-            }
+// --- MAIN DASHBOARD COMPONENT ---
+
+const UserDashboard = ({ navigate }) => {
+    const { userData } = useAuth();
+    const [liveTests, setLiveTests] = useState({});
+    const [showFeedbackThanks, setShowFeedbackThanks] = useState(false);
+
+    // Use the custom hooks to get all required data
+    const { allTests, linkedArticles, loading: masterDataLoading } = useMasterData();
+    const userStatus = useUserStatus(userData?.uid);
+    const userAttempts = useUserAttempts(userData?.uid);
+
+    // Use useMemo to reactively compute the categorized lists whenever the source data changes
+    const { rdfcTests, mockTests, sectionalTests, otherAddOnTests } = useMemo(() => {
+        if (!allTests || allTests.length === 0) {
+            return { rdfcTests: [], mockTests: [], sectionalTests: [], otherAddOnTests: [] };
+        }
+        const rdfc = allTests.filter(test => linkedArticles[test.id]);
+        const nonRdfcTests = allTests.filter(test => !linkedArticles[test.id]);
+        const mocks = nonRdfcTests.filter(t => t.type?.toUpperCase() === 'MOCK');
+        const sectionals = nonRdfcTests.filter(t => t.type?.toUpperCase() === 'SECTIONAL');
+        const others = nonRdfcTests.filter(t => t.type?.toUpperCase() === 'TEST');
+        const sortByDate = (a, b) => (b.createdAt?.toDate() || 0) - (a.createdAt?.toDate() || 0);
+
+        return {
+            rdfcTests: rdfc.sort(sortByDate),
+            mockTests: mocks.sort(sortByDate),
+            sectionalTests: sectionals.sort(sortByDate),
+            otherAddOnTests: others.sort(sortByDate)
         };
-        fetchDashboardData();
-    }, [userStatus]);
+    }, [allTests, linkedArticles]);
+    
+    const loading = masterDataLoading || userStatus === null;
 
     const handleViewArticle = async (articleUrl, testId) => {
         if (!userData?.uid) return;
@@ -261,7 +298,7 @@ const UserDashboard = ({ navigate }) => {
     const renderTestCard = (test) => {
         const isScheduled = test.liveAt && test.liveAt.toDate() > new Date() && !liveTests[test.id];
         const isLocked = getIsLocked(test, test.type);
-        const attempt = userAttempts[test.id];
+        const attempt = userAttempts[test.id]; // Always reads the latest status
         let buttonContent, buttonClass, buttonIcon;
 
         if (isScheduled) {
@@ -325,7 +362,7 @@ const UserDashboard = ({ navigate }) => {
                     return { text: "View Article", action: () => handleViewArticle(article.url, test.id), className: "bg-blue-600 hover:bg-blue-700 text-white", disabled: false, icon: <FaBookOpen /> };
                 }
                 if (type === 'test' && article) {
-                    const attempt = userAttempts[test.id];
+                    const attempt = userAttempts[test.id]; // Always reads the latest status
                     if (attempt?.status === 'completed') return { text: "View Analysis", action: () => navigate('results', { attemptId: attempt.id }), className: "bg-green-600 hover:bg-green-700 text-white", disabled: false, icon: <FaEye /> };
                     if (attempt?.status === 'in-progress') return { text: "Continue Test", action: () => navigate('test', { testId: test.id }), className: "bg-orange-500 hover:bg-orange-600 text-white", disabled: false, icon: <FaPlay /> };
                     return { text: "Start Test", action: () => navigate('test', { testId: test.id }), className: "bg-blue-600 hover:bg-blue-700 text-white", disabled: false, icon: <FaPlay /> };
@@ -388,7 +425,7 @@ const UserDashboard = ({ navigate }) => {
         setShowFeedbackThanks(true);
     };
 
-    if (loading || !userStatus) {
+    if (loading) {
         return <div className="text-center text-gray-400 p-8">Loading Dashboard...</div>;
     }
     

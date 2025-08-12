@@ -1,10 +1,44 @@
-import React, { useState, useEffect, useCallback, Fragment, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { doc, getDoc, updateDoc, addDoc, collection, serverTimestamp, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { useAuth } from '../contexts/AuthContext';
 import ConfirmModal from '../components/ConfirmModal';
 
-// --- Draggable Calculator Component (No Changes) ---
+// --- Helper Hook for reliable intervals ---
+function useInterval(callback, delay) {
+    const savedCallback = useRef();
+    useEffect(() => {
+        savedCallback.current = callback;
+    }, [callback]);
+    useEffect(() => {
+        function tick() {
+            savedCallback.current();
+        }
+        if (delay !== null) {
+            let id = setInterval(tick, delay);
+            return () => clearInterval(id);
+        }
+    }, [delay]);
+}
+
+// --- Offline Warning Modal ---
+const OfflineModal = () => (
+    <div className="fixed inset-0 bg-white bg-opacity-95 flex items-center justify-center z-[100]" style={{ backdropFilter: 'blur(5px)' }}>
+        <div className="text-center p-8 max-w-lg rounded-lg shadow-2xl bg-white">
+            <svg className="mx-auto h-20 w-20 text-yellow-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+            <h2 className="mt-4 text-3xl font-bold text-gray-800">Connection Issue</h2>
+            <p className="mt-2 text-gray-600">
+                You appear to be offline. Don't worry, <strong className="font-semibold text-gray-700">your progress is being saved automatically</strong> to this device.
+                The test will sync with our servers once you're back online.
+            </p>
+        </div>
+    </div>
+);
+
+
+// --- Draggable Calculator Component ---
 const Calculator = ({ setIsCalculatorOpen }) => {
     const [input, setInput] = useState('');
     const calculatorRef = useRef(null);
@@ -34,7 +68,7 @@ const Calculator = ({ setIsCalculatorOpen }) => {
     );
 };
 
-// --- Onscreen Number Pad Component (No Changes) ---
+// --- Onscreen Number Pad Component ---
 const NumberPad = ({ onNumberClick }) => {
     const handleButtonClick = (num) => { onNumberClick(num); };
     return (
@@ -72,36 +106,134 @@ const TestInterfacePage = ({ navigate, testId }) => {
     const [attemptDocId, setAttemptDocId] = useState(null);
     const [mobileView, setMobileView] = useState('question');
     const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
-    const [isMobileDevice, setIsMobileDevice] = useState(window.innerWidth < 1024); // State for device check
+    const [isMobileDevice, setIsMobileDevice] = useState(window.innerWidth < 1024);
+    
+    const [isOnline, setIsOnline] = useState(navigator.onLine);
+    const [showOfflineModal, setShowOfflineModal] = useState(false);
+    const lastSyncTimestamp = useRef(Date.now());
+
     const questionTimerRef = useRef(null);
     const testContainerRef = useRef(null);
     const exitingToDashboardRef = useRef(false);
     const submittingTestRef = useRef(false);
     const isResumeConfirmedRef = useRef(false);
+    const navigateOnExitRef = useRef(false);
+    
     const currentSection = test?.sections ? test.sections[currentSectionIndex] : null;
     const currentQuestion = currentSection ? currentSection.questions[currentQuestionIndex] : null;
     const showPassagePanel = currentSection && currentQuestion && (currentQuestion.passage || currentQuestion.passageImageUrl) && currentSection.name !== 'QA';
 
-    // Effect to check for mobile device on resize
+    const getLocalStorageKey = useCallback(() => {
+        if (!user || !testId) return null;
+        return `test_progress_${user.uid}_${testId}`;
+    }, [user, testId]);
+    
+    useEffect(() => {
+        const handleOnline = () => setIsOnline(true);
+        const handleOffline = () => setIsOnline(false);
+        window.addEventListener('online', handleOnline);
+        window.addEventListener('offline', handleOffline);
+        return () => {
+            window.removeEventListener('online', handleOnline);
+            window.removeEventListener('offline', handleOffline);
+        };
+    }, []);
+
+    useEffect(() => {
+        setShowOfflineModal(!isOnline && isFullScreenActive);
+    }, [isOnline, isFullScreenActive]);
+
+
     useEffect(() => {
         const handleResize = () => setIsMobileDevice(window.innerWidth < 1024);
         window.addEventListener('resize', handleResize);
         return () => window.removeEventListener('resize', handleResize);
     }, []);
 
-    const startQuestionTimer = useCallback(() => { questionTimerRef.current = Date.now(); }, []);
+    const startQuestionTimer = useCallback(() => {
+        questionTimerRef.current = Date.now();
+    }, []);
 
     const recordTimeTaken = useCallback(() => {
         if (questionTimerRef.current) {
             const timeSpent = (Date.now() - questionTimerRef.current) / 1000;
             setTimeTaken(prev => {
                 const newTimeTaken = { ...prev };
-                if (!newTimeTaken[currentSectionIndex]) newTimeTaken[currentSectionIndex] = {};
-                newTimeTaken[currentSectionIndex][currentQuestionIndex] = (newTimeTaken[currentSectionIndex][currentQuestionIndex] || 0) + timeSpent;
+                const secTime = newTimeTaken[currentSectionIndex] ? { ...newTimeTaken[currentSectionIndex] } : {};
+                secTime[currentQuestionIndex] = (secTime[currentQuestionIndex] || 0) + timeSpent;
+                newTimeTaken[currentSectionIndex] = secTime;
                 return newTimeTaken;
             });
         }
     }, [currentSectionIndex, currentQuestionIndex]);
+    
+    useEffect(() => {
+        if (test && !loading) {
+            if (isFullScreenActive) {
+                startQuestionTimer();
+            } else {
+                recordTimeTaken();
+                questionTimerRef.current = null;
+            }
+        }
+    }, [isFullScreenActive, test, loading, startQuestionTimer, recordTimeTaken]);
+
+    const getProgressData = useCallback((status = 'in-progress') => {
+        let finalTimeTaken = { ...timeTaken };
+        if (questionTimerRef.current) {
+            const timeSpent = (Date.now() - questionTimerRef.current) / 1000;
+            const secIdx = currentSectionIndex;
+            const qIdx = currentQuestionIndex;
+            const sectionTimeTaken = finalTimeTaken[secIdx] ? { ...finalTimeTaken[secIdx] } : {};
+            sectionTimeTaken[qIdx] = (sectionTimeTaken[qIdx] || 0) + timeSpent;
+            finalTimeTaken[secIdx] = sectionTimeTaken;
+        }
+        return {
+            status,
+            answers,
+            timeTaken: finalTimeTaken,
+            questionStatuses,
+            sectionTimers,
+            currentSectionIndex,
+            currentQuestionIndex,
+            lastUpdatedAt: Date.now(),
+        };
+    }, [answers, timeTaken, questionStatuses, sectionTimers, currentSectionIndex, currentQuestionIndex]);
+
+    useInterval(() => {
+        if (!loading && test && isFullScreenActive) {
+            const key = getLocalStorageKey();
+            if (key) {
+                const dataToSave = getProgressData();
+                localStorage.setItem(key, JSON.stringify(dataToSave));
+            }
+        }
+    }, 5000);
+
+    const syncToFirestore = useCallback(async () => {
+        if (!isOnline || !attemptDocId) return;
+        const key = getLocalStorageKey();
+        const localDataString = key ? localStorage.getItem(key) : null;
+        if (localDataString) {
+            const localData = JSON.parse(localDataString);
+            if (localData.lastUpdatedAt > lastSyncTimestamp.current) {
+                try {
+                    const dataToSync = { ...localData, lastAccessedAt: serverTimestamp() };
+                    delete dataToSync.lastUpdatedAt;
+                    await updateDoc(doc(db, "attempts", attemptDocId), dataToSync);
+                    lastSyncTimestamp.current = Date.now();
+                } catch (error) {
+                    console.error("Sync failed:", error);
+                }
+            }
+        }
+    }, [isOnline, attemptDocId, getLocalStorageKey]);
+    
+    useEffect(() => {
+        if (isOnline) {
+            syncToFirestore();
+        }
+    }, [isOnline, syncToFirestore]);
     
     const handleSubmitClick = useCallback(() => {
         submittingTestRef.current = true;
@@ -125,29 +257,117 @@ const TestInterfacePage = ({ navigate, testId }) => {
     }, [currentSectionIndex, test, recordTimeTaken, startQuestionTimer, handleSubmitClick, currentSection]);
 
     const submitTest = useCallback(async () => {
-        recordTimeTaken(); 
-        const finalAttemptData = { status: 'completed', completedAt: serverTimestamp(), answers, timeTaken, questionStatuses, sectionTimers };
+        const finalAttemptData = getProgressData('completed');
+        const key = getLocalStorageKey();
+        if (key) {
+             localStorage.setItem(key, JSON.stringify(finalAttemptData));
+        }
+        if (!isOnline) {
+            alert("You are offline. Your final result has been saved to this device and will be submitted automatically when you reconnect.");
+            setIsConfirmOpen(false);
+            return;
+        }
         try {
-            if (attemptDocId) await updateDoc(doc(db, "attempts", attemptDocId), finalAttemptData);
+            if (attemptDocId) {
+                const dataToSync = { ...finalAttemptData, completedAt: serverTimestamp() };
+                delete dataToSync.lastUpdatedAt;
+                await updateDoc(doc(db, "attempts", attemptDocId), dataToSync);
+            }
+            if (key) localStorage.removeItem(key);
             navigate('results', { attemptId: attemptDocId });
         } catch (error) {
             console.error("Error submitting test:", error);
-            setIsConfirmOpen(true);
+            alert("A connection error occurred while submitting. Your progress is saved locally. Please try again.");
+            setIsConfirmOpen(false);
         }
-    }, [answers, timeTaken, attemptDocId, navigate, recordTimeTaken, questionStatuses, sectionTimers]);
+    }, [getProgressData, getLocalStorageKey, isOnline, attemptDocId, navigate]);
 
     const saveProgressAndExit = useCallback(async () => {
-        recordTimeTaken();
-        const progressData = { lastAccessedAt: serverTimestamp(), currentSectionIndex, currentQuestionIndex, answers, timeTaken, sectionTimers, questionStatuses, status: 'in-progress' };
-        try {
-            if (attemptDocId) await updateDoc(doc(db, "attempts", attemptDocId), progressData);
+        const progressData = getProgressData('in-progress');
+        const key = getLocalStorageKey();
+        if (key) localStorage.setItem(key, JSON.stringify(progressData));
+        
+        await syncToFirestore();
+        
+        navigateOnExitRef.current = true;
+        
+        if (!document.fullscreenElement) {
             navigate('home');
-        } catch (error) {
-            console.error("Error saving progress and exiting:", error);
-            setIsExitConfirmOpen(false);
-            setIsConfirmOpen(true);
+        } else {
+             document.exitFullscreen();
         }
-    }, [answers, timeTaken, currentSectionIndex, currentQuestionIndex, sectionTimers, attemptDocId, navigate, recordTimeTaken, questionStatuses]);
+    }, [getProgressData, getLocalStorageKey, syncToFirestore, navigate]);
+
+    
+    useEffect(() => {
+        const fetchAndPrepareTest = async () => {
+            if (!testId || !user?.uid) { navigate('home'); return; }
+            setLoading(true);
+            const key = `test_progress_${user.uid}_${testId}`;
+            const localDataString = localStorage.getItem(key);
+            let localData = null;
+            if (localDataString) {
+                localData = JSON.parse(localDataString);
+                setAnswers(localData.answers || {});
+                setTimeTaken(localData.timeTaken || {});
+                setQuestionStatuses(localData.questionStatuses || {});
+                setSectionTimers(localData.sectionTimers || []);
+                setCurrentSectionIndex(localData.currentSectionIndex || 0);
+                setCurrentQuestionIndex(localData.currentQuestionIndex || 0);
+            }
+            try {
+                const testRef = doc(db, 'tests', testId);
+                const testSnap = await getDoc(testRef);
+                if (!testSnap.exists()) { alert('Test not found.'); navigate('home'); return; }
+                const testData = testSnap.data();
+                setTest(testData);
+                const attemptsRef = collection(db, 'attempts');
+                const q = query(attemptsRef, where('userId', '==', user.uid), where('testId', '==', testId));
+                const querySnapshot = await getDocs(q);
+                let attemptDoc = !querySnapshot.empty ? querySnapshot.docs[0] : null;
+                if (attemptDoc) {
+                    const attemptData = attemptDoc.data();
+                    setAttemptDocId(attemptDoc.id);
+                    if (attemptData.status === 'completed') {
+                        if (key) localStorage.removeItem(key);
+                        navigate('results', { attemptId: attemptDoc.id });
+                        return; 
+                    }
+                    const remoteTimestamp = attemptData.lastAccessedAt?.toDate().getTime() || 0;
+                    const localTimestamp = localData?.lastUpdatedAt || 0;
+                    if (remoteTimestamp > localTimestamp) {
+                        setAnswers(attemptData.answers || {});
+                        setTimeTaken(attemptData.timeTaken || {});
+                        setQuestionStatuses(attemptData.questionStatuses || {});
+                        setSectionTimers(attemptData.sectionTimers || testData.sections.map(s => s.duration * 60));
+                        setCurrentSectionIndex(attemptData.currentSectionIndex || 0);
+                        setCurrentQuestionIndex(attemptData.currentQuestionIndex || 0);
+                    }
+                    setIsResumeConfirmOpen(true);
+                } else {
+                    const initialSectionTimers = testData.sections.map(s => s.duration * 60);
+                    const initialStatuses = {};
+                    testData.sections.forEach((sec, secIdx) => { initialStatuses[secIdx] = {}; sec.questions.forEach((q, qIdx) => { initialStatuses[secIdx][qIdx] = 'not-visited'; }); });
+                    setSectionTimers(initialSectionTimers);
+                    setQuestionStatuses(initialStatuses);
+                    const newAttemptData = { testId, testTitle: testData.title, userId: user.uid, startedAt: serverTimestamp(), status: 'in-progress', answers: {}, timeTaken: {}, sectionTimers: initialSectionTimers, questionStatuses: initialStatuses, lastAccessedAt: serverTimestamp() };
+                    const newAttemptRef = await addDoc(collection(db, "attempts"), newAttemptData);
+                    setAttemptDocId(newAttemptRef.id);
+                    handleFullscreen();
+                }
+            } catch (error) {
+                console.error("Error preparing test:", error);
+                if (!localData) {
+                    alert("Error loading test. Please check your connection and try again.");
+                    navigate('home');
+                }
+            } finally {
+                setLoading(false);
+            }
+        };
+        fetchAndPrepareTest();
+    }, [testId, user, navigate]);
+
 
     const handleFullscreen = useCallback(() => {
         if (testContainerRef.current) {
@@ -158,65 +378,27 @@ const TestInterfacePage = ({ navigate, testId }) => {
 
     useEffect(() => {
         const handleNativeFullscreenChange = () => {
-            setIsFullScreenActive(document.fullscreenElement !== null);
-            if (!document.fullscreenElement && !exitingToDashboardRef.current && !submittingTestRef.current) setIsExitConfirmOpen(true);
-            else if (!document.fullscreenElement) exitingToDashboardRef.current = false;
+            const isFullscreen = document.fullscreenElement !== null;
+            setIsFullScreenActive(isFullscreen);
+
+            if (!isFullscreen) {
+                if (navigateOnExitRef.current) {
+                    navigateOnExitRef.current = false; 
+                    navigate('home');
+                    return; 
+                }
+
+                if (!exitingToDashboardRef.current && !submittingTestRef.current) {
+                    setIsExitConfirmOpen(true);
+                } else {
+                    exitingToDashboardRef.current = false;
+                }
+            }
         };
         document.addEventListener('fullscreenchange', handleNativeFullscreenChange);
         return () => document.removeEventListener('fullscreenchange', handleNativeFullscreenChange);
-    }, []);
+    }, [navigate]); 
 
-    useEffect(() => {
-        const fetchAndPrepareTest = async () => {
-            if (!testId || !user?.uid) { navigate('home'); return; }
-            setLoading(true);
-            try {
-                const testRef = doc(db, 'tests', testId);
-                const testSnap = await getDoc(testRef);
-                if (!testSnap.exists()) { alert('Test not found.'); navigate('home'); return; }
-                const testData = testSnap.data();
-                setTest(testData);
-
-                const attemptsRef = collection(db, 'attempts');
-                const q = query(attemptsRef, where('userId', '==', user.uid), where('testId', '==', testId));
-                const querySnapshot = await getDocs(q);
-                let attemptDoc = !querySnapshot.empty ? (querySnapshot.docs.find(doc => doc.data().status === 'in-progress') || querySnapshot.docs[0]) : null;
-
-                if (attemptDoc) {
-                    const attemptData = attemptDoc.data();
-                    if (attemptData.status === 'completed') {
-                        navigate('results', { attemptId: attemptDoc.id });
-                        return; 
-                    }
-                    setAttemptDocId(attemptDoc.id);
-                    setCurrentSectionIndex(attemptData.currentSectionIndex || 0);
-                    setCurrentQuestionIndex(attemptData.currentQuestionIndex || 0);
-                    setSectionTimers(attemptData.sectionTimers || testData.sections.map(s => s.duration * 60));
-                    setAnswers(attemptData.answers || {});
-                    setTimeTaken(attemptData.timeTaken || {});
-                    setQuestionStatuses(attemptData.questionStatuses || {});
-                    setIsResumeConfirmOpen(true);
-                } else {
-                    const initialSectionTimers = testData.sections.map(s => s.duration * 60);
-                    const initialStatuses = {};
-                    testData.sections.forEach((sec, secIdx) => { initialStatuses[secIdx] = {}; sec.questions.forEach((q, qIdx) => { initialStatuses[secIdx][qIdx] = 'not-visited'; }); });
-                    const newAttemptData = { testId, testTitle: testData.title, userId: user.uid, startedAt: serverTimestamp(), status: 'in-progress', answers: {}, timeTaken: {}, sectionTimers: initialSectionTimers, questionStatuses: initialStatuses };
-                    const newAttemptRef = await addDoc(collection(db, "attempts"), newAttemptData);
-                    setAttemptDocId(newAttemptRef.id);
-                    setSectionTimers(initialSectionTimers);
-                    setQuestionStatuses(initialStatuses);
-                    handleFullscreen();
-                }
-            } catch (error) {
-                console.error("Error preparing test:", error);
-                alert("Error loading test. Please try again.");
-                navigate('home');
-            } finally {
-                setLoading(false);
-            }
-        };
-        fetchAndPrepareTest();
-    }, [testId, user, navigate, handleFullscreen]);
 
     useEffect(() => {
         let timer = null; 
@@ -228,9 +410,8 @@ const TestInterfacePage = ({ navigate, testId }) => {
                         newTimers[currentSectionIndex] -= 1;
                         return newTimers;
                     } else {
-                        // **FIX**: Moved recordTimeTaken inside the conditional to prevent double-counting on final submit.
                         if (currentSectionIndex < test.sections.length - 1) {
-                            recordTimeTaken(); // Record time before switching section.
+                            recordTimeTaken(); 
                             const nextSectionIndex = currentSectionIndex + 1;
                             setSectionTransitionMessage(`Submitting ${test.sections[currentSectionIndex].name} section... Loading next section: ${test.sections[nextSectionIndex].name}`);
                             setCurrentSectionIndex(nextSectionIndex); 
@@ -240,7 +421,7 @@ const TestInterfacePage = ({ navigate, testId }) => {
                             return newTimers; 
                         } else {
                             if (document.fullscreenElement) document.exitFullscreen();
-                            submitTest(); // This function will handle the final time recording.
+                            submitTest();
                             return newTimers; 
                         }
                     }
@@ -262,11 +443,6 @@ const TestInterfacePage = ({ navigate, testId }) => {
     const changeQuestion = (newIndex) => {
         recordTimeTaken();
         setCurrentQuestionIndex(newIndex);
-        startQuestionTimer();
-        // **FIX**: If on mobile, switch back to the question view after selecting from the palette
-        if (isMobileDevice) {
-            setMobileView('question');
-        }
     };
     
     const updateQuestionStatus = useCallback((secIdx, qIdx, newStatus) => {
@@ -286,9 +462,12 @@ const TestInterfacePage = ({ navigate, testId }) => {
         if (!loading && test) {
             const status = questionStatuses[currentSectionIndex]?.[currentQuestionIndex];
             if (status === 'not-visited') updateQuestionStatus(currentSectionIndex, currentQuestionIndex, 'not-answered');
-            startQuestionTimer();
+            if (isFullScreenActive) {
+                startQuestionTimer();
+            }
         }
-    }, [currentSectionIndex, currentQuestionIndex, loading, test, startQuestionTimer, updateQuestionStatus, questionStatuses]);
+    }, [currentSectionIndex, currentQuestionIndex, loading, test, startQuestionTimer, updateQuestionStatus, questionStatuses, isFullScreenActive]);
+
 
     const handleOptionSelect = (optionIndex) => {
         setAnswers(prev => ({ ...prev, [currentSectionIndex]: { ...prev[currentSectionIndex], [currentQuestionIndex]: optionIndex } }));
@@ -314,7 +493,6 @@ const TestInterfacePage = ({ navigate, testId }) => {
         if (isLastQuestionOfTest) return; 
         else if (currentQuestionIndex < currentSection.questions.length - 1) {
             setCurrentQuestionIndex(prev => prev + 1);
-            startQuestionTimer();
         } else {
             handleSectionSubmit();
         }
@@ -338,7 +516,9 @@ const TestInterfacePage = ({ navigate, testId }) => {
 
     const handleBackToDashboardClick = useCallback(() => {
         exitingToDashboardRef.current = true;
-        if (document.fullscreenElement) document.exitFullscreen();
+        if (document.fullscreenElement) {
+            document.exitFullscreen();
+        }
         setIsExitConfirmOpen(true);
     }, []);
 
@@ -348,7 +528,6 @@ const TestInterfacePage = ({ navigate, testId }) => {
         handleFullscreen();
     }, [handleFullscreen]);
 
-    // **FIX**: Device restriction logic
     const isRestrictedType = test?.type === 'MOCK' || test?.type === 'SECTIONAL';
     if (isMobileDevice && isRestrictedType) {
         return (
@@ -379,8 +558,9 @@ const TestInterfacePage = ({ navigate, testId }) => {
 
     return (
         <div ref={testContainerRef} className="bg-gray-200 h-screen flex flex-col text-gray-800 font-sans">
+            {showOfflineModal && <OfflineModal />}
             <ConfirmModal isOpen={isConfirmOpen} setIsOpen={(val) => { setIsConfirmOpen(val); if (!val && submittingTestRef.current) { submittingTestRef.current = false; handleFullscreen(); } }} onConfirm={submitTest} title="Submit Test?">Are you sure you want to end the test? This action is final.</ConfirmModal>
-            <ConfirmModal isOpen={isExitConfirmOpen} setIsOpen={(val) => { setIsExitConfirmOpen(val); if (!val) { exitingToDashboardRef.current = false; handleFullscreen(); } }} onConfirm={saveProgressAndExit} title="Exit Test?">You are attempting to exit the test. Your progress will be saved. Do you wish to continue?</ConfirmModal>
+            <ConfirmModal isOpen={isExitConfirmOpen} setIsOpen={(val) => { setIsExitConfirmOpen(val); if (!val && !navigateOnExitRef.current) { exitingToDashboardRef.current = false; handleFullscreen(); } }} onConfirm={saveProgressAndExit} title="Exit Test?">You are attempting to exit the test. Your progress will be saved. Do you wish to continue?</ConfirmModal>
             <ConfirmModal isOpen={isResumeConfirmOpen} setIsOpen={(val) => { setIsResumeConfirmOpen(val); if (!val && !isResumeConfirmedRef.current) navigate('home'); isResumeConfirmedRef.current = false; }} onConfirm={handleConfirmResume} title="Resume Test" confirmText="OK">Resuming previous test progress!</ConfirmModal>
             {isCalculatorOpen && <Calculator setIsCalculatorOpen={setIsCalculatorOpen} />}
             {sectionTransitionMessage && <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50"><div className="bg-white p-6 rounded-lg shadow-xl text-center text-lg font-semibold animate-bounce">{sectionTransitionMessage}</div></div>}
@@ -393,7 +573,6 @@ const TestInterfacePage = ({ navigate, testId }) => {
                     <div className="bg-gray-100 border-b border-t border-gray-300 flex-shrink-0 h-12"><div className="max-w-full mx-auto px-4 flex justify-between items-center h-full"><div className="flex overflow-x-auto"><div className="flex">{test.sections.map((section, index) => (<button key={section.name} disabled={true} className={`py-2 px-4 text-sm whitespace-nowrap ${index === currentSectionIndex ? 'bg-white border-b-2 border-blue-600 text-blue-600 font-semibold' : 'text-gray-500 bg-gray-200'}`}>{section.name}</button>))}</div></div><div className="text-right flex-shrink-0 ml-4"><div className="text-xs text-gray-500">Time Left</div><div className="text-lg md:text-xl font-bold text-black">{String(minutes).padStart(2, '0')}:{String(seconds).padStart(2, '0')}</div></div></div></div>
 
                     <div className="flex-1 overflow-hidden flex flex-col md:flex-row max-w-full p-2 md:p-4 gap-4">
-                        {/* **FIX**: Passage Panel is now removed from the DOM if not needed, allowing the Question panel to expand. */}
                         {showPassagePanel && (
                             <div className={`flex-1 bg-white shadow-md rounded-lg p-4 flex-col overflow-y-auto relative min-h-0 ${mobileView === 'passage' ? 'flex' : 'hidden'} md:flex`}>
                                 <div className="absolute inset-0 z-0" style={watermarkStyle}></div>
