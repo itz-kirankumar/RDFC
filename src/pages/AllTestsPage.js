@@ -1,8 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { collection, query, where, onSnapshot, doc, updateDoc } from 'firebase/firestore';
 import { db } from '../firebase/config';
-import { FaEye, FaLock, FaPlay, FaCheckCircle, FaBookOpen, FaHourglassHalf } from 'react-icons/fa';
+import { FaEye, FaLock, FaPlay, FaCheckCircle, FaBookOpen, FaHourglassHalf, FaArrowLeft } from 'react-icons/fa';
+
+// --- HELPER COMPONENTS ---
 
 const CountdownTimer = ({ targetDate, onComplete }) => {
     const calculateTimeLeft = () => {
@@ -10,89 +12,113 @@ const CountdownTimer = ({ targetDate, onComplete }) => {
         let timeLeft = {};
         if (difference > 0) {
             timeLeft = {
-                Days: Math.floor(difference / (1000 * 60 * 60 * 24)),
-                Hours: Math.floor((difference / (1000 * 60 * 60)) % 24),
-                Minutes: Math.floor((difference / 1000 / 60) % 60),
-                Seconds: Math.floor((difference / 1000) % 60)
+                D: Math.floor(difference / (1000 * 60 * 60 * 24)),
+                H: Math.floor((difference / (1000 * 60 * 60)) % 24),
+                M: Math.floor((difference / 1000 / 60) % 60),
+                S: Math.floor((difference / 1000) % 60)
             };
         }
         return timeLeft;
     };
-
     const [timeLeft, setTimeLeft] = useState(calculateTimeLeft());
-
     useEffect(() => {
         const timer = setTimeout(() => {
             const newTimeLeft = calculateTimeLeft();
             setTimeLeft(newTimeLeft);
-            if (!Object.keys(newTimeLeft).length) {
-                onComplete();
-            }
+            if (!Object.keys(newTimeLeft).length) onComplete();
         }, 1000);
         return () => clearTimeout(timer);
     });
-
     const timerComponents = Object.entries(timeLeft).map(([interval, value]) => (
-        <span key={interval} className="text-center p-1">
-            <span className="font-mono text-base sm:text-lg font-semibold">{String(value).padStart(2, '0')}</span>
-            <span className="text-xs uppercase block opacity-70">{interval}</span>
-        </span>
+        <div key={interval} className="flex flex-col items-center mx-1">
+            <span className="font-mono text-lg font-bold">{String(value).padStart(2, '0')}</span>
+            <span className="text-xs opacity-70">{interval}</span>
+        </div>
     ));
-
     return (
-        <div className="flex justify-around items-center text-white w-full h-full bg-gray-700/50 rounded-md">
-            {timerComponents.length ? timerComponents : <span>Loading...</span>}
+        <div className="flex justify-center items-center text-white w-full h-full bg-cyan-800/50 rounded-md p-2">
+            {timerComponents.length ? timerComponents : <span className="font-semibold text-sm">Loading...</span>}
         </div>
     );
 };
 
+const ActionButton = ({ icon, text, onClick, className, disabled = false }) => (
+    <button onClick={onClick} disabled={disabled} className={`w-full text-sm font-semibold px-3 py-3 rounded-md transition-all duration-300 flex items-center justify-center space-x-2 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 ${className} ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}>
+        {icon}
+        <span>{text}</span>
+    </button>
+);
 
-const AllTestsPage = ({ navigate, tests, title, contentType }) => {
+
+// --- MAIN PAGE COMPONENT ---
+
+const AllTestsPage = ({ navigate, tests: initialTests = [], title, contentType }) => {
     const { userData } = useAuth();
     const [userAttempts, setUserAttempts] = useState({});
     const [userStatus, setUserStatus] = useState(null);
     const [filterType, setFilterType] = useState('All');
     const [liveTests, setLiveTests] = useState({});
+    const [visibleCount, setVisibleCount] = useState(10); // State to track visible items
 
     useEffect(() => {
-        if (!userData?.uid) {
-            setUserStatus(null);
-            return;
-        }
-        const userDocRef = doc(db, 'users', userData.uid);
-        const unsubscribe = onSnapshot(userDocRef, (docSnap) => {
+        if (!userData?.uid) return;
+        const unsub = onSnapshot(doc(db, 'users', userData.uid), (docSnap) => {
             setUserStatus(docSnap.exists() ? docSnap.data() : null);
         });
-        return () => unsubscribe();
+        return unsub;
     }, [userData?.uid]);
 
     useEffect(() => {
-        if (!userData?.uid) {
-            setUserAttempts({});
-            return;
-        }
-        const attemptsQuery = query(collection(db, "attempts"), where("userId", "==", userData.uid));
-        const unsubscribe = onSnapshot(attemptsQuery, (querySnapshot) => {
-            const attemptsMap = {};
-            querySnapshot.forEach((doc) => {
-                const attemptData = doc.data();
-                attemptsMap[attemptData.testId] = { id: doc.id, status: attemptData.status };
-            });
+        if (!userData?.uid) return;
+        const q = query(collection(db, "attempts"), where("userId", "==", userData.uid));
+        const unsub = onSnapshot(q, (snapshot) => {
+            const attemptsMap = snapshot.docs.reduce((acc, doc) => {
+                const data = doc.data();
+                acc[data.testId] = { id: doc.id, status: data.status };
+                return acc;
+            }, {});
             setUserAttempts(attemptsMap);
         });
-        return () => unsubscribe();
+        return unsub;
     }, [userData?.uid]);
+    
+    // Check for live tests
+    useEffect(() => {
+        const checkLiveStatus = () => {
+            const now = new Date().getTime();
+            const newLiveTests = {};
+            initialTests.forEach(test => {
+                if (test.liveAt?.toDate().getTime() <= now) {
+                    newLiveTests[test.id] = true;
+                }
+            });
+            setLiveTests(newLiveTests);
+        };
+        const interval = setInterval(checkLiveStatus, 1000 * 60); // Check every minute
+        checkLiveStatus();
+        return () => clearInterval(interval);
+    }, [initialTests]);
+
+    const sortedAndFilteredTests = useMemo(() => {
+        const sorted = [...initialTests].sort((a, b) => {
+            if (a.isFree !== b.isFree) return a.isFree ? -1 : 1;
+            return (b.createdAt?.toDate() || 0) - (a.createdAt?.toDate() || 0);
+        });
+
+        if (contentType === 'rdfc' || filterType === 'All') {
+            return sorted;
+        }
+        return sorted.filter(test => test.type.toUpperCase() === filterType.toUpperCase());
+    }, [initialTests, filterType, contentType]);
+
 
     const getIsLocked = (test, itemType) => {
         if (test.isFree) return false;
         if (!userStatus?.isSubscribed) return true;
-    
         const access = userStatus.accessControl;
         if (!access) return true;
-    
         if (itemType === 'rdfc_article') return !access.rdfc_articles;
         if (itemType === 'rdfc_test') return !access.rdfc_tests;
-    
         switch (test.type?.toUpperCase()) {
             case 'MOCK': return !access.mock;
             case 'SECTIONAL': return !access.sectional;
@@ -104,330 +130,206 @@ const AllTestsPage = ({ navigate, tests, title, contentType }) => {
     const handleViewArticle = async (articleUrl, testId) => {
         if (!userData?.uid) return;
         try {
-            const userRef = doc(db, 'users', userData.uid);
-            await updateDoc(userRef, { [`readArticles.${testId}`]: true });
+            await updateDoc(doc(db, 'users', userData.uid), { [`readArticles.${testId}`]: true });
             navigate('rdfcArticleViewer', { articleUrl, testId });
         } catch (error) {
             console.error("Error marking article as read:", error);
         }
     };
     
-    const renderRDFCDesktopRow = (test) => {
-        const article = test.article;
+    const renderCellContent = (test, type) => {
         const isScheduled = test.liveAt && test.liveAt.toDate() > new Date() && !liveTests[test.id];
+        if (isScheduled) return <div className="w-full h-10 flex items-center justify-center"><CountdownTimer targetDate={test.liveAt.toDate()} onComplete={() => setLiveTests(prev => ({ ...prev, [test.id]: true }))} /></div>;
 
-        const renderCellContent = (type) => {
-            if (isScheduled) {
-                return <div className="w-full h-10 flex items-center justify-center"><CountdownTimer targetDate={test.liveAt.toDate()} onComplete={() => setLiveTests(prev => ({...prev, [test.id]: true}))} /></div>;
-            }
-            const isLocked = getIsLocked(test, `rdfc_${type}`);
-            const isArticleRead = userStatus?.readArticles?.[test.id];
+        const isLocked = getIsLocked(test, type);
+        let props;
 
-            let text, action, className, disabled = !article, icon;
-            if(isLocked) {
-                text = "Unlock";
-                action = () => navigate('subscription');
-                className = "bg-amber-500 hover:bg-amber-400 text-gray-900";
-                icon = <FaLock />;
-            } else if(type === 'article') {
-                if(isArticleRead) {
-                    text = "Article Read";
-                    action = () => navigate('rdfcArticleViewer', { articleUrl: article.url, testId: test.id });
-                    className = "bg-gray-600 hover:bg-gray-700 text-gray-300";
-                    icon = <FaCheckCircle />;
-                } else {
-                    text = "View Article";
-                    action = () => handleViewArticle(article.url, test.id);
-                    className = "bg-blue-600 hover:bg-blue-700 text-white";
-                    icon = <FaBookOpen />;
-                }
-            } else { // type === 'test'
+        if (isLocked) {
+            props = { icon: <FaLock />, text: "Unlock", onClick: () => navigate('subscription'), className: "bg-amber-500 text-gray-900 hover:bg-amber-400" };
+        } else {
+             if (type === 'rdfc_article') {
+                const isArticleRead = userStatus?.readArticles?.[test.id];
+                props = isArticleRead 
+                    ? { icon: <FaCheckCircle />, text: "Read", onClick: () => navigate('rdfcArticleViewer', { articleUrl: test.article.url, testId: test.id }), className: "bg-gray-600 text-gray-300 hover:bg-gray-500" }
+                    : { icon: <FaBookOpen />, text: "View Article", onClick: () => handleViewArticle(test.article.url, test.id), className: "bg-sky-600 text-white hover:bg-sky-500" };
+            } else { // test button
                 const attempt = userAttempts[test.id];
-                if (attempt?.status === 'completed') {
-                    text = "View Analysis";
-                    action = () => navigate('results', { attemptId: attempt.id });
-                    className = "bg-green-600 hover:bg-green-700 text-white";
-                    icon = <FaEye />;
-                } else if (attempt?.status === 'in-progress') {
-                    text = "Continue Test";
-                    action = () => navigate('test', { testId: test.id });
-                    className = "bg-orange-500 hover:bg-orange-600 text-white";
-                    icon = <FaPlay />;
-                } else {
-                    text = "Start Test";
-                    action = () => navigate('test', { testId: test.id });
-                    className = "bg-blue-600 hover:bg-blue-700 text-white";
-                    icon = <FaPlay />;
-                }
+                if (attempt?.status === 'completed') props = { icon: <FaEye />, text: "Analysis", onClick: () => navigate('results', { attemptId: attempt.id }), className: "bg-green-600 text-white hover:bg-green-500" };
+                else if (attempt?.status === 'in-progress') props = { icon: <FaPlay />, text: "Continue", onClick: () => navigate('test', { testId: test.id }), className: "bg-orange-500 text-white hover:bg-orange-400" };
+                else props = { icon: <FaPlay />, text: "Start Test", onClick: () => navigate('test', { testId: test.id }), className: "bg-blue-600 text-white hover:bg-blue-500" };
             }
-            return <button onClick={action} disabled={disabled} className={`text-xs px-3 py-1 rounded-full w-40 h-10 flex items-center justify-center space-x-2 ${className} ${isLocked ? 'opacity-60' : ''}`}>{icon} <span>{text}</span></button>;
-        };
+        }
+        return <button onClick={props.onClick} disabled={contentType === 'rdfc' && !test.article} className={`text-xs px-3 py-1 rounded-full w-36 h-9 flex items-center justify-center space-x-2 font-semibold ${props.className}`}>{props.icon} <span>{props.text}</span></button>;
+    };
 
+    const renderRDFCDesktopRow = (test) => {
+        const { article } = test;
         return (
             <tr key={test.id} className="hover:bg-gray-700/50">
-                <td className="px-6 py-4 text-sm font-medium text-white">
-                    <div className="flex items-center">
-                        <span>{test.title}</span>
-                        {isScheduled && <span className="ml-2 flex-shrink-0 text-xs font-semibold rounded-full bg-cyan-700 text-cyan-200 px-2 py-1">Coming Soon</span>}
-                    </div>
-                </td>
-                <td className="px-6 py-4 text-sm text-gray-400">{article ? article.name : 'N/A'}</td>
-                <td className="px-6 py-4 text-sm text-gray-400 max-w-xs truncate">{article ? article.description : 'N/A'}</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm">{renderCellContent('article')}</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm">{renderCellContent('test')}</td>
-            </tr>
-        );
-    };
-    
-    const renderRDFCMobileCard = (test) => {
-        const article = test.article;
-        const isScheduled = test.liveAt && test.liveAt.toDate() > new Date() && !liveTests[test.id];
-
-        const getButtonState = (type) => {
-            const itemType = `rdfc_${type}`;
-            const isLocked = getIsLocked(test, itemType);
-            const isArticleRead = userStatus?.readArticles?.[test.id];
-
-            let text, action, className, disabled = false, icon;
-            if (isLocked) {
-                text = "Unlock";
-                action = () => navigate('subscription');
-                className = "bg-amber-500 hover:bg-amber-400 text-gray-900";
-                icon = <FaLock />;
-            } else if (type === 'article') {
-                if (isArticleRead) {
-                    text = "Article Read";
-                    action = () => navigate('rdfcArticleViewer', { articleUrl: article.url, testId: test.id });
-                    className = "bg-gray-600 hover:bg-gray-700 text-gray-300";
-                    icon = <FaCheckCircle />;
-                } else {
-                    text = "View Article";
-                    action = () => handleViewArticle(article.url, test.id);
-                    className = "bg-blue-600 hover:bg-blue-700 text-white";
-                    icon = <FaBookOpen />;
-                }
-            } else { // type === 'test'
-                const attempt = userAttempts[test.id];
-                if (attempt?.status === 'completed') {
-                    text = "View Analysis";
-                    action = () => navigate('results', { attemptId: attempt.id });
-                    className = "bg-green-600 hover:bg-green-700 text-white";
-                    icon = <FaEye />;
-                } else if (attempt?.status === 'in-progress') {
-                    text = "Continue Test";
-                    action = () => navigate('test', { testId: test.id });
-                    className = "bg-orange-500 hover:bg-orange-600 text-white";
-                    icon = <FaPlay />;
-                } else {
-                    text = "Start Test";
-                    action = () => navigate('test', { testId: test.id });
-                    className = "bg-blue-600 hover:bg-blue-700 text-white";
-                    icon = <FaPlay />;
-                }
-            }
-            return { text, action, className, disabled, icon };
-        };
-
-        const renderButtons = () => {
-            const articleButton = getButtonState('article');
-            const testButton = getButtonState('test');
-            return (
-                <div className="flex space-x-2 mt-4">
-                    <button onClick={articleButton.action} disabled={articleButton.disabled || !article} className={`flex-1 text-sm font-semibold px-3 py-2 rounded-md transition-colors flex items-center justify-center space-x-2 ${getIsLocked(test, 'rdfc_article') ? 'opacity-60' : ''} ${articleButton.className}`}>{articleButton.icon} <span>{articleButton.text}</span></button>
-                    <button onClick={testButton.action} disabled={testButton.disabled || !article} className={`flex-1 text-sm font-semibold px-3 py-2 rounded-md transition-colors flex items-center justify-center space-x-2 ${getIsLocked(test, 'rdfc_test') ? 'opacity-60' : ''} ${testButton.className}`}>{testButton.icon} <span>{testButton.text}</span></button>
-                </div>
-            );
-        };
-        
-        return (
-            <div key={test.id} className="bg-gray-800 rounded-lg p-4 mb-4 border-l-4 border-purple-500">
-                <h4 className="text-lg font-semibold text-white">{test.title} {isScheduled && <span className="ml-2 text-xs font-semibold rounded-full bg-cyan-700 text-cyan-200 px-2 py-1">Coming Soon</span>}</h4>
-                <p className="text-sm text-gray-400 mt-1 mb-2">{article ? article.name : 'N/A'}</p>
-                <p className="text-xs text-gray-500 mb-4 h-8 overflow-hidden">{article ? article.description : 'N/A'}</p>
-                {isScheduled 
-                    ? <div className="mt-2"><CountdownTimer targetDate={test.liveAt.toDate()} onComplete={() => setLiveTests(prev => ({...prev, [test.id]: true}))} /></div>
-                    : renderButtons()
-                }
-            </div>
-        );
-    };
-
-    const renderAddOnTestRow = (test) => {
-        const isScheduled = test.liveAt && test.liveAt.toDate() > new Date() && !liveTests[test.id];
-
-        const renderCellContent = () => {
-            if (isScheduled) {
-                return <div className="w-full h-10 flex items-center justify-center"><CountdownTimer targetDate={test.liveAt.toDate()} onComplete={() => setLiveTests(prev => ({...prev, [test.id]: true}))} /></div>;
-            }
-            const isLocked = getIsLocked(test, 'test');
-            let text, action, className, icon;
-            if (isLocked) {
-                text = "Unlock";
-                action = () => navigate('subscription');
-                className = "bg-amber-500 hover:bg-amber-400 text-gray-900";
-                icon = <FaLock />;
-            } else {
-                const attempt = userAttempts[test.id];
-                if (attempt?.status === 'completed') {
-                    text = "View Analysis";
-                    action = () => navigate('results', { attemptId: attempt.id });
-                    className = "bg-green-600 hover:bg-green-700 text-white";
-                    icon = <FaEye />;
-                } else if (attempt?.status === 'in-progress') {
-                    text = "Continue Test";
-                    action = () => navigate('test', { testId: test.id });
-                    className = "bg-orange-500 hover:bg-orange-600 text-white";
-                    icon = <FaPlay />;
-                } else {
-                    text = "Start Test";
-                    action = () => navigate('test', { testId: test.id });
-                    className = "bg-blue-600 hover:bg-blue-700 text-white";
-                    icon = <FaPlay />;
-                }
-            }
-            return <button onClick={action} className={`px-4 py-2 rounded-md font-semibold transition-colors flex items-center justify-center space-x-2 ${className}`}>{icon} <span>{text}</span></button>;
-        };
-        
-        return (
-            <tr key={test.id} className={`hover:bg-gray-700/50 ${getIsLocked(test, 'test') && !isScheduled ? 'opacity-60' : ''}`}>
-                <td className="px-6 py-4 text-sm font-medium text-white">
-                    <div className="flex items-center">
-                        <span>{test.title}</span>
-                        {isScheduled && <span className="ml-2 flex-shrink-0 text-xs font-semibold rounded-full bg-cyan-700 text-cyan-200 px-2 py-1">Coming Soon</span>}
-                    </div>
-                </td>
-                <td className="px-6 py-4 text-sm text-gray-400">{test.type}</td>
-                <td className="px-6 py-4 text-sm text-gray-400">{test.description}</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm">{renderCellContent()}</td>
+                <td className="px-6 py-4 text-sm"><div className="flex items-center"><span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-500 font-semibold">{test.title}</span>{test.isFree && <span className="ml-2 text-xs font-semibold rounded-full bg-green-700 text-green-200 px-2 py-1">Free</span>}</div></td>
+                <td className="px-6 py-4 text-sm text-gray-300">{article?.name || 'N/A'}</td>
+                <td className="px-6 py-4 text-sm text-gray-400 max-w-xs truncate">{article?.description || 'N/A'}</td>
+                <td className="px-6 py-4 text-sm">{renderCellContent(test, 'rdfc_article')}</td>
+                <td className="px-6 py-4 text-sm">{renderCellContent(test, 'rdfc_test')}</td>
             </tr>
         );
     };
 
-    const renderAddOnMobileCard = (test) => {
-        const isScheduled = test.liveAt && test.liveAt.toDate() > new Date() && !liveTests[test.id];
-        const isLocked = getIsLocked(test, 'test');
-
-        const renderButton = () => {
-             let text, action, className, icon;
-             if (isLocked) {
-                 text = "Unlock";
-                 action = () => navigate('subscription');
-                 className = "bg-amber-500 hover:bg-amber-400 text-gray-900";
-                 icon = <FaLock />;
-             } else {
-                 const attempt = userAttempts[test.id];
-                 if (attempt?.status === 'completed') {
-                     text = "View Analysis";
-                     action = () => navigate('results', { attemptId: attempt.id });
-                     className = "bg-green-600 hover:bg-green-700 text-white";
-                     icon = <FaEye />;
-                 } else if (attempt?.status === 'in-progress') {
-                     text = "Continue Test";
-                     action = () => navigate('test', { testId: test.id });
-                     className = "bg-orange-500 hover:bg-orange-600 text-white";
-                     icon = <FaPlay />;
-                 } else {
-                     text = "Start Test";
-                     action = () => navigate('test', { testId: test.id });
-                     className = "bg-blue-600 hover:bg-blue-700 text-white";
-                     icon = <FaPlay />;
-                 }
-             }
-             return <button onClick={action} className={`w-full text-sm font-semibold px-3 py-3 rounded-md transition-colors flex items-center justify-center space-x-2 ${className}`}>{icon} <span>{text}</span></button>;
-        };
-
+    const renderRdfcMobileRow = (test) => {
+        const { article } = test;
+        const isArticleLocked = getIsLocked(test, 'rdfc_article');
+        const isTestLocked = getIsLocked(test, 'rdfc_test');
+        
         return (
-            <div key={test.id} className={`bg-gray-800 rounded-lg p-4 mb-4 border-l-4 ${isLocked ? 'border-amber-500' : 'border-blue-500'} ${isLocked && !isScheduled ? 'opacity-60' : ''}`}>
-                <div className="flex justify-between items-start">
-                    <h4 className="text-lg font-semibold text-white">{test.title}</h4>
-                    <span className={`flex-shrink-0 ml-2 inline-block px-2 py-1 text-xs font-semibold rounded-full ${test.type === 'MOCK' ? 'bg-purple-700 text-purple-200' : test.type === 'SECTIONAL' ? 'bg-teal-700 text-teal-200' : 'bg-gray-600 text-gray-400'}`}>{test.type}</span>
-                </div>
-                {isScheduled && <span className="mt-2 inline-block text-xs font-semibold rounded-full bg-cyan-700 text-cyan-200 px-2 py-1">Coming Soon</span>}
-                <p className="text-sm text-gray-400 mt-2 mb-4">{test.description}</p>
-                {isScheduled
-                    ? <div className="mt-2"><CountdownTimer targetDate={test.liveAt.toDate()} onComplete={() => setLiveTests(prev => ({...prev, [test.id]: true}))} /></div>
-                    : renderButton()
-                }
-            </div>
+            <tr key={test.id} className="hover:bg-gray-700/50">
+                <td className="px-4 py-3 text-sm">
+                    <div className="flex flex-col items-start space-y-1">
+                        <span className="text-sm font-semibold text-white">{test.title}</span>
+                        <span className="text-xs text-gray-400">{article?.name || 'N/A'}</span>
+                        {test.isFree && <span className="text-xs font-semibold rounded-full bg-green-700 text-green-200 px-2 py-1">Free</span>}
+                    </div>
+                </td>
+                <td className="px-4 py-3 text-sm flex flex-col space-y-2">
+                    {renderCellContent(test, 'rdfc_article')}
+                    {renderCellContent(test, 'rdfc_test')}
+                </td>
+            </tr>
         );
     };
-
-    if (!userStatus) return <div className="text-center text-gray-400 p-8">Loading...</div>;
-
-    const sortedTests = [...tests].sort((a, b) => {
-        if (a.isFree && !b.isFree) return -1;
-        if (!a.isFree && b.isFree) return 1;
-        return (b.createdAt?.toDate() || 0) - (a.createdAt?.toDate() || 0);
-    });
     
-    const filteredTests = filterType === 'All' || contentType !== 'test' 
-        ? sortedTests 
-        : sortedTests.filter(test => test.type.toUpperCase() === filterType.toUpperCase());
+    const renderAddOnDesktopRow = (test) => {
+        const typeColors = { MOCK: 'bg-purple-700 text-purple-200', SECTIONAL: 'bg-teal-700 text-teal-200', TEST: 'bg-gray-600 text-gray-300' };
+        return (
+            <tr key={test.id} className="hover:bg-gray-700/50">
+                <td className="px-6 py-4 text-sm"><div className="flex items-center"><span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500 font-semibold">{test.title}</span>{test.isFree && <span className="ml-2 text-xs font-semibold rounded-full bg-green-700 text-green-200 px-2 py-1">Free</span>}</div></td>
+                <td className="px-6 py-4 text-sm text-gray-400"><span className={`inline-block px-2 py-1 text-xs font-semibold rounded-full ${typeColors[test.type.toUpperCase()] || typeColors.TEST}`}>{test.type}</span></td>
+                <td className="px-6 py-4 text-sm text-gray-400 max-w-xs truncate">{test.description}</td>
+                <td className="px-6 py-4 text-sm">{renderCellContent(test, test.type)}</td>
+            </tr>
+        );
+    };
     
-    const isPaidContentPresent = tests.some(test => !test.isFree);
+    const renderAddOnMobileRow = (test) => {
+        const typeColors = { MOCK: 'bg-purple-700 text-purple-200', SECTIONAL: 'bg-teal-700 text-teal-200', TEST: 'bg-gray-600 text-gray-300' };
+        return (
+            <tr key={test.id} className="hover:bg-gray-700/50">
+                <td className="px-4 py-3 text-sm">
+                    <div className="flex flex-col items-start space-y-1">
+                        <span className="text-sm font-semibold text-white">{test.title}</span>
+                        <span className={`px-2 py-1 text-xs font-semibold rounded-full ${typeColors[test.type.toUpperCase()] || typeColors.TEST}`}>{test.type}</span>
+                        {test.isFree && <span className="text-xs font-semibold rounded-full bg-green-700 text-green-200 px-2 py-1">Free</span>}
+                    </div>
+                </td>
+                <td className="px-4 py-3 text-sm">
+                    {renderCellContent(test, test.type)}
+                </td>
+            </tr>
+        );
+    };
+    
+    if (!userStatus) return <div className="text-center text-gray-400 p-8">Loading User Data...</div>;
+    
+    const isPaidContentPresent = initialTests.some(test => !test.isFree);
     const showUnlockBanner = !userStatus.isSubscribed && isPaidContentPresent;
     
+    const renderDesktopTable = (headers, renderRow) => (
+        <div className="bg-gray-800 shadow-md rounded-lg overflow-hidden border border-gray-700">
+            <table className="min-w-full divide-y divide-gray-700">
+                <thead className="bg-gray-700/50">
+                    <tr>
+                        {headers.map(h => <th key={h} className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">{h}</th>)}
+                    </tr>
+                </thead>
+                <tbody className="bg-gray-800 divide-y divide-gray-700">
+                    {sortedAndFilteredTests.slice(0, visibleCount).map(test => renderRow(test))}
+                </tbody>
+            </table>
+            {sortedAndFilteredTests.length > visibleCount && (
+                <div className="p-4 bg-gray-800 text-center">
+                    <button onClick={() => setVisibleCount(prev => prev + 10)} className="text-sm font-semibold text-blue-400 hover:text-blue-300">
+                        Load more...
+                    </button>
+                </div>
+            )}
+        </div>
+    );
+    
+    const renderMobileTable = (headers, renderRow) => (
+        <div className="bg-gray-800 shadow-md rounded-lg overflow-hidden border border-gray-700">
+             <table className="min-w-full divide-y divide-gray-700">
+                <thead className="bg-gray-700/50">
+                    <tr>
+                        {headers.map(h => <th key={h} className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">{h}</th>)}
+                    </tr>
+                </thead>
+                <tbody className="bg-gray-800 divide-y divide-gray-700">
+                    {sortedAndFilteredTests.slice(0, visibleCount).map(test => renderRow(test))}
+                </tbody>
+            </table>
+            {sortedAndFilteredTests.length > visibleCount && (
+                <div className="p-4 bg-gray-800 text-center">
+                    <button onClick={() => setVisibleCount(prev => prev + 10)} className="text-sm font-semibold text-blue-400 hover:text-blue-300">
+                        Load more...
+                    </button>
+                </div>
+            )}
+        </div>
+    );
+
     return (
-        <div className="max-w-7xl mx-auto px-4">
+        <div className="max-w-7xl mx-auto px-4 py-8">
             <div className="flex justify-between items-center mb-6">
-                <h1 className="text-2xl md:text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-teal-300 to-blue-400">{title}</h1>
-                <button onClick={() => navigate('home')} className="bg-gray-800 text-white px-4 md:px-6 py-2 rounded-md font-semibold hover:bg-gray-700 shadow transition-all">&larr; Back to Dashboard</button>
+                <h1 className="text-2xl md:text-3xl font-bold text-white">{title}</h1>
+                <button onClick={() => navigate('home')} className="bg-gray-700 text-white px-4 py-2 rounded-md font-semibold hover:bg-gray-600 transition-all flex items-center space-x-2"><FaArrowLeft /><span>Dashboard</span></button>
             </div>
             
             {showUnlockBanner && (
-                <div className="mb-8 p-6 rounded-lg shadow-lg bg-gradient-to-r from-amber-400 to-yellow-500 text-center">
-                    <p className="text-xl font-bold text-gray-900 mb-4">Unlock Your Full Potential!</p>
-                    <p className="text-gray-800 mb-4">Subscribe now to get access to all premium tests and articles.</p>
-                    <button onClick={() => navigate('subscription')} className="bg-white text-gray-900 px-8 py-3 rounded-md font-bold hover:bg-gray-200 transition-transform transform hover:scale-105">Subscribe Now</button>
+                <div className="mb-8 p-5 rounded-lg bg-gradient-to-r from-amber-500 to-yellow-600 text-center flex flex-col sm:flex-row items-center justify-center sm:justify-between shadow-lg">
+                    <p className="text-lg font-bold text-white mb-2 sm:mb-0">Unlock Your Full Potential! Access all premium content now.</p>
+                    <button onClick={() => navigate('subscription')} className="bg-white text-amber-700 px-6 py-2 rounded-md font-bold hover:bg-gray-200 transition-transform transform hover:scale-105">Subscribe Now</button>
                 </div>
             )}
             
-            {contentType === 'rdfc' ? (
-                <>
-                    <div className="hidden md:block bg-gray-800 shadow-md rounded-lg overflow-hidden border border-gray-700">
-                        <table className="min-w-full divide-y divide-gray-700">
-                           <thead className="bg-gray-700/50"><tr><th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Test Title</th><th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Article Name</th><th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Article Description</th><th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Article Link</th><th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Test Link</th></tr></thead>
-                            <tbody className="bg-gray-800 divide-y divide-gray-700">
-                                {tests.map(test => renderRDFCDesktopRow(test))}
-                            </tbody>
-                        </table>
-                    </div>
-                    <div className="md:hidden">
-                        {tests.map(test => renderRDFCMobileCard(test))}
-                    </div>
-                </>
-            ) : (
-                <>
-                    {['mock', 'sectional', 'test'].includes(contentType) && (
-                        <div className="flex space-x-2 mb-4 overflow-x-auto pb-2">
-                            {['All', 'Mock', 'Sectional', 'Test'].map(type => {
-                                const isVisible = contentType === 'test' ? ['All', 'Test'].includes(type) : true;
-                                if (!isVisible) return null;
-                                return (
-                                    <button 
-                                        key={type} 
-                                        onClick={() => setFilterType(type)} 
-                                        className={`flex-shrink-0 px-4 py-2 rounded-md font-semibold text-sm transition-colors ${filterType.toUpperCase() === type.toUpperCase() ? 'bg-blue-600 text-white' : 'bg-gray-800 text-gray-300 hover:bg-gray-700'}`}
-                                    >
-                                        {type}
-                                    </button>
-                                );
-                            })}
-                        </div>
-                    )}
-                    <div className="hidden md:block bg-gray-800 shadow-md rounded-lg overflow-hidden border border-gray-700">
-                        <table className="min-w-full divide-y divide-gray-700">
-                           <thead className="bg-gray-700/50"><tr><th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Test Title</th><th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Test Type</th><th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Test Description</th><th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Action</th></tr></thead>
-                            <tbody className="bg-gray-800 divide-y divide-gray-700">
-                                {filteredTests.map(test => renderAddOnTestRow(test))}
-                            </tbody>
-                        </table>
-                    </div>
-                     <div className="md:hidden">
-                        {filteredTests.map(test => renderAddOnMobileCard(test))}
-                    </div>
-                </>
+            {contentType !== 'rdfc' && (
+                <div className="flex space-x-2 mb-6 p-2 bg-gray-800/50 rounded-lg self-start">
+                    {['All', 'Mock', 'Sectional', 'Test'].filter(type => {
+                        if (type === 'All' && sortedAndFilteredTests.length > 0) return true;
+                        if (initialTests.some(t => t.type.toUpperCase() === type.toUpperCase())) return true;
+                        return false;
+                    }).map(type => (
+                        <button key={type} onClick={() => setFilterType(type)} className={`px-4 py-1.5 text-sm font-semibold rounded-full transition-colors ${filterType === type ? 'bg-blue-600 text-white' : 'text-gray-300 hover:bg-gray-700'}`}>
+                            {type}
+                        </button>
+                    ))}
+                </div>
             )}
+
+            {/* Desktop View */}
+            <div className="hidden md:block">
+                {sortedAndFilteredTests.length > 0 ? (
+                    contentType === 'rdfc'
+                    ? renderDesktopTable(['Title', 'Article Name', 'Article Description', 'Article Action', 'Test Action'], renderRDFCDesktopRow)
+                    : renderDesktopTable(['Title', 'Type', 'Description', 'Action'], renderAddOnDesktopRow)
+                ) : (
+                    <div className="text-center text-gray-500 p-12 bg-gray-800 rounded-lg">
+                        <p>No tests available in this category yet.</p>
+                    </div>
+                )}
+            </div>
+
+            {/* Mobile View */}
+            <div className="md:hidden">
+                {sortedAndFilteredTests.length > 0 ? (
+                    contentType === 'rdfc'
+                    ? renderMobileTable(['Details', 'Actions'], renderRdfcMobileRow)
+                    : renderMobileTable(['Details', 'Action'], renderAddOnMobileRow)
+                ) : (
+                    <div className="text-center text-gray-500 p-12 bg-gray-800 rounded-lg">
+                        <p>No tests available in this category yet.</p>
+                    </div>
+                )}
+            </div>
+
         </div>
     );
 };

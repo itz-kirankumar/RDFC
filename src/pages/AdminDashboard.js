@@ -1,4 +1,5 @@
 import React from 'react';
+import { FaTicketAlt } from 'react-icons/fa'; // Import an icon
 
 const AdminDashboard = ({ navigate }) => {
     return (
@@ -48,13 +49,24 @@ const AdminDashboard = ({ navigate }) => {
                     <p className="mt-2 text-gray-400">Approve and manage user-submitted testimonials.</p>
                 </button>
                 
-                {/* NEW VOCAB MANAGER BUTTON */}
                 <button 
                     onClick={() => navigate('manageVocab')} 
                     className="bg-indigo-800 p-6 rounded-lg shadow-md hover:shadow-xl hover:-translate-y-1 transition-all text-left ring-2 ring-indigo-500"
                 >
                     <h2 className="text-2xl font-bold text-white">Vocab Manager</h2>
                     <p className="mt-2 text-gray-300">Create and manage daily vocabulary wordlists for users.</p>
+                </button>
+
+                {/* NEW SUPPORT MANAGER BUTTON */}
+                <button 
+                    onClick={() => navigate('manageSupport')} 
+                    className="bg-cyan-800 p-6 rounded-lg shadow-md hover:shadow-xl hover:-translate-y-1 transition-all text-left ring-2 ring-cyan-500 flex flex-col justify-between"
+                >
+                    <div>
+                      <h2 className="text-2xl font-bold text-white">Support Center</h2>
+                      <p className="mt-2 text-gray-300">View and respond to user support tickets.</p>
+                    </div>
+                    <FaTicketAlt className="text-cyan-400 text-3xl self-end mt-4"/>
                 </button>
             </div>
         </div>

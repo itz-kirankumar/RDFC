@@ -20,7 +20,9 @@ import ReviewsPage from './pages/ReviewsPageTemp';
 import AdminReviewsManager from './pages/AdminReviewsManager';
 import AllTestimonialsPage from './pages/AllTestimonialsPage';
 import LegalPage from './pages/LegalPage';
-import AdminVocabManager from './pages/AdminVocabManager'; // New Import
+import AdminVocabManager from './pages/AdminVocabManager';
+import SupportPage from './pages/SupportPage';
+import AdminSupportManager from './pages/AdminSupportManager'; // New Import
 
 const MainRouter = () => {
     const { user, userData, loading } = useAuth();
@@ -51,6 +53,7 @@ const MainRouter = () => {
     let showNavbar = true;
 
     if (userData?.isAdmin) {
+        // Admin routes updated
         switch (currentPage) {
             case 'home': pageComponent = <AdminDashboard navigate={navigate} />; break;
             case 'manageTests': pageComponent = <AdminTestManager navigate={navigate} />; break;
@@ -62,7 +65,8 @@ const MainRouter = () => {
             case 'reviews': pageComponent = <ReviewsPage navigate={navigate} />; break;
             case 'manageReviews': pageComponent = <AdminReviewsManager navigate={navigate} />; break;
             case 'allTestimonials': pageComponent = <AllTestimonialsPage navigate={navigate} />; break;
-            case 'manageVocab': pageComponent = <AdminVocabManager navigate={navigate} />; break; // New Route
+            case 'manageVocab': pageComponent = <AdminVocabManager navigate={navigate} />; break; 
+            case 'manageSupport': pageComponent = <AdminSupportManager navigate={navigate} />; break; // New Route
             case 'legal': 
                 pageComponent = <LegalPage navigate={navigate} pageData={pageData} />; 
                 showNavbar = false;
@@ -70,6 +74,7 @@ const MainRouter = () => {
             default: pageComponent = <AdminDashboard navigate={navigate} />;
         }
     } else {
+        // User routes updated
         switch (currentPage) {
             case 'home': pageComponent = <UserDashboard navigate={navigate} />; break;
             case 'test': pageComponent = <TestInterfacePage navigate={navigate} {...pageData} />; break;
@@ -81,7 +86,8 @@ const MainRouter = () => {
             case 'rdfcArticleViewer': pageComponent = <RDFCArticleViewer navigate={navigate} {...pageData} />; break;
             case 'allTests': pageComponent = <AllTestsPage navigate={navigate} {...pageData} />; break;
             case 'reviews': pageComponent = <ReviewsPage navigate={navigate} />; break;
-            case 'allTestimonials': pageComponent = <AllTestimonialsPage navigate={navigate} />; break;
+            case 'allTestimonials': return <AllTestimonialsPage navigate={navigate} />;
+            case 'support': pageComponent = <SupportPage navigate={navigate} />; break;
             case 'legal': 
                 pageComponent = <LegalPage navigate={navigate} pageData={pageData} />; 
                 showNavbar = false;
