@@ -251,7 +251,7 @@ const LoginPage = ({ navigate }) => {
                 @keyframes shine { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
                 .animate-shine { background-size: 200% auto; animation: shine 5s linear infinite; }
                 .banner-container { width: 100%; overflow: hidden; white-space: nowrap; background-color: #1a202c; box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5); position: fixed; top: 0; left: 0; z-index: 1000; height: 40px; }
-                .banner-content-wrapper { display: inline-block; animation: slide 30s linear infinite; padding: 8px 0; min-width: 400%; height: 100%; display: flex; align-items: center; }
+                .banner-content-wrapper { display: inline-block; animation: slide 90s linear infinite; padding: 8px 0; min-width: 400%; height: 100%; display: flex; align-items: center; }
                 .banner-content-wrapper:hover { animation-play-state: paused; }
                 .banner-item { display: inline-flex; align-items: center; margin-right: 80px; text-shadow: 1px 1px 2px rgba(0,0,0,0.3); }
                 .transition-max-height { transition: max-height 0.5s ease-in-out; }
