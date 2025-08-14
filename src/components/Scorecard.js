@@ -26,7 +26,7 @@ const Scorecard = ({ test, sectionWiseResults, totalScore, totalAccuracy, totalT
                         label="Total Score"
                         textColor="text-amber-400"
                     />
-                     <PerformanceMetric 
+                    <PerformanceMetric 
                         icon={<FaBullseye />} 
                         value={`${totalAccuracy.toFixed(2)}%`} 
                         label="Accuracy"
@@ -77,7 +77,6 @@ const Scorecard = ({ test, sectionWiseResults, totalScore, totalAccuracy, totalT
                     </div>
                 </div>
                 
-                {/* UPDATED: This div now uses flexbox to perfectly center the button */}
                 <div className="mt-8 flex justify-center">
                     <button 
                         onClick={() => setView('analysis')} 
@@ -88,7 +87,6 @@ const Scorecard = ({ test, sectionWiseResults, totalScore, totalAccuracy, totalT
                     </button>
                 </div>
             </div>
-            {/* A simple animation class for the modal appearing */}
             <style jsx global>{`
                 @keyframes fade-in-up {
                     0% {

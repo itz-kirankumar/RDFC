@@ -77,9 +77,20 @@ const RDFCArticleViewer = ({ navigate, articleUrl, testId }) => {
         }
     };
 
-    const handleBack = () => {
+    const exitFullscreen = () => {
         if (document.exitFullscreen) {
-            document.exitFullscreen();
+            return document.exitFullscreen();
+        } else if (document.webkitExitFullscreen) {
+            return document.webkitExitFullscreen();
+        } else if (document.msExitFullscreen) {
+            return document.msExitFullscreen();
+        }
+        return Promise.reject('Fullscreen API not supported');
+    };
+
+    const handleBack = () => {
+        if (isFullScreen) {
+            exitFullscreen().catch(err => console.error('Error exiting fullscreen:', err));
         }
         navigate('home');
     };
