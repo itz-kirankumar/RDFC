@@ -75,7 +75,7 @@ const QuestionPaperModal = ({ isOpen, onClose, section }) => {
     );
 };
 
-// --- UPDATED Calculator Component to match the reference image ---
+// --- Calculator Component ---
 const Calculator = ({ setIsCalculatorOpen }) => {
     const [currentValue, setCurrentValue] = useState('0');
     const [previousValue, setPreviousValue] = useState(null);
@@ -364,10 +364,10 @@ const TestInterfacePage = ({ navigate, testId }) => {
     const [sectionTimers, setSectionTimers] = useState([]);
     const [answers, setAnswers] = useState({});
     const [questionStatuses, setQuestionStatuses] = useState({}); 
-    const [timeTaken, setTimeTaken] = useState({}); // Stores time spent per question
+    const [timeTaken, setTimeTaken] = useState({});
     const [isCalculatorOpen, setIsCalculatorOpen] = useState(false);
     const [isQuestionPaperOpen, setIsQuestionPaperOpen] = useState(false);
-    const [sectionTransitionMessage, setSectionTransitionMessage] = useState(''); 
+    const [sectionTransitionMessage, setSectionTransitionMessage] = useState('');
     const [showNavigatorPanel, setShowNavigatorPanel] = useState(true);
     const [attemptDocId, setAttemptDocId] = useState(null);
     const [mobileView, setMobileView] = useState('question');
@@ -378,9 +378,10 @@ const TestInterfacePage = ({ navigate, testId }) => {
     const [showOfflineModal, setShowOfflineModal] = useState(false);
     const lastSyncTimestamp = useRef(Date.now());
 
-    const [instructionStep, setInstructionStep] = useState(0); // 0: No instructions, 1: Page 1, 2: Page 2
+    const [instructionStep, setInstructionStep] = useState(0);
     const [termsAccepted, setTermsAccepted] = useState(false);
     const [isResuming, setIsResuming] = useState(false);
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
     const questionEnterTimestampRef = useRef(Date.now()); 
     
@@ -493,30 +494,44 @@ const TestInterfacePage = ({ navigate, testId }) => {
         }
     }, [isOnline, syncToFirestore]);
     
-    const handleSubmitClick = useCallback(() => {
-        recordTimeSpentOnCurrentQuestion();
-        submitTest();
-    }, [recordTimeSpentOnCurrentQuestion]);
-
-    const handleSectionSubmit = useCallback(() => {
-        recordTimeSpentOnCurrentQuestion();
-        if (!currentSection || !test) return;
-        if (currentSectionIndex < test.sections.length - 1) {
-            const nextSectionIndex = currentSectionIndex + 1;
-            setSectionTransitionMessage(`Submitting ${test.sections[currentSectionIndex].name} section... Loading next section: ${test.sections[nextSectionIndex].name}`);
-            setCurrentSectionIndex(nextSectionIndex);
-            setCurrentQuestionIndex(0); 
-            resetQuestionTimerForNewQuestion();
-            setTimeout(() => { setSectionTransitionMessage(''); }, 1500); 
-        } else {
-            handleSubmitClick();
-        }
-    }, [currentSectionIndex, test, recordTimeSpentOnCurrentQuestion, resetQuestionTimerForNewQuestion, handleSubmitClick, currentSection]);
-
+    // --- MOVED UP: The submitTest function must be defined before it's used by other functions ---
     const submitTest = useCallback(async () => {
+        if (submittingTestRef.current) return;
+        submittingTestRef.current = true;
+        setIsSubmitting(true);
+
         recordTimeSpentOnCurrentQuestion();
+        
+        let finalTotalScore = 0;
+        if (test && test.sections) {
+            const sectionWiseResults = test.sections.map((section, secIdx) => {
+                let correct = 0;
+                let incorrectMcq = 0;
+                section.questions.forEach((q, qIdx) => {
+                    const userAnswer = answers[secIdx]?.[qIdx];
+                    const isAttempted = userAnswer !== undefined && userAnswer !== null && userAnswer !== '';
+                    if (isAttempted) {
+                        const isCorrect = q.type === 'TITA'
+                            ? String(userAnswer).toLowerCase() === String(q.correctOption).toLowerCase()
+                            : userAnswer === q.correctOption;
+                        if (isCorrect) {
+                            correct++;
+                        } else {
+                            if (q.type !== 'TITA') {
+                                incorrectMcq++;
+                            }
+                        }
+                    }
+                });
+                const score = (correct * 3) - (incorrectMcq * 1);
+                return { score };
+            });
+            finalTotalScore = sectionWiseResults.reduce((acc, sec) => acc + sec.score, 0);
+        }
+
         const finalAttemptData = {
             status: 'completed',
+            totalScore: finalTotalScore,
             answers,
             timeTaken,
             questionStatuses,
@@ -532,7 +547,8 @@ const TestInterfacePage = ({ navigate, testId }) => {
         }
         if (!isOnline) {
             alert("You are offline. Your final result has been saved to this device and will be submitted automatically when you reconnect.");
-            // If offline, we don't navigate to results immediately. The component should stay on the test screen.
+            setIsSubmitting(false);
+            submittingTestRef.current = false;
             return;
         }
         try {
@@ -542,15 +558,36 @@ const TestInterfacePage = ({ navigate, testId }) => {
             if (key) localStorage.removeItem(key);
             navigateOnExitRef.current = true;
             if (document.fullscreenElement) {
-                 document.exitFullscreen();
+                 await document.exitFullscreen();
             }
             navigate('results', { attemptId: attemptDocId });
         } catch (error) {
             console.error("Error submitting test:", error);
             alert("A connection error occurred while submitting. Your progress is saved locally. Please try again.");
+            setIsSubmitting(false);
+            submittingTestRef.current = false;
         }
-    }, [answers, timeTaken, questionStatuses, sectionTimers, currentSectionIndex, currentQuestionIndex, getLocalStorageKey, isOnline, attemptDocId, navigate, recordTimeSpentOnCurrentQuestion]);
+    }, [answers, timeTaken, questionStatuses, sectionTimers, currentSectionIndex, currentQuestionIndex, getLocalStorageKey, isOnline, attemptDocId, navigate, recordTimeSpentOnCurrentQuestion, test]);
 
+    const handleSubmitClick = useCallback(() => {
+        submitTest();
+    }, [submitTest]);
+
+    const handleSectionSubmit = useCallback(() => {
+        recordTimeSpentOnCurrentQuestion();
+        if (!currentSection || !test) return;
+        if (currentSectionIndex < test.sections.length - 1) {
+            const nextSectionIndex = currentSectionIndex + 1;
+            setSectionTransitionMessage(`Submitting ${test.sections[currentSectionIndex].name} section... Loading next section: ${test.sections[nextSectionIndex].name}`);
+            setCurrentSectionIndex(nextSectionIndex);
+            setCurrentQuestionIndex(0); 
+            resetQuestionTimerForNewQuestion();
+            setTimeout(() => { setSectionTransitionMessage(''); }, 1500); 
+        } else {
+            handleSubmitClick();
+        }
+    }, [currentSectionIndex, test, recordTimeSpentOnCurrentQuestion, resetQuestionTimerForNewQuestion, handleSubmitClick, currentSection]);
+    
     const saveProgressAndExit = useCallback(async () => {
         recordTimeSpentOnCurrentQuestion();
         const progressData = {
@@ -649,7 +686,7 @@ const TestInterfacePage = ({ navigate, testId }) => {
             }
         };
         fetchAndPrepareTest();
-    }, [testId, user, navigate, getLocalStorageKey]);
+    }, [testId, user, navigate]);
 
 
     const handleFullscreen = useCallback(() => {
@@ -665,7 +702,6 @@ const TestInterfacePage = ({ navigate, testId }) => {
         }
     }, []);
 
-    // SIMPLIFIED: This effect now only updates the fullscreen state and handles intentional navigation.
     useEffect(() => {
         const handleNativeFullscreenChange = () => {
             const isFullscreen = document.fullscreenElement !== null;
@@ -798,7 +834,7 @@ const TestInterfacePage = ({ navigate, testId }) => {
 
     const handleBackToDashboardClick = useCallback(() => {
         saveProgressAndExit();
-    }, []);
+    }, [saveProgressAndExit]);
 
     const handleConfirmResume = useCallback(() => {
         isResumeConfirmedRef.current = true;
@@ -807,12 +843,10 @@ const TestInterfacePage = ({ navigate, testId }) => {
             handleFullscreen();
         }
     }, [handleFullscreen]);
-
-
-    // --- Main Component Render ---
     
+    // Define missing variables
+    const isRestrictedType = test?.type === 'sectional' || test?.type === 'full-length';
     const shouldShowInstructions = instructionStep > 0;
-    const isRestrictedType = test?.type === 'MOCK' || test?.type === 'SECTIONAL';
 
     const renderContent = () => {
         if (loading || !test || !userData) {
@@ -869,7 +903,6 @@ const TestInterfacePage = ({ navigate, testId }) => {
             );
         }
 
-        // --- Main Test Interface ---
         const timerValue = sectionTimers[currentSectionIndex] || 0;
         const minutes = Math.floor(timerValue / 60);
         const seconds = timerValue % 60;
@@ -881,12 +914,18 @@ const TestInterfacePage = ({ navigate, testId }) => {
 
         return (
             <>
+                {isSubmitting && (
+                    <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
+                        <div className="bg-white p-6 rounded-lg shadow-xl text-center text-lg font-semibold animate-bounce">
+                            Submitting Test...
+                        </div>
+                    </div>
+                )}
                 <QuestionPaperModal isOpen={isQuestionPaperOpen} onClose={() => setIsQuestionPaperOpen(false)} section={currentSection} />
                 {showOfflineModal && <OfflineModal />}
                 {isCalculatorOpen && <Calculator setIsCalculatorOpen={setIsCalculatorOpen} />}
                 {sectionTransitionMessage && <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50"><div className="bg-white p-6 rounded-lg shadow-xl text-center text-lg font-semibold animate-bounce">{sectionTransitionMessage}</div></div>}
                 
-                {/* Top Header */}
                 <div className="bg-white shadow-md flex-shrink-0 h-16">
                     <div className="max-w-full mx-auto px-4 flex justify-between items-center h-full">
                         <h1 className="text-lg md:text-xl font-bold">{test.title}</h1>
@@ -897,7 +936,7 @@ const TestInterfacePage = ({ navigate, testId }) => {
                         </div>
                     </div>
                 </div>
-                {/* Section Navigation & Timer */}
+                
                 <div className="bg-gray-100 border-b border-t border-gray-300 flex-shrink-0 h-12">
                     <div className="max-w-full mx-auto px-4 flex justify-between items-center h-full">
                         <div className="flex overflow-x-auto">
@@ -925,7 +964,6 @@ const TestInterfacePage = ({ navigate, testId }) => {
                     </div>
                 </div>
 
-                {/* Main Content Area */}
                 <div className="flex-1 overflow-hidden flex flex-col md:flex-row max-w-full p-2 md:p-4 gap-4">
                     {showPassagePanel && (
                         <div className={`flex-1 bg-white shadow-md rounded-lg p-4 flex-col overflow-y-auto relative min-h-0 ${mobileView === 'passage' ? 'flex' : 'hidden'} md:flex`}>
@@ -1023,7 +1061,7 @@ const TestInterfacePage = ({ navigate, testId }) => {
                                         {index + 1}
                                         {status === 'answered-marked' && <div className="absolute bottom-0.5 right-0.5 w-1.5 h-1.5 bg-green-400 rounded-full"></div>}
                                     </button>
-                                ); 
+                                 ); 
                             })}
                         </div>
                         <div className="mt-4 border-t pt-4 text-xs text-gray-600 space-y-2">
@@ -1036,7 +1074,6 @@ const TestInterfacePage = ({ navigate, testId }) => {
                     </div>
                 </div>
 
-                {/* Bottom Footer */}
                 <div className="bg-white shadow-inner py-2 px-4 flex-shrink-0">
                     <div className="max-w-full mx-auto flex justify-between items-center">
                         <div className="hidden md:flex space-x-2">
@@ -1067,7 +1104,6 @@ const TestInterfacePage = ({ navigate, testId }) => {
                     </div>
                 </div>
 
-                {/* Mobile Footer Navigation */}
                 <div className="md:hidden flex justify-around bg-gray-800 text-white flex-shrink-0 shadow-inner">
                     <button onClick={() => setMobileView('passage')} disabled={!showPassagePanel} className={`flex-1 py-3 text-sm font-semibold ${mobileView === 'passage' ? 'bg-gray-600' : 'bg-gray-800'} disabled:opacity-50 disabled:text-gray-500`}>Passage</button>
                     <button onClick={() => setMobileView('question')} className={`flex-1 py-3 text-sm font-semibold ${mobileView === 'question' ? 'bg-gray-600' : 'bg-gray-800'}`}>Question</button>
