@@ -4,7 +4,7 @@ import { db } from '../firebase/config';
 import { useAuth } from '../contexts/AuthContext';
 import ConfirmModal from '../components/ConfirmModal';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FaBook, FaTimes } from 'react-icons/fa';
+import { FaBook, FaTimes, FaCalculator, FaChevronLeft, FaChevronRight, FaArrowLeft, FaArrowRight } from 'react-icons/fa';
 
 // --- Helper Hook for reliable intervals ---
 function useInterval(callback, delay) {
@@ -185,6 +185,8 @@ const Calculator = ({ setIsCalculatorOpen }) => {
         setCurrentValue(prev => prev.slice(0, -1) || '0');
     };
 
+
+
     const Button = ({ value, onClick, className, gridClass }) => (
         <button onClick={() => onClick(value)} className={`h-10 rounded shadow-sm font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-blue-400 ${className} ${gridClass}`}>
             {value}
@@ -209,7 +211,7 @@ const Calculator = ({ setIsCalculatorOpen }) => {
         { value: '1/x', type: 'op', onClick: handleUnaryOperator, className: "bg-gray-300 hover:bg-gray-400" },
         { value: '4', type: 'num', onClick: handleNumber, className: "bg-gray-200 hover:bg-gray-300 font-bold text-lg" },
         { value: '5', type: 'num', onClick: handleNumber, className: "bg-gray-200 hover:bg-gray-300 font-bold text-lg" },
-        { value: '6', type: 'num', onClick: handleNumber, className: "bg-gray-200 hover:bg-gray-300 font-bold text-lg" },
+        { value: '6', 'type': 'num', onClick: handleNumber, className: "bg-gray-200 hover:bg-gray-300 font-bold text-lg" },
         { value: '*', type: 'op', onClick: handleOperator, className: "bg-gray-300 hover:bg-gray-400" },
         { value: '=', type: 'eq', onClick: handleEquals, className: "bg-green-500 hover:bg-green-600 text-white row-span-2 !h-auto" },
         { value: '1', type: 'num', onClick: handleNumber, className: "bg-gray-200 hover:bg-gray-300 font-bold text-lg" },
@@ -255,6 +257,99 @@ const NumberPad = ({ onNumberClick }) => {
     );
 };
 
+// --- Instructions Page Components ---
+const InstructionsPage1 = ({ test, onNext, userData }) => (
+    <div className="flex flex-col items-center justify-center h-full bg-gray-100 p-4">
+        <div className="bg-white shadow-lg rounded-lg p-8 max-w-2xl w-full text-gray-800">
+            <div className="flex items-center justify-between mb-4">
+                <h2 className="text-2xl font-bold">General Instructions</h2>
+                <div className="flex items-center">
+                    <img src={userData.photoURL} alt="user" className="w-10 h-10 rounded-full mr-2"/>
+                    <p className="font-semibold">{userData.displayName}</p>
+                </div>
+            </div>
+            <p className="mb-4">Welcome to the test! Please read the following instructions carefully before proceeding.</p>
+            
+            <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-md">
+                <h3 className="font-bold text-lg mb-2">Test Details:</h3>
+                <p><strong>Test Title:</strong> {test.title}</p>
+                <p><strong>Total Duration:</strong> {test.sections.reduce((acc, sec) => acc + sec.duration, 0)} minutes</p>
+                <p><strong>Number of Sections:</strong> {test.sections.length}</p>
+                <p><strong>Total Questions:</strong> {test.sections.reduce((acc, sec) => acc + sec.questions.length, 0)}</p>
+                <p className="mt-2">This test consists of the following sections:</p>
+                <ul className="list-disc list-inside mt-1">
+                    {test.sections.map((section, index) => (
+                        <li key={index}>{section.name} ({section.duration} minutes)</li>
+                    ))}
+                </ul>
+            </div>
+
+            <p className="mb-4">
+                1. The clock will be set at the server and will count down. When the timer reaches zero, the test will end by itself.
+            </p>
+            <p className="mb-4">
+                2. You can navigate between questions using the "Save & Next" button or by clicking on question numbers in the palette.
+            </p>
+            <p className="mb-4">
+                3. An on-screen calculator is provided for your convenience.
+            </p>
+            <div className="flex justify-end mt-6">
+                <button onClick={onNext} className="bg-blue-600 text-white px-6 py-3 rounded-md font-bold text-lg hover:bg-blue-700 transition-colors">Next</button>
+            </div>
+        </div>
+    </div>
+);
+
+const InstructionsPage2 = ({ test, onPrevious, onStartTest, termsAccepted, setTermsAccepted, userData, isResuming }) => (
+    <div className="flex flex-col items-center justify-center h-full bg-gray-100 p-4">
+        <div className="bg-white shadow-lg rounded-lg p-8 max-w-2xl w-full text-gray-800">
+            <div className="flex items-center justify-between mb-4">
+                <h2 className="text-2xl font-bold">Other Important Instructions</h2>
+                <div className="flex items-center">
+                    <img src={userData.photoURL} alt="user" className="w-10 h-10 rounded-full mr-2"/>
+                    <p className="font-semibold">{userData.displayName}</p>
+                </div>
+            </div>
+            
+            <p className="mb-4">Please note the following:</p>
+            <ul className="list-disc list-inside mb-6 space-y-2">
+                <li>Go through the various symbols used in the test interface (e.g., in the question palette) and understand their meaning before you start.</li>
+                <li>In MCQ-type questions, candidates will be given points for each correct answer. Negative marking may apply for incorrect answers, as specified in the test details.</li>
+                <li>For Numerical Answer Type (TITA) questions, you must input your answer using the provided on-screen number pad.</li>
+                <li>Your current response for a question will not be saved if you navigate to another question without clicking "Save & Next" or "Mark for Review & Next".</li>
+                <li>Ensure you have a stable internet connection. In case of disconnection, your progress will be saved locally and synced once you are back online.</li>
+                <li>No external/physical calculator is allowed. Use only the on-screen calculator provided.</li>
+            </ul>
+
+            <div className="flex items-start mb-6">
+                <input
+                    type="checkbox"
+                    id="acceptTerms"
+                    checked={termsAccepted}
+                    onChange={(e) => setTermsAccepted(e.target.checked)}
+                    className="mt-1 mr-2 h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                />
+                <label htmlFor="acceptTerms" className="text-gray-700 text-sm">
+                    I have read and understood all the instructions. I declare that I am not in possession of any prohibited gadget (like mobile phone, Bluetooth devices etc.) and that I will not carry any unauthorized material into the Examination Hall. I agree that in case of not adhering to the instructions, I shall be liable to be debarred from this Test and/or disciplinary action which may include ban from future Tests/Examinations.
+                </label>
+            </div>
+
+            <div className="flex justify-between mt-6">
+                <button onClick={onPrevious} className="bg-gray-200 text-gray-800 px-6 py-3 rounded-md font-bold text-lg hover:bg-gray-300 transition-colors flex items-center">
+                    <FaChevronLeft className="mr-2"/> Previous
+                </button>
+                <button
+                    onClick={onStartTest}
+                    disabled={!termsAccepted}
+                    className={`px-6 py-3 rounded-md font-bold text-lg transition-colors ${termsAccepted ? 'bg-green-600 text-white hover:bg-green-700' : 'bg-gray-400 text-gray-700 cursor-not-allowed'}`}
+                >
+                    {isResuming ? 'Continue Test' : 'Start Test'}
+                </button>
+            </div>
+        </div>
+    </div>
+);
+
 
 const TestInterfacePage = ({ navigate, testId }) => {
     const { user, userData } = useAuth();
@@ -263,17 +358,17 @@ const TestInterfacePage = ({ navigate, testId }) => {
     const [isConfirmOpen, setIsConfirmOpen] = useState(false);
     const [isExitConfirmOpen, setIsExitConfirmOpen] = useState(false);
     const [isResumeConfirmOpen, setIsResumeConfirmOpen] = useState(false);
-    const [isFullScreenActive, setIsFullScreenActive] = useState(false);
+    const [isFullScreenActive, setIsFullScreenActive] = useState(document.fullscreenElement !== null);
     const [currentSectionIndex, setCurrentSectionIndex] = useState(0);
     const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
     const [sectionTimers, setSectionTimers] = useState([]);
     const [answers, setAnswers] = useState({});
     const [questionStatuses, setQuestionStatuses] = useState({}); 
-    const [timeTaken, setTimeTaken] = useState({});
+    const [timeTaken, setTimeTaken] = useState({}); // Stores time spent per question
     const [isCalculatorOpen, setIsCalculatorOpen] = useState(false);
     const [isQuestionPaperOpen, setIsQuestionPaperOpen] = useState(false);
     const [sectionTransitionMessage, setSectionTransitionMessage] = useState(''); 
-    const [showNavigatorPanel, setShowNavigatorPanel] = useState(true); 
+    const [showNavigatorPanel, setShowNavigatorPanel] = useState(true);
     const [attemptDocId, setAttemptDocId] = useState(null);
     const [mobileView, setMobileView] = useState('question');
     const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
@@ -283,9 +378,13 @@ const TestInterfacePage = ({ navigate, testId }) => {
     const [showOfflineModal, setShowOfflineModal] = useState(false);
     const lastSyncTimestamp = useRef(Date.now());
 
-    const questionTimerRef = useRef(null);
+    const [instructionStep, setInstructionStep] = useState(0); // 0: No instructions, 1: Page 1, 2: Page 2
+    const [termsAccepted, setTermsAccepted] = useState(false);
+    const [isResuming, setIsResuming] = useState(false);
+
+    const questionEnterTimestampRef = useRef(Date.now()); 
+    
     const testContainerRef = useRef(null);
-    const exitingToDashboardRef = useRef(false);
     const submittingTestRef = useRef(false);
     const isResumeConfirmedRef = useRef(false);
     const navigateOnExitRef = useRef(false);
@@ -294,7 +393,6 @@ const TestInterfacePage = ({ navigate, testId }) => {
     const currentQuestion = currentSection ? currentSection.questions[currentQuestionIndex] : null;
     const showPassagePanel = currentSection && currentQuestion && (currentQuestion.passage || currentQuestion.passageImageUrl) && currentSection.name !== 'QA';
 
-    // All logic functions below are unchanged
     const getLocalStorageKey = useCallback(() => {
         if (!user || !testId) return null;
         return `test_progress_${user.uid}_${testId}`;
@@ -315,20 +413,15 @@ const TestInterfacePage = ({ navigate, testId }) => {
         setShowOfflineModal(!isOnline && isFullScreenActive);
     }, [isOnline, isFullScreenActive]);
 
-
     useEffect(() => {
         const handleResize = () => setIsMobileDevice(window.innerWidth < 1024);
         window.addEventListener('resize', handleResize);
         return () => window.removeEventListener('resize', handleResize);
     }, []);
 
-    const startQuestionTimer = useCallback(() => {
-        questionTimerRef.current = Date.now();
-    }, []);
-
-    const recordTimeTaken = useCallback(() => {
-        if (questionTimerRef.current) {
-            const timeSpent = (Date.now() - questionTimerRef.current) / 1000;
+    const recordTimeSpentOnCurrentQuestion = useCallback(() => {
+        if (questionEnterTimestampRef.current && currentSectionIndex !== null && currentQuestionIndex !== null) {
+            const timeSpent = (Date.now() - questionEnterTimestampRef.current) / 1000;
             setTimeTaken(prev => {
                 const newTimeTaken = { ...prev };
                 const secTime = newTimeTaken[currentSectionIndex] ? { ...newTimeTaken[currentSectionIndex] } : {};
@@ -338,52 +431,45 @@ const TestInterfacePage = ({ navigate, testId }) => {
             });
         }
     }, [currentSectionIndex, currentQuestionIndex]);
-    
-    useEffect(() => {
-        if (test && !loading) {
-            if (isFullScreenActive) {
-                startQuestionTimer();
-            } else {
-                recordTimeTaken();
-                questionTimerRef.current = null;
-            }
-        }
-    }, [isFullScreenActive, test, loading, startQuestionTimer, recordTimeTaken]);
 
-    const getProgressData = useCallback((status = 'in-progress') => {
-        let finalTimeTaken = { ...timeTaken };
-        if (questionTimerRef.current) {
-            const timeSpent = (Date.now() - questionTimerRef.current) / 1000;
-            const secIdx = currentSectionIndex;
-            const qIdx = currentQuestionIndex;
-            const sectionTimeTaken = finalTimeTaken[secIdx] ? { ...finalTimeTaken[secIdx] } : {};
-            sectionTimeTaken[qIdx] = (sectionTimeTaken[qIdx] || 0) + timeSpent;
-            finalTimeTaken[secIdx] = sectionTimeTaken;
+    const resetQuestionTimerForNewQuestion = useCallback(() => {
+        questionEnterTimestampRef.current = Date.now();
+    }, []);
+
+    useEffect(() => {
+        if (!loading && test && isFullScreenActive && instructionStep === 0) {
+            resetQuestionTimerForNewQuestion();
         }
-        return {
-            status,
-            answers,
-            timeTaken: finalTimeTaken,
-            questionStatuses,
-            sectionTimers,
-            currentSectionIndex,
-            currentQuestionIndex,
-            lastUpdatedAt: Date.now(),
-        };
-    }, [answers, timeTaken, questionStatuses, sectionTimers, currentSectionIndex, currentQuestionIndex]);
+    }, [currentSectionIndex, currentQuestionIndex, loading, test, isFullScreenActive, resetQuestionTimerForNewQuestion, instructionStep]);
 
     useInterval(() => {
-        if (!loading && test && isFullScreenActive) {
+        if (!loading && test && isFullScreenActive && instructionStep === 0) {
             const key = getLocalStorageKey();
             if (key) {
-                const dataToSave = getProgressData();
+                const tempTimeTaken = { ...timeTaken };
+                if (questionEnterTimestampRef.current) {
+                    const timeSpent = (Date.now() - questionEnterTimestampRef.current) / 1000;
+                    const secTime = tempTimeTaken[currentSectionIndex] ? { ...tempTimeTaken[currentSectionIndex] } : {};
+                    secTime[currentQuestionIndex] = (secTime[currentQuestionIndex] || 0) + timeSpent;
+                    tempTimeTaken[currentSectionIndex] = secTime;
+                }
+                const dataToSave = {
+                    status: 'in-progress',
+                    answers,
+                    timeTaken: tempTimeTaken,
+                    questionStatuses,
+                    sectionTimers,
+                    currentSectionIndex,
+                    currentQuestionIndex,
+                    lastUpdatedAt: Date.now(),
+                };
                 localStorage.setItem(key, JSON.stringify(dataToSave));
             }
         }
     }, 5000);
 
     const syncToFirestore = useCallback(async () => {
-        if (!isOnline || !attemptDocId) return;
+        if (!isOnline || !attemptDocId || instructionStep !== 0) return;
         const key = getLocalStorageKey();
         const localDataString = key ? localStorage.getItem(key) : null;
         if (localDataString) {
@@ -399,7 +485,7 @@ const TestInterfacePage = ({ navigate, testId }) => {
                 }
             }
         }
-    }, [isOnline, attemptDocId, getLocalStorageKey]);
+    }, [isOnline, attemptDocId, getLocalStorageKey, instructionStep]);
     
     useEffect(() => {
         if (isOnline) {
@@ -408,54 +494,75 @@ const TestInterfacePage = ({ navigate, testId }) => {
     }, [isOnline, syncToFirestore]);
     
     const handleSubmitClick = useCallback(() => {
-        submittingTestRef.current = true;
-        if (document.fullscreenElement) document.exitFullscreen();
-        setIsConfirmOpen(true);
-    }, []);
+        recordTimeSpentOnCurrentQuestion();
+        submitTest();
+    }, [recordTimeSpentOnCurrentQuestion]);
 
     const handleSectionSubmit = useCallback(() => {
-        recordTimeTaken();
+        recordTimeSpentOnCurrentQuestion();
         if (!currentSection || !test) return;
         if (currentSectionIndex < test.sections.length - 1) {
             const nextSectionIndex = currentSectionIndex + 1;
             setSectionTransitionMessage(`Submitting ${test.sections[currentSectionIndex].name} section... Loading next section: ${test.sections[nextSectionIndex].name}`);
             setCurrentSectionIndex(nextSectionIndex);
             setCurrentQuestionIndex(0); 
-            startQuestionTimer();
+            resetQuestionTimerForNewQuestion();
             setTimeout(() => { setSectionTransitionMessage(''); }, 1500); 
         } else {
             handleSubmitClick();
         }
-    }, [currentSectionIndex, test, recordTimeTaken, startQuestionTimer, handleSubmitClick, currentSection]);
+    }, [currentSectionIndex, test, recordTimeSpentOnCurrentQuestion, resetQuestionTimerForNewQuestion, handleSubmitClick, currentSection]);
 
     const submitTest = useCallback(async () => {
-        const finalAttemptData = getProgressData('completed');
+        recordTimeSpentOnCurrentQuestion();
+        const finalAttemptData = {
+            status: 'completed',
+            answers,
+            timeTaken,
+            questionStatuses,
+            sectionTimers,
+            currentSectionIndex,
+            currentQuestionIndex,
+            completedAt: serverTimestamp(),
+        };
+
         const key = getLocalStorageKey();
         if (key) {
              localStorage.setItem(key, JSON.stringify(finalAttemptData));
         }
         if (!isOnline) {
             alert("You are offline. Your final result has been saved to this device and will be submitted automatically when you reconnect.");
-            setIsConfirmOpen(false);
+            // If offline, we don't navigate to results immediately. The component should stay on the test screen.
             return;
         }
         try {
             if (attemptDocId) {
-                const dataToSync = { ...finalAttemptData, completedAt: serverTimestamp() };
-                delete dataToSync.lastUpdatedAt;
-                await updateDoc(doc(db, "attempts", attemptDocId), dataToSync);
+                await updateDoc(doc(db, "attempts", attemptDocId), finalAttemptData);
             }
             if (key) localStorage.removeItem(key);
+            navigateOnExitRef.current = true;
+            if (document.fullscreenElement) {
+                 document.exitFullscreen();
+            }
             navigate('results', { attemptId: attemptDocId });
         } catch (error) {
             console.error("Error submitting test:", error);
             alert("A connection error occurred while submitting. Your progress is saved locally. Please try again.");
-            setIsConfirmOpen(false);
         }
-    }, [getProgressData, getLocalStorageKey, isOnline, attemptDocId, navigate]);
+    }, [answers, timeTaken, questionStatuses, sectionTimers, currentSectionIndex, currentQuestionIndex, getLocalStorageKey, isOnline, attemptDocId, navigate, recordTimeSpentOnCurrentQuestion]);
 
     const saveProgressAndExit = useCallback(async () => {
-        const progressData = getProgressData('in-progress');
+        recordTimeSpentOnCurrentQuestion();
+        const progressData = {
+            status: 'in-progress',
+            answers,
+            timeTaken,
+            questionStatuses,
+            sectionTimers,
+            currentSectionIndex,
+            currentQuestionIndex,
+            lastUpdatedAt: Date.now(),
+        };
         const key = getLocalStorageKey();
         if (key) localStorage.setItem(key, JSON.stringify(progressData));
         
@@ -468,9 +575,8 @@ const TestInterfacePage = ({ navigate, testId }) => {
         } else {
              document.exitFullscreen();
         }
-    }, [getProgressData, getLocalStorageKey, syncToFirestore, navigate]);
+    }, [answers, timeTaken, questionStatuses, sectionTimers, currentSectionIndex, currentQuestionIndex, getLocalStorageKey, syncToFirestore, navigate, recordTimeSpentOnCurrentQuestion]);
 
-    
     useEffect(() => {
         const fetchAndPrepareTest = async () => {
             if (!testId || !user?.uid) { navigate('home'); return; }
@@ -493,10 +599,12 @@ const TestInterfacePage = ({ navigate, testId }) => {
                 if (!testSnap.exists()) { alert('Test not found.'); navigate('home'); return; }
                 const testData = testSnap.data();
                 setTest(testData);
+
                 const attemptsRef = collection(db, 'attempts');
                 const q = query(attemptsRef, where('userId', '==', user.uid), where('testId', '==', testId));
                 const querySnapshot = await getDocs(q);
                 let attemptDoc = !querySnapshot.empty ? querySnapshot.docs[0] : null;
+
                 if (attemptDoc) {
                     const attemptData = attemptDoc.data();
                     setAttemptDocId(attemptDoc.id);
@@ -507,6 +615,7 @@ const TestInterfacePage = ({ navigate, testId }) => {
                     }
                     const remoteTimestamp = attemptData.lastAccessedAt?.toDate().getTime() || 0;
                     const localTimestamp = localData?.lastUpdatedAt || 0;
+                    
                     if (remoteTimestamp > localTimestamp) {
                         setAnswers(attemptData.answers || {});
                         setTimeTaken(attemptData.timeTaken || {});
@@ -515,7 +624,9 @@ const TestInterfacePage = ({ navigate, testId }) => {
                         setCurrentSectionIndex(attemptData.currentSectionIndex || 0);
                         setCurrentQuestionIndex(attemptData.currentQuestionIndex || 0);
                     }
+                    setIsResuming(true);
                     setIsResumeConfirmOpen(true);
+                    setInstructionStep(1);
                 } else {
                     const initialSectionTimers = testData.sections.map(s => s.duration * 60);
                     const initialStatuses = {};
@@ -525,7 +636,7 @@ const TestInterfacePage = ({ navigate, testId }) => {
                     const newAttemptData = { testId, testTitle: testData.title, userId: user.uid, startedAt: serverTimestamp(), status: 'in-progress', answers: {}, timeTaken: {}, sectionTimers: initialSectionTimers, questionStatuses: initialStatuses, lastAccessedAt: serverTimestamp() };
                     const newAttemptRef = await addDoc(collection(db, "attempts"), newAttemptData);
                     setAttemptDocId(newAttemptRef.id);
-                    handleFullscreen();
+                    setInstructionStep(1);
                 }
             } catch (error) {
                 console.error("Error preparing test:", error);
@@ -538,43 +649,40 @@ const TestInterfacePage = ({ navigate, testId }) => {
             }
         };
         fetchAndPrepareTest();
-    }, [testId, user, navigate]);
+    }, [testId, user, navigate, getLocalStorageKey]);
 
 
     const handleFullscreen = useCallback(() => {
         if (testContainerRef.current) {
-            if (!document.fullscreenElement) testContainerRef.current.requestFullscreen().catch(err => console.error(`Fullscreen Error: ${err.message}`));
-            else document.exitFullscreen();
+            if (!document.fullscreenElement) {
+                testContainerRef.current.requestFullscreen().catch(err => {
+                    console.error(`Fullscreen Error: ${err.message}`);
+                    alert("Failed to enter fullscreen. Please allow fullscreen access for this site in your browser settings.");
+                });
+            } else {
+                document.exitFullscreen();
+            }
         }
     }, []);
 
+    // SIMPLIFIED: This effect now only updates the fullscreen state and handles intentional navigation.
     useEffect(() => {
         const handleNativeFullscreenChange = () => {
             const isFullscreen = document.fullscreenElement !== null;
             setIsFullScreenActive(isFullscreen);
-
-            if (!isFullscreen) {
-                if (navigateOnExitRef.current) {
-                    navigateOnExitRef.current = false; 
-                    navigate('home');
-                    return; 
-                }
-
-                if (!exitingToDashboardRef.current && !submittingTestRef.current) {
-                    setIsExitConfirmOpen(true);
-                } else {
-                    exitingToDashboardRef.current = false;
-                }
+    
+            if (!isFullscreen && navigateOnExitRef.current) {
+                navigateOnExitRef.current = false;
+                navigate('home');
             }
         };
         document.addEventListener('fullscreenchange', handleNativeFullscreenChange);
         return () => document.removeEventListener('fullscreenchange', handleNativeFullscreenChange);
     }, [navigate]); 
 
-
     useEffect(() => {
         let timer = null; 
-        if (!loading && test && currentSection && sectionTimers.length > 0 && isFullScreenActive) {
+        if (!loading && test && currentSection && sectionTimers.length > 0 && isFullScreenActive && instructionStep === 0) {
             timer = setInterval(() => {
                 setSectionTimers(prevTimers => {
                     const newTimers = [...prevTimers];
@@ -583,12 +691,12 @@ const TestInterfacePage = ({ navigate, testId }) => {
                         return newTimers;
                     } else {
                         if (currentSectionIndex < test.sections.length - 1) {
-                            recordTimeTaken(); 
+                            recordTimeSpentOnCurrentQuestion();
                             const nextSectionIndex = currentSectionIndex + 1;
-                            setSectionTransitionMessage(`Submitting ${test.sections[currentSectionIndex].name} section... Loading next section: ${test.sections[nextSectionIndex].name}`);
+                            setSectionTransitionMessage(`Time's up for ${test.sections[currentSectionIndex].name} section. Submitting... Loading next section: ${test.sections[nextSectionIndex].name}`);
                             setCurrentSectionIndex(nextSectionIndex); 
                             setCurrentQuestionIndex(0); 
-                            startQuestionTimer(); 
+                            resetQuestionTimerForNewQuestion();
                             setTimeout(() => { setSectionTransitionMessage(''); }, 1500); 
                             return newTimers; 
                         } else {
@@ -601,7 +709,7 @@ const TestInterfacePage = ({ navigate, testId }) => {
             }, 1000);
         }
         return () => { if (timer) clearInterval(timer); };
-    }, [loading, test, currentSectionIndex, submitTest, recordTimeTaken, startQuestionTimer, currentSection, sectionTimers, isFullScreenActive]);
+    }, [loading, test, currentSectionIndex, submitTest, recordTimeSpentOnCurrentQuestion, resetQuestionTimerForNewQuestion, currentSection, sectionTimers, isFullScreenActive, instructionStep]);
 
     useEffect(() => {
         const disableSelectionAndRightClick = (event) => event.preventDefault();
@@ -613,8 +721,9 @@ const TestInterfacePage = ({ navigate, testId }) => {
     }, []);
 
     const changeQuestion = (newIndex) => {
-        recordTimeTaken();
+        recordTimeSpentOnCurrentQuestion();
         setCurrentQuestionIndex(newIndex);
+        resetQuestionTimerForNewQuestion();
     };
     
     const updateQuestionStatus = useCallback((secIdx, qIdx, newStatus) => {
@@ -631,14 +740,11 @@ const TestInterfacePage = ({ navigate, testId }) => {
     }, []);
 
     useEffect(() => {
-        if (!loading && test) {
+        if (!loading && test && isFullScreenActive && instructionStep === 0) {
             const status = questionStatuses[currentSectionIndex]?.[currentQuestionIndex];
             if (status === 'not-visited') updateQuestionStatus(currentSectionIndex, currentQuestionIndex, 'not-answered');
-            if (isFullScreenActive) {
-                startQuestionTimer();
-            }
         }
-    }, [currentSectionIndex, currentQuestionIndex, loading, test, startQuestionTimer, updateQuestionStatus, questionStatuses, isFullScreenActive]);
+    }, [currentSectionIndex, currentQuestionIndex, loading, test, updateQuestionStatus, questionStatuses, isFullScreenActive, instructionStep]);
 
 
     const handleOptionSelect = (optionIndex) => {
@@ -659,15 +765,19 @@ const TestInterfacePage = ({ navigate, testId }) => {
     };
 
     const handleSaveAndNext = () => {
-        recordTimeTaken(); 
+        recordTimeSpentOnCurrentQuestion();
         if (!currentSection || !test) return; 
         const isLastQuestionOfTest = currentQuestionIndex === currentSection.questions.length - 1 && currentSectionIndex === test.sections.length - 1;
-        if (isLastQuestionOfTest) return; 
+        if (isLastQuestionOfTest) {
+            handleSubmitClick();
+            return;
+        }
         else if (currentQuestionIndex < currentSection.questions.length - 1) {
             setCurrentQuestionIndex(prev => prev + 1);
         } else {
             handleSectionSubmit();
         }
+        resetQuestionTimerForNewQuestion();
     };
 
     const handleClearResponse = () => {
@@ -682,28 +792,35 @@ const TestInterfacePage = ({ navigate, testId }) => {
 
     const handleMarkForReview = () => {
         updateQuestionStatus(currentSectionIndex, currentQuestionIndex, 'marked');
-        handleSaveAndNext(); 
+        handleSaveAndNext();
         setIsMoreMenuOpen(false);
     };
 
     const handleBackToDashboardClick = useCallback(() => {
-        exitingToDashboardRef.current = true;
-        if (document.fullscreenElement) {
-            document.exitFullscreen();
-        }
-        setIsExitConfirmOpen(true);
+        saveProgressAndExit();
     }, []);
 
     const handleConfirmResume = useCallback(() => {
         isResumeConfirmedRef.current = true;
         setIsResumeConfirmOpen(false);
-        handleFullscreen();
+        if (!document.fullscreenElement) {
+            handleFullscreen();
+        }
     }, [handleFullscreen]);
 
+
+    // --- Main Component Render ---
+    
+    const shouldShowInstructions = instructionStep > 0;
     const isRestrictedType = test?.type === 'MOCK' || test?.type === 'SECTIONAL';
-    if (isMobileDevice && isRestrictedType) {
-        return (
-            <div className="flex items-center justify-center h-screen bg-gray-100 p-4">
+
+    const renderContent = () => {
+        if (loading || !test || !userData) {
+            return <div className="text-center text-gray-400 p-8">Loading Test Interface...</div>;
+        }
+    
+        if (isMobileDevice && isRestrictedType) {
+            return (
                 <div className="bg-white p-8 rounded-lg shadow-md text-center max-w-lg">
                     <p className="text-gray-800">
                         Sectionals/Full-length tests are only available on laptop/desktop. If you are already using a laptop/desktop, 
@@ -711,57 +828,93 @@ const TestInterfacePage = ({ navigate, testId }) => {
                         Minus buttons on the keyboard.
                     </p>
                 </div>
-            </div>
-        );
-    }
+            );
+        }
+        
+        if (shouldShowInstructions && !isFullScreenActive) {
+            return (
+                <div className="bg-white shadow-lg rounded-lg p-8 max-w-md w-full text-center flex flex-col items-center">
+                    <h2 className="text-2xl font-bold mb-4 text-gray-800">Fullscreen Required</h2>
+                    <p className="text-gray-600 mb-6 text-center">This test must be taken in fullscreen. Please enter fullscreen to view the instructions and begin.</p>
+                    <button onClick={handleFullscreen} className="bg-blue-600 text-white px-6 py-3 rounded-md font-bold text-lg hover:bg-blue-700 transition-colors">
+                        Enter Fullscreen & View Instructions
+                    </button>
+                </div>
+            );
+        }
     
-    if (loading || !test || !currentSection || !currentQuestion) {
-        return <div className="text-center text-gray-400 p-8">Loading Test Interface...</div>;
-    }
+        if (instructionStep === 1) {
+            return <InstructionsPage1 test={test} onNext={() => setInstructionStep(2)} userData={userData} />;
+        }
+    
+        if (instructionStep === 2) {
+            return <InstructionsPage2
+                test={test}
+                onPrevious={() => setInstructionStep(1)}
+                onStartTest={() => { setInstructionStep(0); if (!isFullScreenActive) handleFullscreen(); }}
+                termsAccepted={termsAccepted}
+                setTermsAccepted={setTermsAccepted}
+                userData={userData}
+                isResuming={isResuming}
+            />;
+        }
+    
+        if (!isFullScreenActive) {
+            return (
+                <div className="bg-white shadow-lg rounded-lg p-8 max-w-md w-full text-center flex flex-col items-center">
+                    <h2 className="text-2xl font-bold mb-4 text-gray-800">Test Requires Fullscreen</h2>
+                    <p className="text-gray-600 mb-6">Please enter fullscreen mode to begin or continue the test.</p>
+                    <button onClick={handleFullscreen} className="bg-blue-600 text-white px-6 py-3 rounded-md font-bold text-lg hover:bg-blue-700 transition-colors">Enter Fullscreen</button>
+                </div>
+            );
+        }
 
-    const timerValue = sectionTimers[currentSectionIndex] || 0;
-    const minutes = Math.floor(timerValue / 60);
-    const seconds = timerValue % 60;
-    const watermarkSvg = `<svg xmlns='http://www.w3.org/2000/svg' width='300' height='300'><text x='50%' y='50%' dominant-baseline='middle' text-anchor='middle' fill='rgba(0, 0, 0, 0.08)' font-size='16' font-family='Arial' transform='rotate(-45 150 150)'>${userData.email}</text></svg>`;
-    const watermarkStyle = { backgroundImage: `url("data:image/svg+xml,${encodeURIComponent(watermarkSvg)}")`, backgroundRepeat: 'repeat' };
-    const isLastQuestionOfCurrentSection = currentQuestionIndex === (currentSection.questions.length - 1);
-    const isLastSectionOfTest = currentSectionIndex === (test.sections.length - 1);
-    const shouldDisableSaveAndNext = isLastQuestionOfCurrentSection;
+        // --- Main Test Interface ---
+        const timerValue = sectionTimers[currentSectionIndex] || 0;
+        const minutes = Math.floor(timerValue / 60);
+        const seconds = timerValue % 60;
+        const watermarkSvg = `<svg xmlns='http://www.w3.org/2000/svg' width='300' height='300'><text x='50%' y='50%' dominant-baseline='middle' text-anchor='middle' fill='rgba(0, 0, 0, 0.08)' font-size='16' font-family='Arial' transform='rotate(-45 150 150)'>${userData.email}</text></svg>`;
+        const watermarkStyle = { backgroundImage: `url("data:image/svg+xml,${encodeURIComponent(watermarkSvg)}")`, backgroundRepeat: 'repeat' };
+        const isLastQuestionOfCurrentSection = currentQuestionIndex === (currentSection.questions.length - 1);
+        const isLastSectionOfTest = currentSectionIndex === (test.sections.length - 1);
+        const shouldDisableSaveAndNext = isLastQuestionOfCurrentSection && isLastSectionOfTest;
 
-    return (
-        <div ref={testContainerRef} className="bg-gray-200 h-screen flex flex-col text-gray-800 font-sans">
-            <QuestionPaperModal
-                isOpen={isQuestionPaperOpen}
-                onClose={() => setIsQuestionPaperOpen(false)}
-                section={currentSection}
-            />
-            {showOfflineModal && <OfflineModal />}
-            <ConfirmModal isOpen={isConfirmOpen} setIsOpen={(val) => { setIsConfirmOpen(val); if (!val && submittingTestRef.current) { submittingTestRef.current = false; handleFullscreen(); } }} onConfirm={submitTest} title="Submit Test?">Are you sure you want to end the test? This action is final.</ConfirmModal>
-            <ConfirmModal isOpen={isExitConfirmOpen} setIsOpen={(val) => { setIsExitConfirmOpen(val); if (!val && !navigateOnExitRef.current) { exitingToDashboardRef.current = false; handleFullscreen(); } }} onConfirm={saveProgressAndExit} title="Exit Test?">You are attempting to exit the test. Your progress will be saved. Do you wish to continue?</ConfirmModal>
-            <ConfirmModal isOpen={isResumeConfirmOpen} setIsOpen={(val) => { setIsResumeConfirmOpen(val); if (!val && !isResumeConfirmedRef.current) navigate('home'); isResumeConfirmedRef.current = false; }} onConfirm={handleConfirmResume} title="Resume Test" confirmText="OK">Resuming previous test progress!</ConfirmModal>
-            {isCalculatorOpen && <Calculator setIsCalculatorOpen={setIsCalculatorOpen} />}
-            {sectionTransitionMessage && <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50"><div className="bg-white p-6 rounded-lg shadow-xl text-center text-lg font-semibold animate-bounce">{sectionTransitionMessage}</div></div>}
-            
-            {!isFullScreenActive ? (
-                <div className="flex flex-1 items-center justify-center text-center p-4"><div className="bg-white shadow-lg rounded-lg p-8 max-w-md w-full"><h2 className="text-2xl font-bold mb-4 text-gray-800">Test Requires Fullscreen</h2><p className="text-gray-600 mb-6">Please enter fullscreen mode to begin or continue the test.</p><button onClick={handleFullscreen} className="bg-blue-600 text-white px-6 py-3 rounded-md font-bold text-lg hover:bg-blue-700 transition-colors">Enter Fullscreen</button></div></div>
-            ) : (
-                <>
-                    <div className="bg-white shadow-md flex-shrink-0 h-16"><div className="max-w-full mx-auto px-4 flex justify-between items-center h-full">
+        return (
+            <>
+                <QuestionPaperModal isOpen={isQuestionPaperOpen} onClose={() => setIsQuestionPaperOpen(false)} section={currentSection} />
+                {showOfflineModal && <OfflineModal />}
+                {isCalculatorOpen && <Calculator setIsCalculatorOpen={setIsCalculatorOpen} />}
+                {sectionTransitionMessage && <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50"><div className="bg-white p-6 rounded-lg shadow-xl text-center text-lg font-semibold animate-bounce">{sectionTransitionMessage}</div></div>}
+                
+                {/* Top Header */}
+                <div className="bg-white shadow-md flex-shrink-0 h-16">
+                    <div className="max-w-full mx-auto px-4 flex justify-between items-center h-full">
                         <h1 className="text-lg md:text-xl font-bold">{test.title}</h1>
                         <div className="flex space-x-4 items-center">
-                            <button onClick={handleFullscreen} title="Toggle Fullscreen" className="text-gray-600 hover:text-black"><svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 8V4m0 0h4M4 4l5 5m11-5h-4m0 0v4m0-4l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5h-4m0 0v-4m0 4l-5-5"></path></svg></button>
-                            <button onClick={handleBackToDashboardClick} className="font-semibold px-4 py-2 rounded-md bg-gray-200 hover:bg-gray-300 text-sm">Back to Dashboard</button>
+                            <button onClick={handleFullscreen} title="Toggle Fullscreen" className="text-gray-600 hover:text-black p-2 rounded-md hover:bg-gray-100 transition-colors">
+                                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 8V4m0 0h4M4 4l5 5m11-5h-4m0 0v4m0-4l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5h-4m0 0v-4m0 4l-5-5"></path></svg>
+                            </button>
                         </div>
-                    </div></div>
-                    <div className="bg-gray-100 border-b border-t border-gray-300 flex-shrink-0 h-12"><div className="max-w-full mx-auto px-4 flex justify-between items-center h-full">
+                    </div>
+                </div>
+                {/* Section Navigation & Timer */}
+                <div className="bg-gray-100 border-b border-t border-gray-300 flex-shrink-0 h-12">
+                    <div className="max-w-full mx-auto px-4 flex justify-between items-center h-full">
                         <div className="flex overflow-x-auto">
                             <div className="flex">
-                                {test.sections.map((section, index) => (<button key={section.name} disabled={true} className={`py-2 px-4 text-sm whitespace-nowrap ${index === currentSectionIndex ? 'bg-white border-b-2 border-blue-600 text-blue-600 font-semibold' : 'text-gray-500 bg-gray-200'}`}>{section.name}</button>))}
+                                {test.sections.map((section, index) => (
+                                    <button key={section.name} disabled={true} className={`py-2 px-4 text-sm whitespace-nowrap ${index === currentSectionIndex ? 'bg-white border-b-2 border-blue-600 text-blue-600 font-semibold' : 'text-gray-500 bg-gray-200'}`}>
+                                        {section.name}
+                                    </button>
+                                ))}
                             </div>
                         </div>
                         <div className="flex items-center space-x-4">
-                            <button onClick={() => setIsQuestionPaperOpen(true)} className="font-semibold px-4 py-1.5 rounded-md bg-green-600 text-white hover:bg-green-700 text-sm flex items-center space-x-2 transition-colors">
-                                <FaBook />
+                            <button onClick={() => setIsCalculatorOpen(true)} title="Calculator" className="text-gray-600 hover:text-black p-2 rounded-md hover:bg-gray-100 transition-colors flex items-center">
+                                <FaCalculator className="w-5 h-5" />
+                            </button>
+                            <button onClick={() => setIsQuestionPaperOpen(true)} className="font-semibold px-3 py-1.5 rounded-md bg-green-600 text-white hover:bg-green-700 text-sm flex items-center space-x-1 transition-colors">
+                                <FaBook className="w-4 h-4" />
                                 <span>Question Paper</span>
                             </button>
                             <div className="text-right flex-shrink-0">
@@ -769,61 +922,167 @@ const TestInterfacePage = ({ navigate, testId }) => {
                                 <div className="text-lg md:text-xl font-bold text-black">{String(minutes).padStart(2, '0')}:{String(seconds).padStart(2, '0')}</div>
                             </div>
                         </div>
-                    </div></div>
+                    </div>
+                </div>
 
-                    <div className="flex-1 overflow-hidden flex flex-col md:flex-row max-w-full p-2 md:p-4 gap-4">
-                        {showPassagePanel && (
-                            <div className={`flex-1 bg-white shadow-md rounded-lg p-4 flex-col overflow-y-auto relative min-h-0 ${mobileView === 'passage' ? 'flex' : 'hidden'} md:flex`}>
-                                <div className="absolute inset-0 z-0" style={watermarkStyle}></div>
-                                <div className="relative z-10">
-                                    <h2 className="font-bold mb-2">Directions</h2>
-                                    {currentQuestion.passageImageUrl && <img src={currentQuestion.passageImageUrl} alt="Passage" className="max-w-full h-auto mb-4 rounded"/>}
-                                    <div className="prose max-w-none text-gray-800 whitespace-pre-wrap">{currentQuestion.passage}</div>
+                {/* Main Content Area */}
+                <div className="flex-1 overflow-hidden flex flex-col md:flex-row max-w-full p-2 md:p-4 gap-4">
+                    {showPassagePanel && (
+                        <div className={`flex-1 bg-white shadow-md rounded-lg p-4 flex-col overflow-y-auto relative min-h-0 ${mobileView === 'passage' ? 'flex' : 'hidden'} md:flex`}>
+                            <div className="absolute inset-0 z-0" style={watermarkStyle}></div>
+                            <div className="relative z-10">
+                                <h2 className="font-bold mb-2">Directions</h2>
+                                {currentQuestion.passageImageUrl && <img src={currentQuestion.passageImageUrl} alt="Passage" className="max-w-full h-auto mb-4 rounded"/>}
+                                <div className="prose max-w-none text-gray-800 whitespace-pre-wrap">{currentQuestion.passage}</div>
+                            </div>
+                        </div>
+                    )}
+                    
+                    <div className={`flex-1 bg-white shadow-md rounded-lg p-4 flex-col overflow-y-auto relative min-h-0 ${mobileView === 'question' ? 'flex' : 'hidden'} md:flex`}>
+                        <div className="absolute inset-0 z-0" style={watermarkStyle}></div>
+                        <div className="relative z-10">
+                            <h2 className="font-bold mb-4">Question No. {currentQuestionIndex + 1}</h2>
+                            {currentQuestion.questionImageUrl && <img src={currentQuestion.questionImageUrl} alt="Question" className="max-w-full h-auto mb-4 rounded"/>}
+                            <div className="prose max-w-none text-gray-800 mb-6 whitespace-pre-wrap">{currentQuestion.questionText}</div>
+                            {currentQuestion.type === 'TITA' ? (
+                                <>
+                                    <input type="text" value={answers[currentSectionIndex]?.[currentQuestionIndex] || ''} readOnly className="p-2 border-2 rounded-md w-full" placeholder="Input answer using number pad..."/>
+                                    <NumberPad onNumberClick={handleTitaChange} />
+                                </>
+                            ) : (
+                                <div className="space-y-3">
+                                    {currentQuestion.options.map((option, index) => (
+                                        <div key={index} onClick={() => handleOptionSelect(index)} className={`flex items-start p-3 border-2 rounded-lg cursor-pointer transition-colors ${answers[currentSectionIndex]?.[currentQuestionIndex] === index ? 'bg-blue-50 border-blue-500' : 'border-gray-300 hover:bg-gray-50'}`}>
+                                            <input type="radio" name={`q_${currentQuestionIndex}`} checked={answers[currentSectionIndex]?.[currentQuestionIndex] === index} readOnly className="mt-1 mr-3 h-4 w-4 text-blue-600 border-gray-300 focus:ring-blue-500"/>
+                                            <label className="flex-1">{option}</label>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    <div className="hidden md:flex flex-shrink-0">
+                        <div className="flex items-center justify-center">
+                            <button onClick={() => setShowNavigatorPanel(p => !p)} className="bg-gray-700 hover:bg-black text-white h-16 w-6 rounded-l-lg flex items-center justify-center transition-colors">
+                                {showNavigatorPanel ? <FaChevronRight size={14} /> : <FaChevronLeft size={14} />}
+                            </button>
+                        </div>
+                        <div className={`w-80 bg-white shadow-md rounded-r-lg p-4 flex-col overflow-y-auto min-h-0 ${showNavigatorPanel ? 'flex' : 'hidden'}`}>
+                            <div className="flex items-center justify-center border-b pb-2 mb-4">
+                                <div className="text-center flex-1">
+                                    <img src={userData.photoURL} alt="user" className="w-16 h-16 rounded-full mx-auto mb-2"/>
+                                    <p className="font-semibold">{userData.displayName}</p>
                                 </div>
                             </div>
-                        )}
+                            <p className="font-bold text-center mb-2">Question Palette: {currentSection.name}</p>
+                            <div className="grid grid-cols-6 sm:grid-cols-5 gap-2">
+                                {currentSection.questions.map((_, index) => { 
+                                    const status = questionStatuses[currentSectionIndex]?.[index]; 
+                                    let colorClass = 'bg-gray-300 hover:bg-gray-400 text-gray-800'; 
+                                    if (status === 'answered') colorClass = 'bg-green-500 text-white'; 
+                                    else if (status === 'not-answered') colorClass = 'bg-red-500 text-white'; 
+                                    else if (status === 'marked') colorClass = 'bg-purple-500 text-white'; 
+                                    else if (status === 'answered-marked') colorClass = 'bg-purple-500 text-white relative'; 
+                                    if (index === currentQuestionIndex) colorClass += ' ring-2 ring-offset-2 ring-blue-500'; 
+                                    return (
+                                        <button key={index} onClick={() => changeQuestion(index)} className={`h-8 w-8 md:h-9 md:w-9 flex items-center justify-center rounded-md font-semibold transition-all ${colorClass}`}>
+                                            {index + 1}
+                                            {status === 'answered-marked' && <div className="absolute bottom-0.5 right-0.5 w-1.5 h-1.5 bg-green-400 rounded-full"></div>}
+                                        </button>
+                                    ); 
+                                })}
+                            </div>
+                            <div className="mt-4 border-t pt-4 text-xs text-gray-600 space-y-2">
+                                <div className="flex items-center"><div className="w-4 h-4 rounded-md bg-green-500 mr-2"></div> Answered</div>
+                                <div className="flex items-center"><div className="w-4 h-4 rounded-md bg-red-500 mr-2"></div> Not Answered</div>
+                                <div className="flex items-center"><div className="w-4 h-4 rounded-md bg-gray-300 mr-2"></div> Not Visited</div>
+                                <div className="flex items-center"><div className="w-4 h-4 rounded-md bg-purple-500 mr-2"></div> Marked for Review</div>
+                                <div className="flex items-center"><div className="w-4 h-4 rounded-md bg-purple-500 relative mr-2"><div className="absolute bottom-0.5 right-0.5 w-1.5 h-1.5 bg-green-400 rounded-full"></div></div> Answered & Marked</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className={`w-full bg-white shadow-md rounded-lg p-4 flex-shrink-0 flex-col overflow-y-auto min-h-0 ${mobileView === 'navigator' ? 'flex' : 'hidden'} md:hidden`}>
+                        <div className="text-center border-b pb-2 mb-4">
+                            <img src={userData.photoURL} alt="user" className="w-16 h-16 rounded-full mx-auto mb-2"/>
+                            <p className="font-semibold">{userData.displayName}</p>
+                        </div>
+                        <p className="font-bold text-center mb-2">Question Palette: {currentSection.name}</p>
+                         <div className="grid grid-cols-6 sm:grid-cols-5 gap-2">
+                            {currentSection.questions.map((_, index) => { 
+                                const status = questionStatuses[currentSectionIndex]?.[index]; 
+                                let colorClass = 'bg-gray-300 hover:bg-gray-400 text-gray-800'; 
+                                if (status === 'answered') colorClass = 'bg-green-500 text-white'; 
+                                else if (status === 'not-answered') colorClass = 'bg-red-500 text-white'; 
+                                else if (status === 'marked') colorClass = 'bg-purple-500 text-white'; 
+                                else if (status === 'answered-marked') colorClass = 'bg-purple-500 text-white relative'; 
+                                if (index === currentQuestionIndex) colorClass += ' ring-2 ring-offset-2 ring-blue-500'; 
+                                return (
+                                    <button key={index} onClick={() => changeQuestion(index)} className={`h-8 w-8 md:h-9 md:w-9 flex items-center justify-center rounded-md font-semibold transition-all ${colorClass}`}>
+                                        {index + 1}
+                                        {status === 'answered-marked' && <div className="absolute bottom-0.5 right-0.5 w-1.5 h-1.5 bg-green-400 rounded-full"></div>}
+                                    </button>
+                                ); 
+                            })}
+                        </div>
+                        <div className="mt-4 border-t pt-4 text-xs text-gray-600 space-y-2">
+                            <div className="flex items-center"><div className="w-4 h-4 rounded-md bg-green-500 mr-2"></div> Answered</div>
+                            <div className="flex items-center"><div className="w-4 h-4 rounded-md bg-red-500 mr-2"></div> Not Answered</div>
+                            <div className="flex items-center"><div className="w-4 h-4 rounded-md bg-gray-300 mr-2"></div> Not Visited</div>
+                            <div className="flex items-center"><div className="w-4 h-4 rounded-md bg-purple-500 mr-2"></div> Marked for Review</div>
+                            <div className="flex items-center"><div className="w-4 h-4 rounded-md bg-purple-500 relative mr-2"><div className="absolute bottom-0.5 right-0.5 w-1.5 h-1.5 bg-green-400 rounded-full"></div></div> Answered & Marked</div>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Bottom Footer */}
+                <div className="bg-white shadow-inner py-2 px-4 flex-shrink-0">
+                    <div className="max-w-full mx-auto flex justify-between items-center">
+                        <div className="hidden md:flex space-x-2">
+                            <button onClick={handleMarkForReview} className="font-semibold px-4 py-2 rounded-md bg-gray-200 hover:bg-gray-300">Mark for Review & Next</button>
+                            <button onClick={handleClearResponse} className="font-semibold px-4 py-2 rounded-md bg-gray-200 hover:bg-gray-300">Clear Response</button>
+                        </div>
+
+                        <div className="md:hidden flex space-x-2 relative">
+                            <button onClick={() => setIsMoreMenuOpen(prev => !prev)} className="font-semibold px-4 py-2 rounded-md bg-gray-200 hover:bg-gray-300">More</button>
+                            {isMoreMenuOpen && (
+                                <div className="absolute bottom-full left-0 mb-2 w-48 bg-white rounded-md shadow-lg border z-10">
+                                    <button onClick={handleMarkForReview} className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Mark & Next</button>
+                                    <button onClick={handleClearResponse} className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Clear Response</button>
+                                </div>
+                            )}
+                        </div>
                         
-                        <div className={`flex-1 bg-white shadow-md rounded-lg p-4 flex-col overflow-y-auto relative min-h-0 ${mobileView === 'question' ? 'flex' : 'hidden'} md:flex`}>
-                            <div className="absolute inset-0 z-0" style={watermarkStyle}></div><div className="relative z-10"><h2 className="font-bold mb-4">Question No. {currentQuestionIndex + 1}</h2>{currentQuestion.questionImageUrl && <img src={currentQuestion.questionImageUrl} alt="Question" className="max-w-full h-auto mb-4 rounded"/>}<div className="prose max-w-none text-gray-800 mb-6 whitespace-pre-wrap">{currentQuestion.questionText}</div>{currentQuestion.type === 'TITA' ? (<><input type="text" value={answers[currentSectionIndex]?.[currentQuestionIndex] || ''} readOnly className="p-2 border-2 rounded-md w-full" placeholder="Input answer using number pad..."/><NumberPad onNumberClick={handleTitaChange} /></>) : (<div className="space-y-3">{currentQuestion.options.map((option, index) => (<div key={index} onClick={() => handleOptionSelect(index)} className={`flex items-start p-3 border-2 rounded-lg cursor-pointer transition-colors ${answers[currentSectionIndex]?.[currentQuestionIndex] === index ? 'bg-blue-50 border-blue-500' : 'border-gray-300 hover:bg-gray-50'}`}><input type="radio" name={`q_${currentQuestionIndex}`} checked={answers[currentSectionIndex]?.[currentQuestionIndex] === index} readOnly className="mt-1 mr-3 h-4 w-4 text-blue-600 border-gray-300 focus:ring-blue-500"/><label className="flex-1">{option}</label></div>))}</div>)}</div>
-                        </div>
-
-                        <div className={`w-full md:w-80 bg-white shadow-md rounded-lg p-4 flex-shrink-0 flex-col overflow-y-auto min-h-0 ${mobileView === 'navigator' ? 'flex' : 'hidden'} ${showNavigatorPanel ? 'md:flex' : 'md:hidden'}`}>
-                            <div className="text-center border-b pb-2"><img src={userData.photoURL} alt="user" className="w-16 h-16 rounded-full mx-auto mb-2"/><p className="font-semibold">{userData.displayName}</p></div><div className="mt-4"><button onClick={() => setIsCalculatorOpen(true)} className="w-full mb-4 py-2 bg-gray-200 rounded-md font-semibold hover:bg-gray-300">View Calculator</button><p className="font-bold text-center mb-2">Question Palette: {currentSection.name}</p><div className="grid grid-cols-6 sm:grid-cols-5 gap-2">{currentSection.questions.map((_, index) => { const status = questionStatuses[currentSectionIndex]?.[index]; let colorClass = 'bg-gray-300 hover:bg-gray-400 text-gray-800'; if (status === 'answered') colorClass = 'bg-green-500 text-white'; else if (status === 'not-answered') colorClass = 'bg-red-500 text-white'; else if (status === 'marked') colorClass = 'bg-purple-500 text-white'; else if (status === 'answered-marked') colorClass = 'bg-purple-500 text-white relative'; if (index === currentQuestionIndex) colorClass += ' ring-2 ring-offset-2 ring-blue-500'; return (<button key={index} onClick={() => changeQuestion(index)} className={`h-8 w-8 md:h-9 md:w-9 flex items-center justify-center rounded-md font-semibold transition-all ${colorClass}`}>{index + 1}{status === 'answered-marked' && <div className="absolute bottom-0.5 right-0.5 w-1.5 h-1.5 bg-green-400 rounded-full"></div>}</button>); })}</div></div><div className="mt-4 border-t pt-4 text-xs text-gray-600 space-y-2"><div className="flex items-center"><div className="w-4 h-4 rounded-md bg-green-500 mr-2"></div> Answered</div><div className="flex items-center"><div className="w-4 h-4 rounded-md bg-red-500 mr-2"></div> Not Answered</div><div className="flex items-center"><div className="w-4 h-4 rounded-md bg-gray-300 mr-2"></div> Not Visited</div><div className="flex items-center"><div className="w-4 h-4 rounded-md bg-purple-500 mr-2"></div> Marked for Review</div><div className="flex items-center"><div className="w-4 h-4 rounded-md bg-purple-500 relative mr-2"><div className="absolute bottom-0.5 right-0.5 w-1.5 h-1.5 bg-green-400 rounded-full"></div></div> Answered & Marked</div></div>
-                        </div>
-                    </div>
-
-                    <div className="bg-white shadow-inner py-2 px-4 flex-shrink-0">
-                        <div className="max-w-full mx-auto flex justify-between items-center">
-                            <div className="hidden md:flex space-x-2">
-                                <button onClick={handleMarkForReview} className="font-semibold px-4 py-2 rounded-md bg-gray-200 hover:bg-gray-300">Mark for Review & Next</button>
-                                <button onClick={handleClearResponse} className="font-semibold px-4 py-2 rounded-md bg-gray-200 hover:bg-gray-300">Clear Response</button>
-                                <button onClick={() => setShowNavigatorPanel(prev => !prev)} className="font-semibold px-4 py-2 rounded-md bg-gray-200 hover:bg-gray-300">{showNavigatorPanel ? 'Hide Navigator' : 'Show Navigator'}</button>
-                            </div>
-
-                            <div className="md:hidden flex space-x-2 relative">
-                                <button onClick={() => setIsMoreMenuOpen(prev => !prev)} className="font-semibold px-4 py-2 rounded-md bg-gray-200 hover:bg-gray-300">More</button>
-                                {isMoreMenuOpen && (
-                                    <div className="absolute bottom-full left-0 mb-2 w-48 bg-white rounded-md shadow-lg border z-10">
-                                        <button onClick={handleMarkForReview} className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Mark & Next</button>
-                                        <button onClick={handleClearResponse} className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Clear Response</button>
-                                    </div>
-                                )}
-                            </div>
-                            
-                            <div className="flex space-x-2">
-                                {isLastQuestionOfCurrentSection && !isLastSectionOfTest ? (<button onClick={handleSectionSubmit} className="font-bold px-4 md:px-6 py-2 rounded-md bg-blue-600 text-white hover:bg-blue-700 text-sm md:text-base">SUBMIT SECTION</button>) : (<button onClick={handleSaveAndNext} disabled={shouldDisableSaveAndNext} className={`font-bold px-4 md:px-6 py-2 rounded-md text-sm md:text-base ${shouldDisableSaveAndNext ? 'bg-gray-400 text-gray-700 cursor-not-allowed' : 'bg-blue-600 text-white hover:bg-blue-700'}`}>SAVE & NEXT</button>)}
-                                {currentSectionIndex === test.sections.length - 1 && <button onClick={handleSubmitClick} className="font-bold px-4 md:px-6 py-2 rounded-md bg-green-600 text-white hover:bg-green-700 text-sm md:text-base">SUBMIT</button>}
-                            </div>
+                        <div className="flex space-x-2">
+                            {isLastQuestionOfCurrentSection && !isLastSectionOfTest ? (
+                                <button onClick={handleSectionSubmit} className="font-bold px-4 md:px-6 py-2 rounded-md bg-blue-600 text-white hover:bg-blue-700 text-sm md:text-base">SUBMIT SECTION</button>
+                            ) : (
+                                <button onClick={handleSaveAndNext} disabled={shouldDisableSaveAndNext} className={`font-bold px-4 md:px-6 py-2 rounded-md text-sm md:text-base ${shouldDisableSaveAndNext ? 'bg-gray-400 text-gray-700 cursor-not-allowed' : 'bg-blue-600 text-white hover:bg-blue-700'}`}>SAVE & NEXT</button>
+                            )}
+                            {currentSectionIndex === test.sections.length - 1 && 
+                                <button onClick={handleSubmitClick} className="font-bold px-4 md:px-6 py-2 rounded-md bg-green-600 text-white hover:bg-green-700 text-sm md:text-base">SUBMIT</button>
+                            }
                         </div>
                     </div>
+                </div>
 
-                    <div className="md:hidden flex justify-around bg-gray-800 text-white flex-shrink-0 shadow-inner">
-                        <button onClick={() => setMobileView('passage')} disabled={!showPassagePanel} className={`flex-1 py-3 text-sm font-semibold ${mobileView === 'passage' ? 'bg-gray-600' : 'bg-gray-800'} disabled:opacity-50 disabled:text-gray-500`}>Passage</button>
-                        <button onClick={() => setMobileView('question')} className={`flex-1 py-3 text-sm font-semibold ${mobileView === 'question' ? 'bg-gray-600' : 'bg-gray-800'}`}>Question</button>
-                        {showNavigatorPanel && <button onClick={() => setMobileView('navigator')} className={`flex-1 py-3 text-sm font-semibold ${mobileView === 'navigator' ? 'bg-gray-600' : 'bg-gray-800'}`}>Palette</button>}
-                    </div>
-                </>
-            )}
+                {/* Mobile Footer Navigation */}
+                <div className="md:hidden flex justify-around bg-gray-800 text-white flex-shrink-0 shadow-inner">
+                    <button onClick={() => setMobileView('passage')} disabled={!showPassagePanel} className={`flex-1 py-3 text-sm font-semibold ${mobileView === 'passage' ? 'bg-gray-600' : 'bg-gray-800'} disabled:opacity-50 disabled:text-gray-500`}>Passage</button>
+                    <button onClick={() => setMobileView('question')} className={`flex-1 py-3 text-sm font-semibold ${mobileView === 'question' ? 'bg-gray-600' : 'bg-gray-800'}`}>Question</button>
+                    <button onClick={() => setMobileView('navigator')} className={`flex-1 py-3 text-sm font-semibold ${mobileView === 'navigator' ? 'bg-gray-600' : 'bg-gray-800'}`}>Palette</button>
+                </div>
+            </>
+        );
+    }
+
+    const isPromptScreen = (loading || !test || !userData) || (isMobileDevice && isRestrictedType) || (shouldShowInstructions && !isFullScreenActive) || (!isFullScreenActive && instructionStep === 0);
+    const containerClasses = `bg-gray-200 h-screen text-gray-800 font-sans ${isPromptScreen ? 'flex flex-col items-center justify-center p-4' : 'flex flex-col'}`;
+
+    return (
+        <div ref={testContainerRef} className={containerClasses}>
+            {renderContent()}
             <style jsx>{`
                 :fullscreen { width: 100vw; height: 100vh; display: flex; flex-direction: column; margin: 0; padding: 0; background-color: #f3f4f6; overflow: hidden; }
                 :fullscreen > div { flex-shrink: 0; }
