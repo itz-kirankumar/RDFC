@@ -45,7 +45,6 @@ const UserEditModal = ({ isOpen, setIsOpen, user, handleGrantAccess, handleRevok
             setValidityDays(user.expiryDate ? Math.ceil((user.expiryDate.toDate().getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)) : 30);
             setSelectedPlanId(user.planId || '');
             setPricePaid(user.planPrice || '');
-            // MODIFICATION: Expanded access control state
             setAccessControl(user.accessControl || { rdfc_articles: false, rdfc_tests: false, test: false, sectional: false, mock: false });
         } else {
             setValidityDays(30);
@@ -60,7 +59,6 @@ const UserEditModal = ({ isOpen, setIsOpen, user, handleGrantAccess, handleRevok
     const handleAccessChange = (e) => {
         const { name, checked } = e.target;
         if (name === 'all') {
-            // MODIFICATION: Expanded access control state for "All"
             setAccessControl({ rdfc_articles: checked, rdfc_tests: checked, test: checked, sectional: checked, mock: checked });
         } else {
             setAccessControl(prev => ({ ...prev, [name]: checked }));
@@ -88,7 +86,6 @@ const UserEditModal = ({ isOpen, setIsOpen, user, handleGrantAccess, handleRevok
         setIsOpen(false);
     };
 
-    // MODIFICATION: Updated check for "All Access"
     const allChecked = accessControl.rdfc_articles && accessControl.rdfc_tests && accessControl.test && accessControl.sectional && accessControl.mock;
 
     return (
@@ -107,10 +104,8 @@ const UserEditModal = ({ isOpen, setIsOpen, user, handleGrantAccess, handleRevok
                                 <div className="space-y-1 bg-gray-900/50 p-3 rounded-lg">
                                     <AccessCheckbox label="All Access" name="all" checked={allChecked} onChange={handleAccessChange} />
                                     <div className="border-t border-gray-700 my-2"></div>
-                                    {/* --- MODIFICATION START: Split RDFC Access --- */}
                                     <AccessCheckbox label="RDFC Articles" name="rdfc_articles" checked={accessControl.rdfc_articles} onChange={handleAccessChange} />
                                     <AccessCheckbox label="RDFC Tests" name="rdfc_tests" checked={accessControl.rdfc_tests} onChange={handleAccessChange} />
-                                    {/* --- MODIFICATION END --- */}
                                     <AccessCheckbox label="Mock Tests" name="mock" checked={accessControl.mock} onChange={handleAccessChange} />
                                     <AccessCheckbox label="Sectional Tests" name="sectional" checked={accessControl.sectional} onChange={handleAccessChange} />
                                     <AccessCheckbox label="Other Add-On Tests" name="test" checked={accessControl.test} onChange={handleAccessChange} />
@@ -181,7 +176,7 @@ const processUserData = (docSnap) => {
 const UserRow = ({ user, handleOpenModal }) => {
     return (
         <tr key={user.id}>
-            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">{user.email}</td>
+            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">{user.name || user.email}</td>
             <td className="px-6 py-4 whitespace-nowrap text-sm">
                 <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${user.isSubscribed ? 'bg-green-800 text-green-100' : 'bg-gray-700 text-gray-300'}`}>
                     {user.isSubscribed ? 'PREMIUM' : 'Standard'}
@@ -206,9 +201,9 @@ const PremiumUserRow = ({ user, mySettledUsers, handleToggleMySettledStatus, han
 
     return (
         <tr key={user.id}>
-            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">{user.email}</td>
+            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">{user.name || user.email}</td>
             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400">
-                {user.planName || 'N/A'} (₹{user.planPrice || 'N/A'})
+                {user.planName || 'N/A'} (₹{user.planPrice != null ? user.planPrice : 'N/A'})
             </td>
             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400">
                 {user.subscribedAt ? user.subscribedAt.toDate().toLocaleDateString() : 'N/A'}
@@ -232,11 +227,59 @@ const PremiumUserRow = ({ user, mySettledUsers, handleToggleMySettledStatus, han
     );
 };
 
+// --- Expiry Management Row Component (for 'Expiry' and 'Verified' tabs) ---
+const ExpiryManagementRow = ({ user, handleOpenModal, onMarkAsVerified, isVerifiedTab = false }) => {
+    const now = new Date();
+    // Ensure expiryDate exists and has a toDate method before proceeding
+    const expiry = user.expiryDate?.toDate ? user.expiryDate.toDate() : null;
+    const diffTime = expiry ? expiry.getTime() - now.getTime() : -Infinity;
+    const diffDays = Math.ceil(diffTime / (1000 * 3600 * 24));
+
+    let expiryText;
+    let textClass;
+
+    if (!expiry) {
+        expiryText = "No Date";
+        textClass = "text-gray-500";
+    } else if (diffDays <= 0) {
+        expiryText = "Expired";
+        textClass = "text-red-400 font-bold";
+    } else {
+        expiryText = `${diffDays} day${diffDays > 1 ? 's' : ''}`;
+        textClass = "text-yellow-400";
+    }
+
+    return (
+        <tr key={user.id}>
+            {/* UPDATED: Use user.name with a fallback to user.email */}
+            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">{user.name || user.email}</td>
+            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400">{user.email}</td>
+            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400">
+                {user.planName || 'N/A'} (₹{user.planPrice != null ? user.planPrice : 'N/A'})
+            </td>
+            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400">{expiry ? expiry.toLocaleDateString() : 'N/A'}</td>
+            <td className={`px-6 py-4 whitespace-nowrap text-sm ${textClass}`}>{expiryText}</td>
+            <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-4">
+                {!isVerifiedTab && (
+                    <button onClick={() => onMarkAsVerified(user.id)} className="text-blue-400 hover:text-blue-300">
+                        Mark as Verified
+                    </button>
+                )}
+                <button onClick={() => handleOpenModal(user)} className="text-gray-300 hover:text-white">
+                    Manage Access
+                </button>
+            </td>
+        </tr>
+    );
+};
+
+
 // --- Main AdminUserManagement Component ---
 export default function AdminUserManagement() {
     const { userData } = useAuth();
     const [users, setUsers] = useState([]);
     const [mySettledUsers, setMySettledUsers] = useState([]);
+    const [verifiedExpiryUsers, setVerifiedExpiryUsers] = useState([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedUser, setSelectedUser] = useState(null);
@@ -260,29 +303,12 @@ export default function AdminUserManagement() {
 
         const usersCol = collection(db, 'users');
         const unsubscribeUsers = onSnapshot(usersCol, (snapshot) => {
-            const now = new Date();
-            snapshot.docs.forEach(docSnap => {
-                const user = docSnap.data();
-                if (user.isSubscribed && user.expiryDate && user.expiryDate.toDate() < now) {
-                    const userRef = doc(db, 'users', docSnap.id);
-                    const updatedData = {
-                        isSubscribed: false,
-                        expiryDate: null,
-                        subscribedAt: null,
-                        planId: null,
-                        planName: null,
-                        planPrice: null,
-                        accessControl: null,
-                    };
-                    updateDoc(userRef, updatedData)
-                        .then(() => console.log(`Successfully auto-revoked subscription for ${user.email}.`))
-                        .catch(error => console.error(`Failed to auto-revoke subscription for ${user.email}:`, error));
-                }
-            });
+            // REMOVED: Auto-revoke logic that was preventing expired users from showing up.
+            // This kind of logic is better suited for a backend function.
 
             const fetchedUsers = snapshot.docs.map(processUserData).filter(u => !u.isAdmin);
             setUsers(fetchedUsers);
-            setTotalUsersCount(snapshot.docs.length-3);
+            setTotalUsersCount(snapshot.docs.filter(doc => !doc.data().isAdmin).length);
             setTotalPremiumUsersCount(snapshot.docs.filter(doc => doc.data().isSubscribed).length);
             setLoading(false);
         }, (error) => {
@@ -291,17 +317,27 @@ export default function AdminUserManagement() {
         });
 
         if (userData?.uid) {
+            // Settled users listener
             const mySettledUsersColRef = collection(db, 'adminSettings', userData.uid, 'settledUsers');
             const unsubscribeMySettledUsers = onSnapshot(mySettledUsersColRef, (snapshot) => {
                 const settledUserIds = snapshot.docs.map(doc => doc.id);
                 setMySettledUsers(settledUserIds);
+            }, (error) => console.error("Error fetching admin's settled users:", error));
+
+            // Verified expiry users listener
+            const verifiedExpiryUsersColRef = collection(db, 'adminSettings', userData.uid, 'verifiedExpiryUsers');
+            const unsubscribeVerifiedExpiryUsers = onSnapshot(verifiedExpiryUsersColRef, (snapshot) => {
+                const verifiedUserIds = snapshot.docs.map(doc => doc.id);
+                setVerifiedExpiryUsers(verifiedUserIds);
             }, (error) => {
-                console.error("Error fetching admin's settled users:", error);
+                console.error("Error fetching admin's verified expiry users:", error);
             });
+
             return () => {
                 unsubscribePlans();
                 unsubscribeUsers();
                 unsubscribeMySettledUsers();
+                unsubscribeVerifiedExpiryUsers();
             };
         }
 
@@ -351,23 +387,26 @@ export default function AdminUserManagement() {
     };
 
     const handleRevokeAccess = async (userId, userEmail) => {
-        if (window.confirm(`Are you sure you want to revoke all premium access for ${userEmail}?`)) {
+        if (window.confirm(`Are you sure you want to revoke all premium access for ${userEmail}? This will also remove them from your settled and verified lists.`)) {
             try {
                 const userRef = doc(db, 'users', userId);
                 const mySettledUserRef = doc(db, 'adminSettings', userData.uid, 'settledUsers', userId);
+                const verifiedUserRef = doc(db, 'adminSettings', userData.uid, 'verifiedExpiryUsers', userId);
 
                 const updatedUserRefData = {
                     isSubscribed: false,
                     expiryDate: null,
                     subscribedAt: null,
                     planId: null,
-
                     planName: null,
                     planPrice: null,
                     accessControl: null,
                 };
                 await updateDoc(userRef, updatedUserRefData);
+                // Clean up from admin-specific lists
                 await deleteDoc(mySettledUserRef).catch(()=>{}); 
+                await deleteDoc(verifiedUserRef).catch(()=>{}); 
+
                 alert(`Access revoked for ${userEmail}.`);
                 setIsUserModalOpen(false);
             } catch (error) {
@@ -378,6 +417,7 @@ export default function AdminUserManagement() {
     };
     
     const handleToggleMySettledStatus = async (userId, newStatus) => {
+        if (!userData?.uid) return;
         try {
             const mySettledUserRef = doc(db, 'adminSettings', userData.uid, 'settledUsers', userId);
             if (newStatus) {
@@ -390,18 +430,59 @@ export default function AdminUserManagement() {
             alert(`Failed to update settled status.`);
         }
     };
+
+    const handleMarkAsVerified = async (userId) => {
+        if (!userData?.uid) {
+            alert("You must be logged in to perform this action.");
+            return;
+        }
+        try {
+            const verifiedUserRef = doc(db, 'adminSettings', userData.uid, 'verifiedExpiryUsers', userId);
+            await setDoc(verifiedUserRef, { timestamp: serverTimestamp() });
+        } catch (error) {
+            console.error(`Error marking user ${userId} as verified:`, error);
+            alert(`Failed to mark user as verified. Check Firestore rules.`);
+        }
+    };
     
-    const filteredUsers = users.filter(user => {
-        const matchesSearch = searchTerm.toLowerCase() === '' || user.email.toLowerCase().includes(searchTerm.toLowerCase());
-        const matchesTab = activeTab === 'all' || (activeTab === 'premium' && user.isSubscribed);
-        return matchesSearch && matchesTab;
-    });
+    const getDaysRemaining = (expiryDate) => {
+        if (!expiryDate?.toDate) return Infinity;
+        const now = new Date();
+        const expiry = expiryDate.toDate();
+        return Math.ceil((expiry.getTime() - now.getTime()) / (1000 * 3600 * 24));
+    };
+
+    const expiringUsers = users
+        .filter(user => {
+            const daysRemaining = getDaysRemaining(user.expiryDate);
+            return user.isSubscribed && daysRemaining <= 3 && !verifiedExpiryUsers.includes(user.id);
+        })
+        .sort((a, b) => getDaysRemaining(a.expiryDate) - getDaysRemaining(b.expiryDate));
+
+    const verifiedUsersList = users.filter(user => verifiedExpiryUsers.includes(user.id));
+
+    let displayedUsers;
+    switch(activeTab) {
+        case 'expiry':
+            displayedUsers = expiringUsers.filter(u => (u.name || u.email).toLowerCase().includes(searchTerm.toLowerCase()));
+            break;
+        case 'verified':
+            displayedUsers = verifiedUsersList.filter(u => (u.name || u.email).toLowerCase().includes(searchTerm.toLowerCase()));
+            break;
+        case 'premium':
+            displayedUsers = users.filter(u => u.isSubscribed && (u.name || u.email).toLowerCase().includes(searchTerm.toLowerCase()));
+            break;
+        default: // 'all'
+            displayedUsers = users.filter(u => (u.name || u.email).toLowerCase().includes(searchTerm.toLowerCase()));
+            break;
+    }
 
     const indexOfLastUser = currentPage * usersPerPage;
     const indexOfFirstUser = indexOfLastUser - usersPerPage;
-    const currentUsers = filteredUsers.slice(indexOfFirstUser, indexOfLastUser);
-    const totalPages = Math.ceil(filteredUsers.length / usersPerPage);
+    const currentUsers = displayedUsers.slice(indexOfFirstUser, indexOfLastUser);
+    const totalPages = Math.ceil(displayedUsers.length / usersPerPage);
     const paginate = (pageNumber) => setCurrentPage(pageNumber);
+
 
     return (
         <div className="max-w-7xl mx-auto">
@@ -418,47 +499,76 @@ export default function AdminUserManagement() {
             </div>
             <input
                 type="text"
-                placeholder="Search by user email..."
+                placeholder="Search by user name or email..."
                 value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
+                onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
                 className="w-full p-2 rounded-md bg-gray-700 text-white border border-gray-600 mb-4 focus:border-white focus:ring focus:ring-gray-500 focus:ring-opacity-50"
             />
             <div className="flex mb-4">
                 <button
-                    onClick={() => setActiveTab('all')}
+                    onClick={() => { setActiveTab('all'); setCurrentPage(1); }}
                     className={`px-4 py-2 rounded-t-md font-semibold text-sm ${activeTab === 'all' ? 'bg-gray-700 text-white' : 'bg-gray-800 text-gray-400 hover:text-white'}`}
                 >
                     All Users
                 </button>
                 <button
-                    onClick={() => setActiveTab('premium')}
+                    onClick={() => { setActiveTab('premium'); setCurrentPage(1); }}
                     className={`px-4 py-2 rounded-t-md font-semibold text-sm ${activeTab === 'premium' ? 'bg-gray-700 text-white' : 'bg-gray-800 text-gray-400 hover:text-white'}`}
                 >
                     Premium Users
                 </button>
+                <button
+                    onClick={() => { setActiveTab('expiry'); setCurrentPage(1); }}
+                    className={`px-4 py-2 rounded-t-md font-semibold text-sm relative ${activeTab === 'expiry' ? 'bg-gray-700 text-white' : 'bg-gray-800 text-gray-400 hover:text-white'}`}
+                >
+                    Expiry
+                    {expiringUsers.length > 0 && <span className="absolute top-0 right-0 -mt-1 -mr-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-xs text-white">{expiringUsers.length}</span>}
+                </button>
+                 <button
+                    onClick={() => { setActiveTab('verified'); setCurrentPage(1); }}
+                    className={`px-4 py-2 rounded-t-md font-semibold text-sm ${activeTab === 'verified' ? 'bg-gray-700 text-white' : 'bg-gray-800 text-gray-400 hover:text-white'}`}
+                >
+                    Verified
+                </button>
             </div>
-            {activeTab === 'all' && (
-                <div className="bg-gray-800 shadow-md rounded-lg overflow-hidden mb-8">
-                     <div className="overflow-x-auto">{loading ? (<p className="p-6 text-center text-gray-400">Loading users...</p>) : (<>
+            
+            <div className="bg-gray-800 shadow-md rounded-lg overflow-hidden mb-8">
+                 <div className="overflow-x-auto">{loading ? (<p className="p-6 text-center text-gray-400">Loading users...</p>) : (<>
+                    {activeTab === 'all' && (
                         <table className="min-w-full divide-y divide-gray-700">
-                           <thead className="bg-gray-700"><tr><th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Email</th><th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Subscription Status</th><th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Subscribed At</th><th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Expiry Date</th><th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Actions</th></tr></thead>
+                           <thead className="bg-gray-700"><tr><th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Name</th><th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Subscription Status</th><th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Subscribed At</th><th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Expiry Date</th><th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Actions</th></tr></thead>
                            <tbody className="bg-gray-800 divide-y divide-gray-700">{currentUsers.length > 0 ? (currentUsers.map(user => (<UserRow key={user.id} user={user} handleOpenModal={handleOpenUserModal}/>))) : (<tr><td colSpan={5} className="px-6 py-4 text-center text-gray-400">No users found.</td></tr>)}</tbody>
                         </table>
-                        <div className="p-4 flex justify-between items-center bg-gray-700"><button onClick={() => paginate(currentPage - 1)} disabled={currentPage === 1} className="px-4 py-2 rounded-md bg-gray-600 text-white disabled:opacity-50">Previous</button><span className="text-gray-300">Page {currentPage} of {totalPages}</span><button onClick={() => paginate(currentPage + 1)} disabled={currentPage === totalPages} className="px-4 py-2 rounded-md bg-gray-600 text-white disabled:opacity-50">Next</button></div></>)}
-                    </div>
-                </div>
-            )}
-            {activeTab === 'premium' && (
-                <div className="bg-gray-800 shadow-md rounded-lg overflow-hidden">
-                    <div className="overflow-x-auto">{loading ? (<p className="p-6 text-center text-gray-400">Loading users...</p>) : (<>
-                        <table className="min-w-full divide-y divide-gray-700">
-                            <thead className="bg-gray-700"><tr><th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Email</th><th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Plan</th><th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Subscribed At</th><th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Expiry Date</th><th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase">My Status</th><th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Actions</th></tr></thead>
+                    )}
+                    {activeTab === 'premium' && (
+                         <table className="min-w-full divide-y divide-gray-700">
+                            <thead className="bg-gray-700"><tr><th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Name</th><th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Plan</th><th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Subscribed At</th><th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Expiry Date</th><th className="px-4 py-3 text-left text-xs font-medium text-gray-300 uppercase">My Status</th><th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Actions</th></tr></thead>
                             <tbody className="bg-gray-800 divide-y divide-gray-700">{currentUsers.length > 0 ? (currentUsers.map(user => (<PremiumUserRow key={user.id} user={user} mySettledUsers={mySettledUsers} handleToggleMySettledStatus={handleToggleMySettledStatus} handleOpenModal={handleOpenUserModal} />))) : (<tr><td colSpan={6} className="px-6 py-4 text-center text-gray-400">No premium users found.</td></tr>)}</tbody>
                         </table>
-                        <div className="p-4 flex justify-between items-center bg-gray-700"><button onClick={() => paginate(currentPage - 1)} disabled={currentPage === 1} className="px-4 py-2 rounded-md bg-gray-600 text-white disabled:opacity-50">Previous</button><span className="text-gray-300">Page {currentPage} of {totalPages}</span><button onClick={() => paginate(currentPage + 1)} disabled={currentPage === totalPages} className="px-4 py-2 rounded-md bg-gray-600 text-white disabled:opacity-50">Next</button></div></>)}
-                    </div>
+                    )}
+                    {activeTab === 'expiry' && (
+                        <table className="min-w-full divide-y divide-gray-700">
+                            <thead className="bg-gray-700"><tr><th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Name</th><th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Mail ID</th><th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Plan</th><th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Expiry Date</th><th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Expires In</th><th className="px-6 py-3 text-right text-xs font-medium text-gray-300 uppercase">Action</th></tr></thead>
+                            <tbody className="bg-gray-800 divide-y divide-gray-700">{currentUsers.length > 0 ? (currentUsers.map(user => (<ExpiryManagementRow key={user.id} user={user} handleOpenModal={handleOpenUserModal} onMarkAsVerified={handleMarkAsVerified} />))) : (<tr><td colSpan={6} className="px-6 py-4 text-center text-gray-400">No users are expiring soon.</td></tr>)}</tbody>
+                        </table>
+                    )}
+                    {activeTab === 'verified' && (
+                        <table className="min-w-full divide-y divide-gray-700">
+                           <thead className="bg-gray-700"><tr><th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Name</th><th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Mail ID</th><th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Plan</th><th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Expiry Date</th><th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Status</th><th className="px-6 py-3 text-right text-xs font-medium text-gray-300 uppercase">Action</th></tr></thead>
+                            <tbody className="bg-gray-800 divide-y divide-gray-700">{currentUsers.length > 0 ? (currentUsers.map(user => (<ExpiryManagementRow key={user.id} user={user} handleOpenModal={handleOpenUserModal} isVerifiedTab={true} />))) : (<tr><td colSpan={6} className="px-6 py-4 text-center text-gray-400">No users have been marked as verified.</td></tr>)}</tbody>
+                        </table>
+                    )}
+                    
+                    {totalPages > 1 && (
+                        <div className="p-4 flex justify-between items-center bg-gray-700">
+                            <button onClick={() => paginate(currentPage - 1)} disabled={currentPage === 1} className="px-4 py-2 rounded-md bg-gray-600 text-white disabled:opacity-50">Previous</button>
+                            <span className="text-gray-300">Page {currentPage} of {totalPages}</span>
+                            <button onClick={() => paginate(currentPage + 1)} disabled={currentPage === totalPages} className="px-4 py-2 rounded-md bg-gray-600 text-white disabled:opacity-50">Next</button>
+                        </div>
+                    )}
+                    </>)}
                 </div>
-            )}
+            </div>
 
             <UserEditModal
                 isOpen={isUserModalOpen}
