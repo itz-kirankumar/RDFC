@@ -1,11 +1,10 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { collection, getDocs, query, where, doc, onSnapshot, updateDoc, orderBy, limit } from 'firebase/firestore';
+import { collection, getDocs, query, where, doc, onSnapshot, updateDoc, orderBy, limit, getDoc } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { useAuth } from '../contexts/AuthContext';
 import FeedbackForm from '../components/FeedbackForm';
 import { motion, AnimatePresence } from 'framer-motion';
-// Add FaHourglassHalf to the import statement
-import { FaEye, FaLock, FaPlay, FaCheckCircle, FaHourglassHalf, FaBookOpen, FaCrown, FaTachometerAlt, FaVial, FaCommentDots, FaHeadset, FaChevronDown, FaArrowLeft, FaArrowRight } from 'react-icons/fa';
+import { FaEye, FaLock, FaPlay, FaCheckCircle, FaHourglassHalf, FaBookOpen, FaCrown, FaTachometerAlt, FaVial, FaCommentDots, FaHeadset, FaChevronDown, FaArrowLeft, FaArrowRight, FaChartLine, FaBullseye, FaStar, FaTrophy } from 'react-icons/fa';
 
 
 // --- WIDGETS AND HELPERS START ---
@@ -233,6 +232,104 @@ const useUserAttempts = (uid) => {
     return userAttempts;
 };
 
+const usePerformanceData = (uid) => {
+    const [data, setData] = useState({
+        metrics: { testsCompleted: 0, avgScore: 0, bestScore: 0 },
+        leaderboard: [],
+        currentUserEntry: null,
+        loading: true
+    });
+
+    useEffect(() => {
+        const fetchData = async () => {
+            try {
+                const allAttemptsQuery = query(collection(db, 'attempts'), where('status', '==', 'completed'));
+                const allAttemptsSnapshot = await getDocs(allAttemptsQuery);
+                const allAttempts = allAttemptsSnapshot.docs.map(doc => doc.data());
+
+                const userScores = {};
+                allAttempts.forEach(attempt => {
+                    const score = typeof attempt.totalScore === 'number' ? attempt.totalScore : 0;
+                    if (!userScores[attempt.userId]) {
+                        userScores[attempt.userId] = { totalScore: 0, count: 0, scores: [] };
+                    }
+                    userScores[attempt.userId].totalScore += score;
+                    userScores[attempt.userId].count += 1;
+                    userScores[attempt.userId].scores.push(score);
+                });
+
+                const rankedUsers = Object.entries(userScores)
+                    .map(([userId, data]) => ({
+                        userId,
+                        totalScore: data.totalScore,
+                        testCount: data.count,
+                        scores: data.scores
+                    }))
+                    .sort((a, b) => b.totalScore - a.totalScore);
+
+                const currentUserIndex = rankedUsers.findIndex(user => user.userId === uid);
+                let currentUserData = null;
+                let metrics = { testsCompleted: 0, avgScore: 0, bestScore: 0 };
+
+                if (currentUserIndex !== -1) {
+                    currentUserData = { ...rankedUsers[currentUserIndex], rank: currentUserIndex + 1 };
+                    metrics = {
+                        testsCompleted: currentUserData.testCount,
+                        avgScore: (currentUserData.totalScore / currentUserData.testCount).toFixed(1),
+                        bestScore: currentUserData.scores.length > 0 ? Math.max(...currentUserData.scores) : 0
+                    };
+                }
+
+                const top10Users = rankedUsers.slice(0, 10);
+                let userIdsToFetch = top10Users.map(u => u.userId);
+                if (currentUserData && !userIdsToFetch.includes(uid)) {
+                    userIdsToFetch.push(uid);
+                }
+                userIdsToFetch = [...new Set(userIdsToFetch)];
+
+                const userDocs = await Promise.all(userIdsToFetch.map(id => getDoc(doc(db, 'users', id))));
+                const usersMap = {};
+                userDocs.forEach(userDoc => {
+                    if (userDoc.exists()) {
+                        usersMap[userDoc.id] = userDoc.data().displayName || 'Anonymous';
+                    }
+                });
+
+                const leaderboard = top10Users.map((user, index) => ({
+                    name: usersMap[user.userId] || 'Anonymous',
+                    score: user.totalScore,
+                    rank: index + 1,
+                    userId: user.userId
+                }));
+
+                let currentUserEntry = null;
+                if (currentUserData) {
+                    currentUserEntry = {
+                        name: usersMap[uid] || 'Anonymous',
+                        score: currentUserData.totalScore,
+                        rank: currentUserData.rank,
+                        userId: uid
+                    };
+                }
+                setData({ metrics, leaderboard, currentUserEntry, loading: false });
+            } catch (error) {
+                console.error("Error fetching performance data:", error);
+                setData({
+                    metrics: { testsCompleted: 0, avgScore: 0, bestScore: 0 },
+                    leaderboard: [],
+                    currentUserEntry: null,
+                    loading: false
+                });
+            }
+        };
+
+        if (uid) fetchData();
+        else setData(prev => ({ ...prev, loading: false }));
+    }, [uid]);
+
+    return data;
+}
+
 // --- MAIN DASHBOARD COMPONENT ---
 
 const UserDashboard = ({ navigate }) => {
@@ -246,6 +343,7 @@ const UserDashboard = ({ navigate }) => {
     const { allTests, linkedArticles, loading: masterDataLoading } = useMasterData();
     const userStatus = useUserStatus(userData?.uid);
     const userAttempts = useUserAttempts(userData?.uid);
+    const { metrics, leaderboard, currentUserEntry, loading: performanceLoading } = usePerformanceData(userData?.uid);
 
     const { 
         rdfcTests, mockTests, sectionalTests, otherAddOnTests
@@ -253,7 +351,6 @@ const UserDashboard = ({ navigate }) => {
         if (!allTests || allTests.length === 0) {
             return { rdfcTests: [], mockTests: [], sectionalTests: [], otherAddOnTests: [] };
         }
-        const sortByDate = (a, b) => (b.createdAt?.toDate() || 0) - (a.createdAt?.toDate() || 0);
         
         const rdfc = allTests.filter(test => linkedArticles[test.id]).sort((a,b) => {
             if (a.isFree !== b.isFree) return a.isFree ? -1 : 1;
@@ -283,7 +380,6 @@ const UserDashboard = ({ navigate }) => {
         };
     }, [allTests, linkedArticles]);
     
-    // Correctly handle live test state updates
     const updateLiveTests = (testId) => {
         setLiveTests(prev => ({...prev, [testId]: true}));
     };
@@ -299,11 +395,10 @@ const UserDashboard = ({ navigate }) => {
             });
             setLiveTests(newLiveTests);
         };
-        const interval = setInterval(checkLiveStatus, 1000 * 60); // Check every minute
+        const interval = setInterval(checkLiveStatus, 1000 * 60);
         checkLiveStatus();
         return () => clearInterval(interval);
     }, [rdfcTests, mockTests, sectionalTests, otherAddOnTests]);
-
 
     const loading = masterDataLoading || !userStatus;
 
@@ -377,7 +472,6 @@ const UserDashboard = ({ navigate }) => {
         const isScheduled = test.liveAt && test.liveAt.toDate() > new Date() && !liveTests[test.id];
         const isLocked = getIsLocked(test, test.type);
         const typeColors = { MOCK: 'bg-purple-700 text-purple-200', SECTIONAL: 'bg-teal-700 text-teal-200', TEST: 'bg-gray-600 text-gray-300' };
-
 
         const renderCellContent = () => {
             if (isScheduled) return <div className="w-full h-10 flex items-center justify-center"><CountdownTimer targetDate={test.liveAt.toDate()} onComplete={() => updateLiveTests(test.id)} /></div>;
@@ -504,7 +598,95 @@ const UserDashboard = ({ navigate }) => {
         )
     };
     
-    // --- NEW MOBILE UI COMPONENTS ---
+    // --- NEW LEADERBOARD ROW COMPONENT ---
+    const LeaderboardRow = ({ entry, rank }) => {
+        const isTopThree = rank <= 3;
+
+        const rankStyles = [
+            { // Rank 1
+                bg: 'bg-gradient-to-br from-amber-400 to-yellow-500',
+                icon: 'text-white',
+                name: 'text-transparent bg-clip-text bg-gradient-to-r from-amber-300 to-yellow-400 font-bold',
+            },
+            { // Rank 2
+                bg: 'bg-gradient-to-br from-gray-300 to-gray-500',
+                icon: 'text-white',
+                name: 'text-transparent bg-clip-text bg-gradient-to-r from-gray-200 to-gray-400 font-semibold',
+            },
+            { // Rank 3
+                bg: 'bg-gradient-to-br from-orange-400 to-amber-600',
+                icon: 'text-white',
+                name: 'text-transparent bg-clip-text bg-gradient-to-r from-orange-300 to-amber-500 font-semibold',
+            }
+        ];
+
+        return (
+            <div className={`flex items-center p-3 rounded-lg transition-all ${isTopThree ? 'bg-gray-700/50' : 'hover:bg-gray-700/30'}`}>
+                <div className="flex items-center justify-center w-12 flex-shrink-0">
+                    {isTopThree ? (
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center shadow-lg ${rankStyles[rank - 1].bg}`}>
+                            <FaTrophy className={`text-lg ${rankStyles[rank - 1].icon}`} />
+                        </div>
+                    ) : (
+                        <span className="text-gray-500 font-bold text-lg">{rank}</span>
+                    )}
+                </div>
+                <p className={`flex-1 truncate ${isTopThree ? rankStyles[rank - 1].name : 'text-white'}`}>
+                    {entry.name}
+                </p>
+                <div className="font-bold text-lg text-cyan-400">{entry.score}</div>
+            </div>
+        );
+    };
+    
+    const PerformanceMetricCard = ({ icon, value, label, color }) => (
+        <div className="bg-gray-800 p-4 rounded-lg text-center flex-grow shadow-lg border border-gray-700">
+            <div className={`text-3xl mx-auto ${color}`}>{icon}</div>
+            <div className="text-2xl font-bold mt-2 text-white">{value}</div>
+            <p className="text-xs text-gray-400 uppercase mt-1">{label}</p>
+        </div>
+    );
+
+    const PerformanceContent = () => {
+        if (performanceLoading) {
+            return <div className="text-center text-gray-400 p-8">Loading Performance Insights...</div>;
+        }
+
+        return (
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <div className="lg:col-span-1 flex flex-col space-y-4">
+                    <h3 className="text-xl font-bold text-white mb-2">Your Insights</h3>
+                    <PerformanceMetricCard icon={<FaCheckCircle />} value={metrics.testsCompleted} label="Tests Completed" color="text-green-400" />
+                    <PerformanceMetricCard icon={<FaBullseye />} value={metrics.avgScore} label="Average Score" color="text-blue-400" />
+                    <PerformanceMetricCard icon={<FaStar />} value={metrics.bestScore} label="Best Single Score" color="text-yellow-400" />
+                </div>
+                <div className="lg:col-span-2">
+                    <h3 className="text-xl font-bold text-white mb-4">Overall Leaderboard (All Tests)</h3>
+                    <div className="bg-gray-800 rounded-lg shadow-lg border border-gray-700 p-2 space-y-1">
+                        {leaderboard.length > 0 ? (
+                            <>
+                                {leaderboard.map((entry) => (
+                                    <LeaderboardRow key={entry.rank} entry={entry} rank={entry.rank} />
+                                ))}
+                                {currentUserEntry && (
+                                    <>
+                                        <hr className="border-gray-700 my-2" />
+                                        <div className="flex items-center p-3 rounded-lg bg-blue-900/50 border border-blue-700 shadow-[0_0_15px_rgba(59,130,246,0.5)]">
+                                            <div className="flex items-center justify-center w-12 flex-shrink-0 text-lg font-bold text-white">
+                                                {currentUserEntry.rank}
+                                            </div>
+                                            <p className="flex-1 font-bold text-white truncate">{currentUserEntry.name} (You)</p>
+                                            <div className="font-bold text-lg text-white">{currentUserEntry.score}</div>
+                                        </div>
+                                    </>
+                                )}
+                            </>
+                        ) : <p className="text-center text-gray-500 py-4">No completed tests yet to rank.</p>}
+                    </div>
+                </div>
+            </div>
+        );
+    };
 
     const AccordionSection = ({ title, icon: Icon, sectionKey, children }) => {
         const isOpen = openAccordion === sectionKey;
@@ -607,7 +789,6 @@ const UserDashboard = ({ navigate }) => {
         const isLocked = getIsLocked(test, test.type);
         const typeColors = { MOCK: 'bg-purple-700 text-purple-200', SECTIONAL: 'bg-teal-700 text-teal-200', TEST: 'bg-gray-600 text-gray-300' };
 
-
         let text, action, className, icon;
         if (isScheduled) {
             text = "Coming Soon"; className = "bg-gray-600 text-gray-300 cursor-default"; icon = <FaHourglassHalf/>; action = () => {};
@@ -650,7 +831,6 @@ const UserDashboard = ({ navigate }) => {
         test: otherAddOnTests || [],
     };
 
-    const selectedTests = testsForFilter[testFilter];
     const anyTestsAvailable = mockTests.length > 0 || sectionalTests.length > 0 || otherAddOnTests.length > 0;
 
     return (
@@ -660,10 +840,10 @@ const UserDashboard = ({ navigate }) => {
                  {renderUserStatus()}
             </div>
 
-            {/* --- DESKTOP UI: TABS --- */}
             <div className="hidden md:block">
                 <div className="mb-8 p-1.5 bg-gray-800 rounded-lg flex flex-wrap sm:space-x-2">
                     <TabButton value="dashboard" label="Dashboard" icon={FaTachometerAlt} />
+                    <TabButton value="performance" label="Performance" icon={FaChartLine} />
                     {rdfcTests.length > 0 && <TabButton value="rdfc" label="RDFC" icon={FaBookOpen} />}
                     {anyTestsAvailable && <TabButton value="tests" label="Tests" icon={FaVial} />}
                     {userStatus?.isSubscribed && !userStatus.hasSubmittedFeedback && <TabButton value="feedback" label="Feedback" icon={FaCommentDots} />}
@@ -679,51 +859,20 @@ const UserDashboard = ({ navigate }) => {
                             </div>
                         </div>
                     )}
-                    {activeTab === 'rdfc' && rdfcTests.length > 0 && (
-                        <TestSection 
-                            title="RDFC Articles & Tests" 
-                            tests={rdfcTests} 
-                            limit={10} 
-                            contentType="rdfc" 
-                            viewAllParams={{ title: 'All RDFC Articles & Tests', contentType: 'rdfc' }} 
-                            navigate={navigate} 
-                            renderDesktopRow={renderRDFCDesktopRow}
-                        />
-                    )}
+                    {activeTab === 'performance' && <PerformanceContent />}
+                    {activeTab === 'rdfc' && rdfcTests.length > 0 && ( <TestSection title="RDFC Articles & Tests" tests={rdfcTests} limit={10} contentType="rdfc" viewAllParams={{ title: 'All RDFC Articles & Tests', contentType: 'rdfc' }} navigate={navigate} renderDesktopRow={renderRDFCDesktopRow}/> )}
                     {activeTab === 'tests' && anyTestsAvailable && (
                         <div>
                             <div className="flex items-center space-x-2 mb-6">
-                                {otherAddOnTests.length > 0 && (
-                                     <button onClick={() => setTestFilter('test')} className={`px-4 py-1.5 text-sm font-semibold rounded-full transition-colors ${testFilter === 'test' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}>Add-Ons</button>
-                                )}
-                                {sectionalTests.length > 0 && (
-                                    <button onClick={() => setTestFilter('sectional')} className={`px-4 py-1.5 text-sm font-semibold rounded-full transition-colors ${testFilter === 'sectional' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}>Sectionals</button>
-                                )}
-                                {mockTests.length > 0 && (
-                                    <button onClick={() => setTestFilter('mock')} className={`px-4 py-1.5 text-sm font-semibold rounded-full transition-colors ${testFilter === 'mock' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}>Mocks</button>
-                                )}
+                                {otherAddOnTests.length > 0 && ( <button onClick={() => setTestFilter('test')} className={`px-4 py-1.5 text-sm font-semibold rounded-full transition-colors ${testFilter === 'test' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}>Add-Ons</button> )}
+                                {sectionalTests.length > 0 && ( <button onClick={() => setTestFilter('sectional')} className={`px-4 py-1.5 text-sm font-semibold rounded-full transition-colors ${testFilter === 'sectional' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}>Sectionals</button> )}
+                                {mockTests.length > 0 && ( <button onClick={() => setTestFilter('mock')} className={`px-4 py-1.5 text-sm font-semibold rounded-full transition-colors ${testFilter === 'mock' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}>Mocks</button> )}
                             </div>
-                            <TestSection 
-                                title={`${testFilter.charAt(0).toUpperCase() + testFilter.slice(1)} Tests`} 
-                                tests={testsForFilter[testFilter]} 
-                                limit={10} 
-                                contentType={testFilter} 
-                                viewAllParams={{ title: `All ${testFilter}s`, contentType: testFilter }} 
-                                navigate={navigate} 
-                                renderDesktopRow={renderAddOnTestRow}
-                            />
+                            <TestSection title={`${testFilter.charAt(0).toUpperCase() + testFilter.slice(1)} Tests`} tests={testsForFilter[testFilter]} limit={10} contentType={testFilter} viewAllParams={{ title: `All ${testFilter}s`, contentType: testFilter }} navigate={navigate} renderDesktopRow={renderAddOnTestRow}/>
                         </div>
                     )}
-                    {activeTab === 'support' && (
-                        <div className="bg-gray-800 rounded-lg p-8 text-center">
-                            <h2 className="text-2xl font-bold text-white mb-4">Support Center</h2>
-                            <p className="text-gray-400 mb-6">Have questions or need assistance? We're here to help!</p>
-                            <button onClick={() => navigate('support')} className="bg-blue-600 text-white px-6 py-2 rounded-md font-semibold hover:bg-blue-700 shadow-lg transition-all">Go to Support Page</button>
-                        </div>
-                    )}
-                    {activeTab === 'feedback' && (
-                        <div className="pt-8 mb-12">{showFeedbackThanks ? (<div className="bg-gray-800 border-l-4 border-green-500 text-white p-6 rounded-lg shadow-lg my-8 text-center"><h3 className="text-xl font-bold">Thank You!</h3><p className="text-gray-300 mt-2">Your feedback is valuable to us and helps improve the platform for everyone.</p></div>) : (<FeedbackForm userStatus={userStatus} onSuccessfulSubmit={handleFeedbackSuccess} />)}</div>
-                    )}
+                    {activeTab === 'support' && ( <div className="bg-gray-800 rounded-lg p-8 text-center"><h2 className="text-2xl font-bold text-white mb-4">Support Center</h2><p className="text-gray-400 mb-6">Have questions or need assistance? We're here to help!</p><button onClick={() => navigate('support')} className="bg-blue-600 text-white px-6 py-2 rounded-md font-semibold hover:bg-blue-700 shadow-lg transition-all">Go to Support Page</button></div> )}
+                    {activeTab === 'feedback' && ( <div className="pt-8 mb-12">{showFeedbackThanks ? (<div className="bg-gray-800 border-l-4 border-green-500 text-white p-6 rounded-lg shadow-lg my-8 text-center"><h3 className="text-xl font-bold">Thank You!</h3><p className="text-gray-300 mt-2">Your feedback is valuable to us and helps improve the platform for everyone.</p></div>) : (<FeedbackForm userStatus={userStatus} onSuccessfulSubmit={handleFeedbackSuccess} />)}</div> )}
                 </div>
             </div>
 
@@ -733,46 +882,13 @@ const UserDashboard = ({ navigate }) => {
                     <ExamCountdownWidget title="CAT 2025" targetDate="2025-11-29T23:59:59" />
                     <VocabCardWidget />
                 </div>
-                
-                {rdfcTests.length > 0 && (
-                    <AccordionSection title="RDFC Articles & Tests" icon={FaBookOpen} sectionKey="rdfc">
-                        {rdfcTests.slice(0, 10).map(test => <MobileRDFCListItem key={test.id} test={test} />)}
-                        {(rdfcTests.length > 10) && <button onClick={() => navigate('allTests', { tests: rdfcTests.map(t => ({...t, article: linkedArticles[t.id]})), title: 'All RDFC', contentType: 'rdfc' })} className="text-blue-400 font-semibold text-sm mt-2 w-full text-center">View All {rdfcTests.length} RDFC Tests...</button>}
-                    </AccordionSection>
-                )}
-                
-                {otherAddOnTests.length > 0 && (
-                    <AccordionSection title="Add-On Tests" icon={FaVial} sectionKey="addon">
-                        {otherAddOnTests.slice(0, 10).map(test => <MobileTestListItem key={test.id} test={test} />)}
-                        {(otherAddOnTests.length > 10) && <button onClick={() => navigate('allTests', { tests: otherAddOnTests, title: 'All Add-On Tests', contentType: 'test' })} className="text-blue-400 font-semibold text-sm mt-2 w-full text-center">View All {otherAddOnTests.length} Add-Ons...</button>}
-                    </AccordionSection>
-                )}
-
-                {sectionalTests.length > 0 && (
-                    <AccordionSection title="Sectional Tests" icon={FaVial} sectionKey="sectional">
-                        {sectionalTests.slice(0, 10).map(test => <MobileTestListItem key={test.id} test={test} />)}
-                        {(sectionalTests.length > 10) && <button onClick={() => navigate('allTests', { tests: sectionalTests, title: 'All Sectional Tests', contentType: 'sectional' })} className="text-blue-400 font-semibold text-sm mt-2 w-full text-center">View All {sectionalTests.length} Sectionals...</button>}
-                    </AccordionSection>
-                )}
-                
-                {mockTests.length > 0 && (
-                    <AccordionSection title="Mock Tests" icon={FaVial} sectionKey="mock">
-                        {mockTests.slice(0, 10).map(test => <MobileTestListItem key={test.id} test={test} />)}
-                        {(mockTests.length > 10) && <button onClick={() => navigate('allTests', { tests: mockTests, title: 'All Mock Tests', contentType: 'mock' })} className="text-blue-400 font-semibold text-sm mt-2 w-full text-center">View All {mockTests.length} Mocks...</button>}
-                    </AccordionSection>
-                )}
-
-
-                {userStatus?.isSubscribed && !userStatus.hasSubmittedFeedback && (
-                     <AccordionSection title="Feedback" icon={FaCommentDots} sectionKey="feedback">
-                        {showFeedbackThanks ? <p className="text-green-400 text-center">Thank you for your feedback!</p> : <FeedbackForm userStatus={userStatus} onSuccessfulSubmit={handleFeedbackSuccess} />}
-                    </AccordionSection>
-                )}
-
-                 <AccordionSection title="Support" icon={FaHeadset} sectionKey="support">
-                    <p className="text-gray-400 text-center mb-4">Need help? Visit our support center.</p>
-                    <button onClick={() => navigate('support')} className="w-full bg-blue-600 text-white px-4 py-2 rounded-md font-semibold hover:bg-blue-700">Go to Support</button>
-                </AccordionSection>
+                <AccordionSection title="Performance" icon={FaChartLine} sectionKey="performance"><PerformanceContent /></AccordionSection>
+                {rdfcTests.length > 0 && ( <AccordionSection title="RDFC Articles & Tests" icon={FaBookOpen} sectionKey="rdfc">{rdfcTests.slice(0, 10).map(test => <MobileRDFCListItem key={test.id} test={test} />)}{(rdfcTests.length > 10) && <button onClick={() => navigate('allTests', { tests: rdfcTests.map(t => ({...t, article: linkedArticles[t.id]})), title: 'All RDFC', contentType: 'rdfc' })} className="text-blue-400 font-semibold text-sm mt-2 w-full text-center">View All {rdfcTests.length} RDFC Tests...</button>}</AccordionSection> )}
+                {otherAddOnTests.length > 0 && ( <AccordionSection title="Add-On Tests" icon={FaVial} sectionKey="addon">{otherAddOnTests.slice(0, 10).map(test => <MobileTestListItem key={test.id} test={test} />)}{(otherAddOnTests.length > 10) && <button onClick={() => navigate('allTests', { tests: otherAddOnTests, title: 'All Add-On Tests', contentType: 'test' })} className="text-blue-400 font-semibold text-sm mt-2 w-full text-center">View All {otherAddOnTests.length} Add-Ons...</button>}</AccordionSection> )}
+                {sectionalTests.length > 0 && ( <AccordionSection title="Sectional Tests" icon={FaVial} sectionKey="sectional">{sectionalTests.slice(0, 10).map(test => <MobileTestListItem key={test.id} test={test} />)}{(sectionalTests.length > 10) && <button onClick={() => navigate('allTests', { tests: sectionalTests, title: 'All Sectional Tests', contentType: 'sectional' })} className="text-blue-400 font-semibold text-sm mt-2 w-full text-center">View All {sectionalTests.length} Sectionals...</button>}</AccordionSection> )}
+                {mockTests.length > 0 && ( <AccordionSection title="Mock Tests" icon={FaVial} sectionKey="mock">{mockTests.slice(0, 10).map(test => <MobileTestListItem key={test.id} test={test} />)}{(mockTests.length > 10) && <button onClick={() => navigate('allTests', { tests: mockTests, title: 'All Mock Tests', contentType: 'mock' })} className="text-blue-400 font-semibold text-sm mt-2 w-full text-center">View All {mockTests.length} Mocks...</button>}</AccordionSection> )}
+                {userStatus?.isSubscribed && !userStatus.hasSubmittedFeedback && ( <AccordionSection title="Feedback" icon={FaCommentDots} sectionKey="feedback">{showFeedbackThanks ? <p className="text-green-400 text-center">Thank you for your feedback!</p> : <FeedbackForm userStatus={userStatus} onSuccessfulSubmit={handleFeedbackSuccess} />}</AccordionSection> )}
+                <AccordionSection title="Support" icon={FaHeadset} sectionKey="support"><p className="text-gray-400 text-center mb-4">Need help? Visit our support center.</p><button onClick={() => navigate('support')} className="w-full bg-blue-600 text-white px-4 py-2 rounded-md font-semibold hover:bg-blue-700">Go to Support</button></AccordionSection>
             </div>
         </div>
     );
