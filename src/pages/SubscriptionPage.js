@@ -74,14 +74,11 @@ const PlanCard = ({ plan }) => {
     );
 
     return (
-        // CARD STYLING: Padding reduced to p-5. No fixed height.
         <div className={`relative bg-gray-900/70 backdrop-blur-sm rounded-2xl p-5 flex flex-col w-full md:w-[360px] transition-all duration-300 ease-in-out transform hover:scale-[1.03] ${plan.isRecommended ? 'border-2 border-amber-400 shadow-[0_0_20px_rgba(252,211,77,0.4)]' : 'border border-gray-700'}`}>
             {plan.isRecommended && <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-amber-400 text-gray-900 font-bold px-3 py-1 text-xs rounded-full shadow-md z-10">Recommended</div>}
             
-            {/* CONTENT WRAPPER: flex-grow pushes button to the bottom, ensuring consistent card heights in a row. */}
             <div className="flex-grow">
                 <div className="text-center mt-2">
-                    {/* Title size reduced */}
                     <h2 className="text-xl font-bold text-white">{plan.name}</h2>
                     {firstActiveOfferTier?.offerName && <p className="text-amber-400 mt-1 text-sm font-semibold">{firstActiveOfferTier.offerName}</p>}
                 </div>
@@ -92,7 +89,6 @@ const PlanCard = ({ plan }) => {
                     />
                 )}
                 
-                {/* Spacing reduced in this section */}
                 <div className="my-4 space-y-2">
                     {plan.tiers.map(tier => {
                         const isOfferActive = tier.hasOffer && tier.offerEndTime && new Date(tier.offerEndTime.toDate()) > new Date();
@@ -104,7 +100,6 @@ const PlanCard = ({ plan }) => {
                             <button 
                                 key={tier.id} 
                                 onClick={() => setSelectedTierId(tier.id)} 
-                                // Padding and font sizes reduced
                                 className={`w-full p-2.5 rounded-lg text-left flex justify-between items-center transition-all duration-300 ease-in-out
                                     ${isSelected ? 'bg-amber-500 text-gray-900 scale-105 shadow-lg' : 'bg-gray-700/80 hover:bg-gray-600/70 text-white'}`}
                             >
@@ -125,7 +120,6 @@ const PlanCard = ({ plan }) => {
 
                 <div>
                     <h3 className="font-semibold text-white text-left mb-2 text-sm">What's Included:</h3>
-                    {/* Spacing and icon size reduced */}
                     <ul className="space-y-1.5 text-gray-300">
                         {plan.features?.map((feature, idx) => (
                             <li key={feature.id || idx} className="flex items-start">
@@ -137,9 +131,9 @@ const PlanCard = ({ plan }) => {
                 </div>
             </div>
 
-            {/* Button padding and margin reduced */}
             <div className="mt-5 flex-shrink-0">
-                <button onClick={() => handleSubscribeClick(finalCheckoutLink)} className="w-full py-2.5 rounded-lg font-semibold text-sm transition-all duration-300 bg-amber-500 text-gray-900 hover:bg-amber-400 shadow-[0_4px_14px_0_rgb(252,211,77,0.39)]">Subscribe Now</button>
+                {/* BUTTON GLOW REMOVED: Replaced the bright custom shadow with a more subtle 'shadow-lg' */}
+                <button onClick={() => handleSubscribeClick(finalCheckoutLink)} className="w-full py-2.5 rounded-lg font-semibold text-sm transition-all duration-300 bg-amber-500 text-gray-900 hover:bg-amber-400 shadow-lg hover:shadow-xl">Subscribe Now</button>
             </div>
         </div>
     );
