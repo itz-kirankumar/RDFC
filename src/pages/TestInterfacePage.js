@@ -5,8 +5,6 @@ import { useAuth } from '../contexts/AuthContext';
 import ConfirmModal from '../components/ConfirmModal';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FaBook, FaTimes, FaCalculator, FaChevronLeft, FaChevronRight, FaArrowLeft, FaArrowRight } from 'react-icons/fa';
-// At the top of TestInterfacePage.js
-
 
 // --- Helper Hook for reliable intervals ---
 function useInterval(callback, delay) {
@@ -187,8 +185,6 @@ const Calculator = ({ setIsCalculatorOpen }) => {
         setCurrentValue(prev => prev.slice(0, -1) || '0');
     };
 
-
-
     const Button = ({ value, onClick, className, gridClass }) => (
         <button onClick={() => onClick(value)} className={`h-10 rounded shadow-sm font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-blue-400 ${className} ${gridClass}`}>
             {value}
@@ -352,7 +348,6 @@ const InstructionsPage2 = ({ test, onPrevious, onStartTest, termsAccepted, setTe
     </div>
 );
 
-
 const TestInterfacePage = ({ navigate, testId }) => {
     const { user, userData } = useAuth();
     const [test, setTest] = useState(null);
@@ -496,64 +491,22 @@ const TestInterfacePage = ({ navigate, testId }) => {
         }
     }, [isOnline, syncToFirestore]);
     
-    // --- MOVED UP: The submitTest function must be defined before it's used by other functions ---
+    // --- CORRECTED SUBMIT FUNCTION ---
     const submitTest = useCallback(async () => {
         if (submittingTestRef.current) return;
         submittingTestRef.current = true;
         setIsSubmitting(true);
 
+        // Record the final time spent on the last question.
         recordTimeSpentOnCurrentQuestion();
         
-        let finalTotalScore = 0;
-        let sectionWiseResults = [];
-        let totalAttempted = 0;
-        let totalCorrect = 0;
-        let totalQuestions = 0;
-        if (test && test.sections) {
-                totalQuestions = test.sections.reduce((acc, sec) => acc + sec.questions.length, 0);
-        
-                sectionWiseResults = test.sections.map((section, secIdx) => {
-                    let correct = 0;
-                    let incorrect = 0;
-                    let attempted = 0;
-                    
-                    section.questions.forEach((q, qIdx) => {
-                        const userAnswer = answers[secIdx]?.[qIdx];
-                        const isAttempted = userAnswer !== undefined && userAnswer !== null && userAnswer !== '';
-                        if (isAttempted) {
-                            attempted++;
-                            const isCorrect = q.type === 'TITA'
-                                ? String(userAnswer).toLowerCase() === String(q.correctOption).toLowerCase()
-                                : userAnswer === q.correctOption;
-                            if (isCorrect) correct++;
-                            else if (q.type !== 'TITA') incorrect++;
-                        }
-                    });
-                    totalCorrect += correct;
-                    totalAttempted += attempted;
-                    return {
-                        name: section.name,
-                        score: (correct * 3) - (incorrect * 1),
-                        correct,
-                        incorrect,
-                        unattempted: section.questions.length - attempted
-                    };
-                });
-                finalTotalScore = sectionWiseResults.reduce((acc, sec) => acc + sec.score, 0);
-            }
-            
-            const totalAccuracy = totalAttempted > 0 ? (totalCorrect / totalAttempted) * 100 : 0;
-            const totalTime = Object.values(timeTaken).reduce((acc, sec) => acc + Object.values(sec).reduce((sAcc, t) => sAcc + t, 0), 0);
-
+        // Prepare the final data to be saved to Firestore.
+        // We only save the raw data. The results page will handle calculations.
         const finalAttemptData = {
             status: 'completed',
-            totalScore: finalTotalScore,
             answers,
             timeTaken,
             questionStatuses,
-            sectionTimers,
-            currentSectionIndex,
-            currentQuestionIndex,
             completedAt: Timestamp.fromDate(new Date()),
         };
 
@@ -561,38 +514,33 @@ const TestInterfacePage = ({ navigate, testId }) => {
         if (key) {
              localStorage.setItem(key, JSON.stringify(finalAttemptData));
         }
+        
         if (!isOnline) {
-            alert("You are offline. Your final result has been saved to this device and will be submitted automatically when you reconnect.");
+            alert("You are offline. Your final result has been saved and will be submitted when you reconnect.");
             setIsSubmitting(false);
             submittingTestRef.current = false;
             return;
         }
+
         try {
+            // Update the document in Firestore
             if (attemptDocId) {
                 await updateDoc(doc(db, "attempts", attemptDocId), finalAttemptData);
             }
+            
+            // Clean up local storage
             if (key) localStorage.removeItem(key);
+            
+            // Ensure we don't navigate to the dashboard on fullscreen exit
             navigateOnExitRef.current = false;
+            
             if (document.fullscreenElement) {
                  await document.exitFullscreen();
             }
-            // Inside the submitTest function...
-            const attemptDataForNav = {
-                answers: answers,
-                timeTaken: timeTaken,
-                testId: test.id // Pass the testId as well
-            };
 
-        navigate('results', {
-                    test: test,
-                    // Pass all the calculated data directly
-                    sectionWiseResults,
-                    totalScore: finalTotalScore,
-                    totalAccuracy,
-                    totalTime,
-                    totalAttempted,
-                    totalQuestions,
-                });
+            // **FIX**: Navigate to the results page with the attemptId.
+            // The ResultAnalysis page will use this ID to fetch the data it needs.
+            navigate('results', { attemptId: attemptDocId });
 
         } catch (error) {
             console.error("Error submitting test:", error);
@@ -600,7 +548,7 @@ const TestInterfacePage = ({ navigate, testId }) => {
             setIsSubmitting(false);
             submittingTestRef.current = false;
         }
-    }, [answers, timeTaken, questionStatuses, sectionTimers, currentSectionIndex, currentQuestionIndex, getLocalStorageKey, isOnline, attemptDocId, navigate, recordTimeSpentOnCurrentQuestion, test]);
+    }, [answers, timeTaken, questionStatuses, getLocalStorageKey, isOnline, attemptDocId, navigate, recordTimeSpentOnCurrentQuestion, test]);
 
     const handleSubmitClick = useCallback(() => {
         submitTest();
@@ -721,7 +669,6 @@ const TestInterfacePage = ({ navigate, testId }) => {
         fetchAndPrepareTest();
     }, [testId, user, navigate]);
 
-
     const handleFullscreen = useCallback(() => {
         if (testContainerRef.current) {
             if (!document.fullscreenElement) {
@@ -740,9 +687,6 @@ const TestInterfacePage = ({ navigate, testId }) => {
             const isFullscreen = document.fullscreenElement !== null;
             setIsFullScreenActive(isFullscreen);
     
-           // Inside the useEffect that listens for 'fullscreenchange'
-
-// Add a check to see if submission is NOT in progress
             if (!isFullscreen && navigateOnExitRef.current && !submittingTestRef.current) {
                 navigateOnExitRef.current = false;
                 navigate('home');
@@ -818,7 +762,6 @@ const TestInterfacePage = ({ navigate, testId }) => {
         }
     }, [currentSectionIndex, currentQuestionIndex, loading, test, updateQuestionStatus, questionStatuses, isFullScreenActive, instructionStep]);
 
-
     const handleOptionSelect = (optionIndex) => {
         setAnswers(prev => ({ ...prev, [currentSectionIndex]: { ...prev[currentSectionIndex], [currentQuestionIndex]: optionIndex } }));
         updateQuestionStatus(currentSectionIndex, currentQuestionIndex, 'answered');
@@ -880,7 +823,6 @@ const TestInterfacePage = ({ navigate, testId }) => {
         }
     }, [handleFullscreen]);
     
-    // Define missing variables
     const isRestrictedType = test?.type === 'sectional' || test?.type === 'full-length';
     const shouldShowInstructions = instructionStep > 0;
 
