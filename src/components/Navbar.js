@@ -99,71 +99,87 @@ const Navbar = ({ navigate, bannerHeight = 0 }) => {
         return unsubscribe;
     }, [user]);
 
-    // Calculate streak when attempts, readArticles, or rdfcMap changes
+    // --- CORRECTED AND IMPROVED STREAK CALCULATION LOGIC ---
     useEffect(() => {
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-
-        const completedDates = new Set();
+        // A streak is defined as completing BOTH the article and the test on the day they were published.
+        
+        // 1. Get all dates the user completed BOTH an RDFC article and its test.
+        const completedTestDates = new Set();
         attempts.forEach(attempt => {
-            const testId = attempt.testId;
-            const publishDate = rdfcMap[testId];
+            const publishDate = rdfcMap[attempt.testId];
             if (publishDate) {
-                const publishedDay = new Date(publishDate);
-                publishedDay.setHours(0, 0, 0, 0);
                 const completedDay = new Date(attempt.completedAt.toDate());
                 completedDay.setHours(0, 0, 0, 0);
+                const publishedDay = new Date(publishDate);
+                publishedDay.setHours(0, 0, 0, 0);
                 if (completedDay.getTime() === publishedDay.getTime()) {
-                    completedDates.add(publishedDay.toISOString().split('T')[0]);
+                    completedTestDates.add(publishedDay.toISOString().split('T')[0]);
                 }
             }
         });
 
-        const viewedDates = new Set();
+        const viewedArticleDates = new Set();
         Object.entries(readArticles).forEach(([articleId, value]) => {
             if (value) {
                 const publishDate = rdfcMap[articleId];
                 if (publishDate) {
                     const publishedDay = new Date(publishDate);
                     publishedDay.setHours(0, 0, 0, 0);
-                    viewedDates.add(publishedDay.toISOString().split('T')[0]);
+                    viewedArticleDates.add(publishedDay.toISOString().split('T')[0]);
                 }
             }
         });
 
-        const bothDates = new Set([...completedDates].filter(date => viewedDates.has(date)));
+        // The intersection of these two sets are the days the user successfully completed their task.
+        const successfulTaskDates = new Set([...completedTestDates].filter(date => viewedArticleDates.has(date)));
 
-        const sortedDates = Array.from(bothDates).sort((a, b) => b.localeCompare(a));
-
-        let calculatedStreak = 0;
-        let lastDate = null;
-
-        for (const dateStr of sortedDates) {
-            const currentDate = new Date(dateStr);
-            currentDate.setHours(0, 0, 0, 0);
-
-            if (lastDate === null) {
-                const yesterday = new Date(today);
-                yesterday.setDate(today.getDate() - 1);
-                if (currentDate.getTime() === today.getTime() || currentDate.getTime() === yesterday.getTime()) {
-                    calculatedStreak = 1;
-                } else {
-                    calculatedStreak = 0;
-                    break;
-                }
-            } else {
-                const previousDay = new Date(lastDate);
-                previousDay.setDate(lastDate.getDate() - 1);
-                if (currentDate.getTime() === previousDay.getTime()) {
-                    calculatedStreak++;
-                } else {
-                    break;
-                }
-            }
-            lastDate = currentDate;
+        if (successfulTaskDates.size === 0) {
+            setCurrentStreak(0);
+            return;
         }
 
-        setCurrentStreak(calculatedStreak);
+        // 2. Sort the successful dates from most recent to oldest.
+        const sortedDates = Array.from(successfulTaskDates).sort((a, b) => new Date(b) - new Date(a));
+        
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        
+        let streak = 0;
+        let lastSuccessfulDate = null;
+
+        // 3. Check if the most recent activity is "current" (today or yesterday) to start the streak.
+        const mostRecentDate = new Date(sortedDates[0]);
+        const yesterday = new Date(today);
+        yesterday.setDate(today.getDate() - 1);
+
+        if (mostRecentDate.getTime() === today.getTime() || mostRecentDate.getTime() === yesterday.getTime()) {
+            streak = 1;
+            lastSuccessfulDate = mostRecentDate;
+        } else {
+            // If the last activity was before yesterday, the streak is broken.
+            setCurrentStreak(0);
+            return;
+        }
+
+        // 4. Continue counting backwards from the second-most-recent day.
+        for (let i = 1; i < sortedDates.length; i++) {
+            const currentDate = new Date(sortedDates[i]);
+            
+            const expectedPreviousDate = new Date(lastSuccessfulDate);
+            expectedPreviousDate.setDate(lastSuccessfulDate.getDate() - 1);
+            
+            // If the current date in our history matches the expected previous day, the streak continues.
+            if (currentDate.getTime() === expectedPreviousDate.getTime()) {
+                streak++;
+                lastSuccessfulDate = currentDate;
+            } else {
+                // If there's a gap, the streak is broken.
+                break;
+            }
+        }
+        
+        setCurrentStreak(streak);
+
     }, [attempts, readArticles, rdfcMap]);
 
     const navbarClasses = `
