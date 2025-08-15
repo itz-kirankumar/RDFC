@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../firebase/config';
-import Scorecard from '../components/Scorecard'; // Assuming Scorecard component is in this path
-import { FaChartPie, FaCheckCircle, FaStopwatch } from 'react-icons/fa';
+import Scorecard from '../components/Scorecard';
+import { FaChartPie, FaCheckCircle, FaStopwatch, FaExpand } from 'react-icons/fa';
 
 // --- Reusable Button Component ---
 const Button = ({ children, className = '', ...props }) => (
@@ -27,7 +27,7 @@ const AnswerOption = ({ option, index, isUserAnswer, isCorrectAnswer, showCorrec
     );
 };
 
-// --- Performance Metrics Table Component (Corrected & Improved) ---
+// --- Performance Metrics Table Component ---
 const PerformanceMetricsTable = ({ metrics }) => {
     const formatTime = (seconds) => {
         if (seconds === null || seconds === undefined) return 'N/A';
@@ -37,8 +37,8 @@ const PerformanceMetricsTable = ({ metrics }) => {
     };
 
     const getStatusColor = (status) => {
-        if (status === 'Correct') return '#22C55E'; // Green
-        if (status === 'Incorrect') return '#EF4444'; // Red
+        if (status === 'Correct') return '#22C55E';
+        if (status === 'Incorrect') return '#EF4444';
         return 'inherit';
     };
 
@@ -90,7 +90,6 @@ const AnalysisView = ({ test, attempt, allAttempts, currentQuestion, setCurrentQ
     const [mobileView, setMobileView] = useState('question');
     const [performanceMetrics, setPerformanceMetrics] = useState({});
 
-    // This effect recalculates metrics whenever the question changes
     useEffect(() => {
         const { secIdx, qIdx } = currentQuestion;
         const activeQuestion = test.sections[secIdx].questions[qIdx];
@@ -128,13 +127,11 @@ const AnalysisView = ({ test, attempt, allAttempts, currentQuestion, setCurrentQ
             };
         };
 
-        // --- Overall Metrics (Requires at least 2 people for comparison) ---
         const overallMetrics = allAttempts.length >= 2 ? calculateMetricsForGroup(allAttempts) : { attemptPercent: null, accuracy: null, timeTaken: null };
 
-        // --- Toppers Metrics (Top 10%, requires at least 10 people for meaningful data) ---
         let toppersMetrics = { attemptPercent: null, accuracy: null, timeTaken: null };
         if (allAttempts.length >= 10) {
-            const sortedAttempts = [...allAttempts].sort((a, b) => b.totalScore - a.totalScore);
+            const sortedAttempts = [...allAttempts].sort((a, b) => (b.totalScore ?? 0) - (a.totalScore ?? 0));
             const toppersCount = Math.ceil(sortedAttempts.length * 0.1);
             const toppersGroup = sortedAttempts.slice(0, toppersCount);
             toppersMetrics = calculateMetricsForGroup(toppersGroup);
@@ -152,14 +149,12 @@ const AnalysisView = ({ test, attempt, allAttempts, currentQuestion, setCurrentQ
             overallAccuracy: overallMetrics.accuracy,
         });
         
-        // Reset view state on question change
         setShowCorrectAnswerHighlight(false);
         setShowExplanationContent(false);
         setMobileView('question');
 
     }, [currentQuestion, allAttempts, test, attempt]);
 
-    // Defensive checks
     if (!test || !attempt || !test.sections || !attempt.answers) return <div className="text-center text-red-500 p-8">Error: Data for analysis is incomplete.</div>;
     const activeSection = test.sections[currentQuestion.secIdx];
     const activeQuestion = activeSection.questions[currentQuestion.qIdx];
@@ -188,19 +183,20 @@ const AnalysisView = ({ test, attempt, allAttempts, currentQuestion, setCurrentQ
 
     return (
         <div className="h-screen flex flex-col bg-gray-200 text-gray-800 font-sans">
-             {/* Header */}
              <div className="bg-white shadow-md p-2 flex-shrink-0 z-20">
                 <div className="max-w-full mx-auto px-4 flex justify-between items-center h-12">
                     <h1 className="text-md md:text-lg font-bold truncate">Analysis: {test.title}</h1>
-                    <div className="flex space-x-2 items-center">
-                        <Button onClick={() => setView('summary')} className="text-blue-600 hover:text-blue-800 text-xs font-semibold">
+                    <div className="flex space-x-4 items-center">
+                        <button onClick={handleFullscreen} title="Toggle Fullscreen" className="text-gray-500 hover:text-gray-900 p-1">
+                            <FaExpand className="h-5 w-5" />
+                        </button>
+                        <Button onClick={() => setView('summary')} className="text-blue-600 hover:text-blue-800 text-xs font-semibold !p-0">
                             &larr; Back to Summary
                         </Button>
                     </div>
                 </div>
             </div>
             
-            {/* Main Content Area */}
             <div className="flex-1 overflow-hidden flex flex-col md:flex-row max-w-full p-2 md:p-4 gap-4">
                 {showPassagePanel && (
                     <div className={`bg-white shadow-md rounded-lg p-4 md:p-6 flex-1 overflow-y-auto min-h-0 ${mobileView === 'passage' ? 'flex' : 'hidden'} md:flex flex-col`}>
@@ -271,7 +267,6 @@ const AnalysisView = ({ test, attempt, allAttempts, currentQuestion, setCurrentQ
                 </div>
             </div>
 
-            {/* Bottom Navigation */}
             <div className="flex-shrink-0">
                 <div className="md:hidden p-2 flex justify-between items-center bg-white border-t border-gray-200">
                     <Button onClick={() => handleNavigation('prev')} disabled={isFirstQuestion} className="bg-gray-200 text-gray-900 hover:bg-gray-300 disabled:opacity-50 text-sm">&larr; Prev</Button>
@@ -285,7 +280,10 @@ const AnalysisView = ({ test, attempt, allAttempts, currentQuestion, setCurrentQ
                 </div>
                 <div className="hidden md:flex bg-white shadow-lg p-4 justify-between items-center z-10 border-t border-gray-200">
                     <Button onClick={() => handleNavigation('prev')} disabled={isFirstQuestion} className="bg-gray-200 text-gray-900 hover:bg-gray-300 disabled:opacity-50">&larr; Previous</Button>
-                    <Button onClick={() => handleNavigation('next')} disabled={isLastQuestion} className="bg-gray-900 text-white hover:bg-gray-700 disabled:opacity-50">Next &rarr;</Button>
+                    <div className="flex items-center space-x-4">
+                        <Button onClick={() => handleNavigation('next')} disabled={isLastQuestion} className="bg-gray-900 text-white hover:bg-gray-700 disabled:opacity-50">Next &rarr;</Button>
+                        <Button onClick={handleCloseToDashboard} className="bg-gray-600 hover:bg-gray-700 text-white">Back to Dashboard</Button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -301,7 +299,18 @@ const ResultAnalysis = ({ navigate, attemptId }) => {
     const [currentQuestion, setCurrentQuestion] = useState({ secIdx: 0, qIdx: 0 });
     const analysisContainerRef = useRef(null);
 
-    // Main data fetching logic
+    const handleFullscreen = useCallback(() => {
+        if (analysisContainerRef.current) {
+            if (!document.fullscreenElement) {
+                analysisContainerRef.current.requestFullscreen().catch(err => {
+                    console.error(`Error attempting to enable full-screen mode: ${err.message} (${err.name})`);
+                });
+            } else {
+                document.exitFullscreen();
+            }
+        }
+    }, []);
+
     useEffect(() => {
         if (!attemptId) {
             console.error("No attempt ID provided.");
@@ -312,28 +321,25 @@ const ResultAnalysis = ({ navigate, attemptId }) => {
         const fetchData = async () => {
             setLoading(true);
             try {
-                // Fetch the user's specific attempt
                 const attemptRef = doc(db, 'attempts', attemptId);
                 const attemptSnap = await getDoc(attemptRef);
                 if (!attemptSnap.exists()) throw new Error("Attempt data not found.");
-                const attemptData = attemptSnap.data();
+                const attemptData = { ...attemptSnap.data(), id: attemptSnap.id };
                 setAttempt(attemptData);
 
-                // Fetch the test details
                 const testRef = doc(db, 'tests', attemptData.testId);
                 const testSnap = await getDoc(testRef);
                 if (!testSnap.exists()) throw new Error("Test data not found for this attempt.");
                 const testData = { id: testSnap.id, ...testSnap.data() };
                 setTest(testData);
 
-                // Fetch all other completed attempts for comparison metrics
                 const attemptsQuery = query(
                     collection(db, 'attempts'),
                     where('testId', '==', attemptData.testId),
                     where('status', '==', 'completed')
                 );
                 const querySnapshot = await getDocs(attemptsQuery);
-                const allAttemptsData = querySnapshot.docs.map(d => d.data());
+                const allAttemptsData = querySnapshot.docs.map(d => ({ ...d.data(), id: d.id }));
                 setAllAttempts(allAttemptsData);
 
             } catch (error) {
@@ -347,6 +353,58 @@ const ResultAnalysis = ({ navigate, attemptId }) => {
         fetchData();
     }, [attemptId, navigate]);
 
+    // --- FIX: Centralized all calculations in a top-level useMemo hook to fix conditional hook error ---
+    const analysisData = useMemo(() => {
+        if (!attempt || !test) {
+            return {
+                sectionWiseResults: [], totalScore: 0, totalCorrect: 0, totalIncorrect: 0,
+                totalAttempted: 0, totalQuestions: 0, totalAccuracy: 0, totalTime: 0,
+                synchronizedAllAttempts: [],
+            };
+        }
+
+        const sectionWiseResults = test.sections.map((section, secIdx) => {
+            let correct = 0, incorrect = 0, unattempted = 0, time = 0, incorrectMcq = 0;
+            section.questions.forEach((q, qIdx) => {
+                const userAnswer = attempt.answers?.[secIdx]?.[qIdx];
+                const isAttempted = userAnswer !== undefined && userAnswer !== null && userAnswer !== '';
+                if (!isAttempted) { unattempted++; } 
+                else {
+                    const isCorrect = q.type === 'TITA'
+                        ? String(userAnswer).toLowerCase() === String(q.correctOption).toLowerCase()
+                        : userAnswer === q.correctOption;
+                    if (isCorrect) correct++;
+                    else {
+                        incorrect++;
+                        if (q.type !== 'TITA') incorrectMcq++;
+                    }
+                }
+                time += attempt.timeTaken?.[secIdx]?.[qIdx] || 0;
+            });
+            const score = (correct * 3) - (incorrectMcq * 1);
+            return { name: section.name, score, correct, incorrect, unattempted, time, totalQuestions: section.questions.length };
+        });
+
+        const totalScore = attempt.totalScore ?? sectionWiseResults.reduce((acc, sec) => acc + sec.score, 0);
+        const totalCorrect = sectionWiseResults.reduce((acc, sec) => acc + sec.correct, 0);
+        const totalIncorrect = sectionWiseResults.reduce((acc, sec) => acc + sec.incorrect, 0);
+        const totalAttempted = totalCorrect + totalIncorrect;
+        const totalQuestions = test.sections.reduce((acc, sec) => acc + sec.questions.length, 0);
+        const totalAccuracy = totalAttempted > 0 ? (totalCorrect / totalAttempted) * 100 : 0;
+        const totalTime = sectionWiseResults.reduce((acc, sec) => acc + sec.time, 0);
+
+        const synchronizedAllAttempts = allAttempts.map(a => 
+            a.id === attempt.id 
+                ? { ...a, totalScore: totalScore } 
+                : a
+        );
+        
+        return {
+            sectionWiseResults, totalScore, totalCorrect, totalIncorrect, totalAttempted,
+            totalQuestions, totalAccuracy, totalTime, synchronizedAllAttempts
+        };
+
+    }, [attempt, test, allAttempts]);
 
     const handleCloseToDashboard = () => {
         if (document.fullscreenElement) document.exitFullscreen();
@@ -355,37 +413,6 @@ const ResultAnalysis = ({ navigate, attemptId }) => {
 
     if (loading) return <div className="text-center text-gray-400 p-8">Loading Analysis...</div>;
     if (!attempt || !test) return <div className="text-center text-red-500 p-8">Could not load analysis data.</div>;
-
-    // Calculate scorecard stats (this runs once)
-    const sectionWiseResults = test.sections.map((section, secIdx) => {
-        let correct = 0, incorrect = 0, unattempted = 0, time = 0, incorrectMcq = 0;
-        section.questions.forEach((q, qIdx) => {
-            const userAnswer = attempt.answers?.[secIdx]?.[qIdx];
-            const isAttempted = userAnswer !== undefined && userAnswer !== null && userAnswer !== '';
-            if (!isAttempted) { unattempted++; } 
-            else {
-                const isCorrect = q.type === 'TITA'
-                    ? String(userAnswer).toLowerCase() === String(q.correctOption).toLowerCase()
-                    : userAnswer === q.correctOption;
-                if (isCorrect) correct++;
-                else {
-                    incorrect++;
-                    if (q.type !== 'TITA') incorrectMcq++;
-                }
-            }
-            time += attempt.timeTaken?.[secIdx]?.[qIdx] || 0;
-        });
-        const score = (correct * 3) - (incorrectMcq * 1);
-        return { name: section.name, score, correct, incorrect, unattempted, time, totalQuestions: section.questions.length };
-    });
-
-    const totalScore = sectionWiseResults.reduce((acc, sec) => acc + sec.score, 0);
-    const totalCorrect = sectionWiseResults.reduce((acc, sec) => acc + sec.correct, 0);
-    const totalIncorrect = sectionWiseResults.reduce((acc, sec) => acc + sec.incorrect, 0);
-    const totalAttempted = totalCorrect + totalIncorrect;
-    const totalQuestions = test.sections.reduce((acc, sec) => acc + sec.questions.length, 0);
-    const totalAccuracy = totalAttempted > 0 ? (totalCorrect / totalAttempted) * 100 : 0;
-    const totalTime = sectionWiseResults.reduce((acc, sec) => acc + sec.time, 0);
     
     const showPassagePanel = (test.sections[currentQuestion.secIdx]?.questions[currentQuestion.qIdx]?.passage || test.sections[currentQuestion.secIdx]?.questions[currentQuestion.qIdx]?.passageImageUrl);
 
@@ -394,12 +421,12 @@ const ResultAnalysis = ({ navigate, attemptId }) => {
             {view === 'summary' ? (
                 <Scorecard 
                     test={test} 
-                    sectionWiseResults={sectionWiseResults} 
-                    totalScore={totalScore} 
-                    totalAccuracy={totalAccuracy} 
-                    totalTime={totalTime} 
-                    totalAttempted={totalAttempted} 
-                    totalQuestions={totalQuestions} 
+                    sectionWiseResults={analysisData.sectionWiseResults} 
+                    totalScore={analysisData.totalScore} 
+                    totalAccuracy={analysisData.totalAccuracy} 
+                    totalTime={analysisData.totalTime} 
+                    totalAttempted={analysisData.totalAttempted} 
+                    totalQuestions={analysisData.totalQuestions} 
                     setView={setView} 
                     handleCloseToDashboard={handleCloseToDashboard}
                 />
@@ -407,12 +434,13 @@ const ResultAnalysis = ({ navigate, attemptId }) => {
                 <AnalysisView 
                     test={test} 
                     attempt={attempt} 
-                    allAttempts={allAttempts}
+                    allAttempts={analysisData.synchronizedAllAttempts}
                     currentQuestion={currentQuestion} 
                     setCurrentQuestion={setCurrentQuestion} 
                     setView={setView} 
                     handleCloseToDashboard={handleCloseToDashboard} 
                     showPassagePanel={showPassagePanel}
+                    handleFullscreen={handleFullscreen}
                 />
             )}
         </div>
