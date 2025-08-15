@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { doc, getDoc, updateDoc, addDoc, collection, serverTimestamp, query, where, getDocs } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, addDoc, collection, serverTimestamp, query, where, getDocs, Timestamp } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { useAuth } from '../contexts/AuthContext';
 import ConfirmModal from '../components/ConfirmModal';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FaBook, FaTimes, FaCalculator, FaChevronLeft, FaChevronRight, FaArrowLeft, FaArrowRight } from 'react-icons/fa';
+// At the top of TestInterfacePage.js
+
 
 // --- Helper Hook for reliable intervals ---
 function useInterval(callback, delay) {
@@ -503,31 +505,45 @@ const TestInterfacePage = ({ navigate, testId }) => {
         recordTimeSpentOnCurrentQuestion();
         
         let finalTotalScore = 0;
+        let sectionWiseResults = [];
+        let totalAttempted = 0;
+        let totalCorrect = 0;
+        let totalQuestions = 0;
         if (test && test.sections) {
-            const sectionWiseResults = test.sections.map((section, secIdx) => {
-                let correct = 0;
-                let incorrectMcq = 0;
-                section.questions.forEach((q, qIdx) => {
-                    const userAnswer = answers[secIdx]?.[qIdx];
-                    const isAttempted = userAnswer !== undefined && userAnswer !== null && userAnswer !== '';
-                    if (isAttempted) {
-                        const isCorrect = q.type === 'TITA'
-                            ? String(userAnswer).toLowerCase() === String(q.correctOption).toLowerCase()
-                            : userAnswer === q.correctOption;
-                        if (isCorrect) {
-                            correct++;
-                        } else {
-                            if (q.type !== 'TITA') {
-                                incorrectMcq++;
-                            }
+                totalQuestions = test.sections.reduce((acc, sec) => acc + sec.questions.length, 0);
+        
+                sectionWiseResults = test.sections.map((section, secIdx) => {
+                    let correct = 0;
+                    let incorrect = 0;
+                    let attempted = 0;
+                    
+                    section.questions.forEach((q, qIdx) => {
+                        const userAnswer = answers[secIdx]?.[qIdx];
+                        const isAttempted = userAnswer !== undefined && userAnswer !== null && userAnswer !== '';
+                        if (isAttempted) {
+                            attempted++;
+                            const isCorrect = q.type === 'TITA'
+                                ? String(userAnswer).toLowerCase() === String(q.correctOption).toLowerCase()
+                                : userAnswer === q.correctOption;
+                            if (isCorrect) correct++;
+                            else if (q.type !== 'TITA') incorrect++;
                         }
-                    }
+                    });
+                    totalCorrect += correct;
+                    totalAttempted += attempted;
+                    return {
+                        name: section.name,
+                        score: (correct * 3) - (incorrect * 1),
+                        correct,
+                        incorrect,
+                        unattempted: section.questions.length - attempted
+                    };
                 });
-                const score = (correct * 3) - (incorrectMcq * 1);
-                return { score };
-            });
-            finalTotalScore = sectionWiseResults.reduce((acc, sec) => acc + sec.score, 0);
-        }
+                finalTotalScore = sectionWiseResults.reduce((acc, sec) => acc + sec.score, 0);
+            }
+            
+            const totalAccuracy = totalAttempted > 0 ? (totalCorrect / totalAttempted) * 100 : 0;
+            const totalTime = Object.values(timeTaken).reduce((acc, sec) => acc + Object.values(sec).reduce((sAcc, t) => sAcc + t, 0), 0);
 
         const finalAttemptData = {
             status: 'completed',
@@ -538,7 +554,7 @@ const TestInterfacePage = ({ navigate, testId }) => {
             sectionTimers,
             currentSectionIndex,
             currentQuestionIndex,
-            completedAt: serverTimestamp(),
+            completedAt: Timestamp.fromDate(new Date()),
         };
 
         const key = getLocalStorageKey();
@@ -556,11 +572,28 @@ const TestInterfacePage = ({ navigate, testId }) => {
                 await updateDoc(doc(db, "attempts", attemptDocId), finalAttemptData);
             }
             if (key) localStorage.removeItem(key);
-            navigateOnExitRef.current = true;
+            navigateOnExitRef.current = false;
             if (document.fullscreenElement) {
                  await document.exitFullscreen();
             }
-            navigate('results', { attemptId: attemptDocId });
+            // Inside the submitTest function...
+            const attemptDataForNav = {
+                answers: answers,
+                timeTaken: timeTaken,
+                testId: test.id // Pass the testId as well
+            };
+
+        navigate('results', {
+                    test: test,
+                    // Pass all the calculated data directly
+                    sectionWiseResults,
+                    totalScore: finalTotalScore,
+                    totalAccuracy,
+                    totalTime,
+                    totalAttempted,
+                    totalQuestions,
+                });
+
         } catch (error) {
             console.error("Error submitting test:", error);
             alert("A connection error occurred while submitting. Your progress is saved locally. Please try again.");
@@ -707,7 +740,10 @@ const TestInterfacePage = ({ navigate, testId }) => {
             const isFullscreen = document.fullscreenElement !== null;
             setIsFullScreenActive(isFullscreen);
     
-            if (!isFullscreen && navigateOnExitRef.current) {
+           // Inside the useEffect that listens for 'fullscreenchange'
+
+// Add a check to see if submission is NOT in progress
+            if (!isFullscreen && navigateOnExitRef.current && !submittingTestRef.current) {
                 navigateOnExitRef.current = false;
                 navigate('home');
             }

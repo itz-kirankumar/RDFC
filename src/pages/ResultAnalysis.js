@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { doc, getDoc, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebase/config';
-import { useAuth } from '../contexts/AuthContext';
 import Scorecard from '../components/Scorecard';
 
 // --- Reusable Button Component ---
@@ -36,19 +35,19 @@ const AnswerOption = ({ option, index, isUserAnswer, isCorrectAnswer, showCorrec
     );
 };
 
-// --- Analysis View Component ---
-const AnalysisView = ({ 
-    test, attempt, currentQuestion, setCurrentQuestion, 
+// --- Your Full, Original Analysis View Component ---
+const AnalysisView = ({
+    test, attempt, currentQuestion, setCurrentQuestion,
     showPassagePanel, handleFullscreen, setView, timeFormatted, handleCloseToDashboard
 }) => {
     const activeSection = test.sections[currentQuestion.secIdx];
     const activeQuestion = activeSection.questions[currentQuestion.qIdx];
     const originalUserAnswer = attempt.answers?.[currentQuestion.secIdx]?.[currentQuestion.qIdx];
-    
+
     const [showCorrectAnswerHighlight, setShowCorrectAnswerHighlight] = useState(false);
     const [showExplanationContent, setShowExplanationContent] = useState(false);
     const [mobileView, setMobileView] = useState('question');
-    
+
     useEffect(() => {
         setShowCorrectAnswerHighlight(false);
         setShowExplanationContent(false);
@@ -57,9 +56,9 @@ const AnalysisView = ({
 
     const handleRevealAnswer = () => setShowCorrectAnswerHighlight(true);
     const handleShowExplanation = () => setShowExplanationContent(true);
-    
+
     const isOriginalUnattempted = originalUserAnswer === null || originalUserAnswer === undefined || originalUserAnswer === '';
-    const isOriginalCorrect = activeQuestion.type === 'TITA' 
+    const isOriginalCorrect = activeQuestion.type === 'TITA'
         ? String(originalUserAnswer || '').toLowerCase() === String(activeQuestion.correctOption).toLowerCase()
         : originalUserAnswer === activeQuestion.correctOption;
 
@@ -68,11 +67,11 @@ const AnalysisView = ({
         let newQIdx = currentQuestion.qIdx;
         if (direction === 'next') {
             if (newQIdx < test.sections[newSecIdx].questions.length - 1) newQIdx++;
-            else if (newSecIdx < test.sections.length - 1) { newSecIdx++; newQIdx = 0; } 
+            else if (newSecIdx < test.sections.length - 1) { newSecIdx++; newQIdx = 0; }
             else { setView('summary'); return; }
         } else if (direction === 'prev') {
             if (newQIdx > 0) newQIdx--;
-            else if (newSecIdx > 0) { newSecIdx--; newQIdx = test.sections[newSecIdx].questions.length - 1; } 
+            else if (newSecIdx > 0) { newSecIdx--; newQIdx = test.sections[newSecIdx].questions.length - 1; }
             else { setView('summary'); return; }
         }
         setCurrentQuestion({ secIdx: newSecIdx, qIdx: newQIdx });
@@ -83,12 +82,10 @@ const AnalysisView = ({
 
     return (
         <div className="h-screen flex flex-col bg-gray-200 text-gray-800 font-sans">
-            {/* Header */}
             <div className="bg-white shadow-md p-2 flex-shrink-0 z-20">
                 <div className="max-w-full mx-auto px-4 flex justify-between items-center h-12">
                     <h1 className="text-md md:text-lg font-bold truncate">Analysis: {test.title}</h1>
                     <div className="flex space-x-2 items-center">
-                        {/* FIX: Fullscreen button now visible on mobile */}
                         <button onClick={handleFullscreen} title="Toggle Fullscreen" className="text-gray-500 hover:text-gray-900">
                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 8V4m0 0h4M4 4l5 5m11-5h-4m0 0v4m0-4l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5h-4m0 0v-4m0 4l-5-5"></path></svg>
                         </button>
@@ -98,10 +95,8 @@ const AnalysisView = ({
                     </div>
                 </div>
             </div>
-            
-            {/* Main Content Area */}
+
             <div className="flex-1 overflow-hidden flex flex-col md:flex-row max-w-full p-2 md:p-4 gap-4">
-                {/* FIX: Passage panel now uses flex-1 to share space equally and is conditionally rendered */}
                 {showPassagePanel && (
                     <div className={`bg-white shadow-md rounded-lg p-4 md:p-6 flex-1 overflow-y-auto min-h-0 ${mobileView === 'passage' ? 'flex' : 'hidden'} md:flex flex-col`}>
                         <h2 className="font-bold mb-2 text-gray-900">Directions for question {currentQuestion.qIdx + 1}</h2>
@@ -171,21 +166,17 @@ const AnalysisView = ({
                 </div>
             </div>
 
-            {/* Bottom Navigation */}
             <div className="flex-shrink-0">
-                {/* **FIX**: Mobile Prev/Next Footer */}
                 <div className="md:hidden p-2 flex justify-between items-center bg-white border-t border-gray-200">
                     <Button onClick={() => handleNavigation('prev')} disabled={isFirstQuestion} className="bg-gray-200 text-gray-900 hover:bg-gray-300 disabled:opacity-50 text-sm">&larr; Prev</Button>
                     <Button onClick={handleCloseToDashboard} className="bg-gray-600 hover:bg-gray-700 text-white text-sm">Dashboard</Button>
                     <Button onClick={() => handleNavigation('next')} disabled={isLastQuestion} className="bg-gray-900 text-white hover:bg-gray-700 disabled:opacity-50 text-sm">Next &rarr;</Button>
                 </div>
-                {/* Mobile Tab Bar */}
                 <div className="md:hidden flex justify-around bg-gray-800 text-white">
                     {showPassagePanel && <button onClick={() => setMobileView('passage')} className={`flex-1 py-3 text-sm font-semibold ${mobileView === 'passage' ? 'bg-gray-600' : ''}`}>Passage</button>}
                     <button onClick={() => setMobileView('question')} className={`flex-1 py-3 text-sm font-semibold ${mobileView === 'question' ? 'bg-gray-600' : ''}`}>Question</button>
                     <button onClick={() => setMobileView('palette')} className={`flex-1 py-3 text-sm font-semibold ${mobileView === 'palette' ? 'bg-gray-600' : ''}`}>Palette</button>
                 </div>
-                {/* **FIX**: Desktop Footer */}
                 <div className="hidden md:flex bg-white shadow-lg p-4 justify-between items-center z-10 border-t border-gray-200">
                     <Button onClick={() => handleNavigation('prev')} disabled={isFirstQuestion} className="bg-gray-200 text-gray-900 hover:bg-gray-300 disabled:opacity-50">&larr; Previous</Button>
                     <div className="flex space-x-4 items-center">
@@ -198,6 +189,7 @@ const AnalysisView = ({
     );
 };
 
+// --- Main Results Component ---
 const ResultAnalysis = ({ navigate, attemptId }) => {
     const [attempt, setAttempt] = useState(null);
     const [test, setTest] = useState(null);
@@ -206,6 +198,51 @@ const ResultAnalysis = ({ navigate, attemptId }) => {
     const [currentQuestion, setCurrentQuestion] = useState({ secIdx: 0, qIdx: 0 });
     const analysisContainerRef = useRef(null);
 
+    useEffect(() => {
+        if (!attemptId) {
+            console.error("No attempt ID provided.");
+            setLoading(false);
+            if(navigate) navigate('home');
+            return;
+        }
+
+        const attemptRef = doc(db, 'attempts', attemptId);
+        const unsubscribe = onSnapshot(attemptRef, async (attemptSnap) => {
+            if (attemptSnap.exists()) {
+                const attemptData = attemptSnap.data();
+                if (!attemptData.completedAt) {
+                    console.log("Waiting for server to finalize submission...");
+                    return;
+                }
+                setAttempt(attemptData);
+                try {
+                    const testRef = doc(db, 'tests', attemptData.testId);
+                    const testSnap = await getDoc(testRef);
+                    if (testSnap.exists()) {
+                        setTest({ id: testSnap.id, ...testSnap.data() });
+                    } else {
+                        throw new Error("Test data not found for this attempt.");
+                    }
+                } catch (error) {
+                    console.error("Error fetching test data:", error);
+                    alert(error.message);
+                } finally {
+                    setLoading(false);
+                }
+            } else {
+                console.error("Attempt data not found.");
+                alert("Attempt data not found.");
+                setLoading(false);
+            }
+        }, (error) => {
+            console.error("Error listening to results:", error);
+            alert("A connection error occurred while fetching results.");
+            setLoading(false);
+        });
+
+        return () => unsubscribe();
+    }, [attemptId, navigate]);
+
     const handleFullscreen = useCallback(() => {
         if (analysisContainerRef.current) {
             if (!document.fullscreenElement) analysisContainerRef.current.requestFullscreen().catch(err => console.error(`Fullscreen Error: ${err.message}`));
@@ -213,79 +250,41 @@ const ResultAnalysis = ({ navigate, attemptId }) => {
         }
     }, []);
 
-    const fetchData = useCallback(async () => {
-        if (!attemptId) { console.error("No attempt ID provided."); navigate('home'); return; }
-        try {
-            const attemptRef = doc(db, 'attempts', attemptId);
-            const attemptSnap = await getDoc(attemptRef);
-            if (attemptSnap.exists()) {
-                const attemptData = attemptSnap.data();
-                setAttempt(attemptData);
-                const testRef = doc(db, 'tests', attemptData.testId);
-                const testSnap = await getDoc(testRef);
-                if (testSnap.exists()) setTest(testSnap.data());
-                else throw new Error("Test data not found for this attempt.");
-            } else {
-                throw new Error("Attempt data not found.");
-            }
-        } catch (error) {
-            console.error("Error fetching results:", error);
-            alert(error.message);
-        } finally {
-            setLoading(false);
-        }
-    }, [attemptId, navigate]);
-
-    useEffect(() => {
-        fetchData();
-    }, [fetchData]);
-
     const handleCloseToDashboard = () => {
         if (document.fullscreenElement) document.exitFullscreen();
-        navigate('home');
+        if(navigate) navigate('home');
     };
 
     if (loading) return <div className="text-center text-gray-400 p-8">Loading Analysis...</div>;
-    if (!attempt || !test) return <div className="text-center text-gray-400 p-8">Could not load analysis data.</div>;
+    
+    if (!attempt || !test) return (
+        <div className="flex flex-col items-center justify-center h-screen text-center p-8">
+            <p className="text-xl text-gray-600">Could not load analysis data.</p>
+            <button onClick={handleCloseToDashboard} className="mt-4 px-6 py-2 bg-blue-600 rounded text-white font-semibold">
+                Return to Dashboard
+            </button>
+        </div>
+    );
 
-    // **FIX**: Corrected scoring logic for TITA questions
     const sectionWiseResults = test.sections.map((section, secIdx) => {
-        let correct = 0, incorrect = 0, unattempted = 0, time = 0;
-        let incorrectMcq = 0; // New counter specifically for MCQ penalty
-
+        let correct = 0, incorrect = 0, unattempted = 0;
+        let incorrectMcq = 0;
         section.questions.forEach((q, qIdx) => {
             const userAnswer = attempt.answers?.[secIdx]?.[qIdx];
             const isAttempted = userAnswer !== undefined && userAnswer !== null && userAnswer !== '';
-
             if (!isAttempted) {
                 unattempted++;
             } else {
-                const isCorrect = q.type === 'TITA'
-                    ? String(userAnswer).toLowerCase() === String(q.correctOption).toLowerCase()
-                    : userAnswer === q.correctOption;
-
-                if (isCorrect) {
-                    correct++;
-                } else {
-                    incorrect++; // Count all incorrect answers (including TITA)
-                    if (q.type !== 'TITA') {
-                        incorrectMcq++; // Only count non-TITA for penalty
-                    }
+                const isCorrect = q.type === 'TITA' ? String(userAnswer).toLowerCase() === String(q.correctOption).toLowerCase() : userAnswer === q.correctOption;
+                if (isCorrect) correct++;
+                else {
+                    incorrect++;
+                    if (q.type !== 'TITA') incorrectMcq++;
                 }
             }
-            time += attempt.timeTaken?.[secIdx]?.[qIdx] || 0;
         });
-        
-        const score = (correct * 3) - (incorrectMcq * 1); // Apply penalty only for incorrect MCQs
-        const attemptedCount = correct + incorrect; // Total attempted is correct + all incorrect
-        const accuracy = attemptedCount > 0 ? (correct / attemptedCount) * 100 : 0;
-        
-        return { 
-            name: section.name, score, correct, incorrect, unattempted, 
-            time, accuracy: accuracy.toFixed(2),
-            totalQuestions: section.questions.length,
-            attemptedQuestions: attemptedCount
-        };
+        const score = (correct * 3) - (incorrectMcq * 1);
+        return { name: section.name, score, correct, incorrect, unattempted };
     });
 
     const totalScore = sectionWiseResults.reduce((acc, sec) => acc + sec.score, 0);
@@ -294,13 +293,9 @@ const ResultAnalysis = ({ navigate, attemptId }) => {
     const totalAttempted = totalCorrect + totalIncorrect;
     const totalQuestions = test.sections.reduce((acc, sec) => acc + sec.questions.length, 0);
     const totalAccuracy = totalAttempted > 0 ? (totalCorrect / totalAttempted) * 100 : 0;
-    const totalTime = sectionWiseResults.reduce((acc, sec) => acc + sec.time, 0);
-
+    const totalTime = Object.values(attempt.timeTaken || {}).reduce((acc, sec) => acc + Object.values(sec || {}).reduce((sAcc, t) => sAcc + t, 0), 0);
     const timeFormatted = `${Math.floor((attempt.timeTaken?.[currentQuestion.secIdx]?.[currentQuestion.qIdx] || 0) / 60)}m ${Math.round((attempt.timeTaken?.[currentQuestion.secIdx]?.[currentQuestion.qIdx] || 0) % 60)}s`;
-
-    const activeSection = test.sections[currentQuestion.secIdx];
-    const activeQuestion = activeSection.questions[currentQuestion.qIdx];
-    const showPassagePanel = activeSection?.name !== 'QA' && (activeQuestion?.passage || activeQuestion?.passageImageUrl);
+    const showPassagePanel = test.sections[currentQuestion.secIdx]?.name !== 'QA' && (test.sections[currentQuestion.secIdx]?.questions[currentQuestion.qIdx]?.passage || test.sections[currentQuestion.secIdx]?.questions[currentQuestion.qIdx]?.passageImageUrl);
 
     return (
         <div ref={analysisContainerRef} className="h-screen flex flex-col bg-white text-gray-800 font-sans">
