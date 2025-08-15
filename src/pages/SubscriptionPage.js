@@ -109,6 +109,11 @@ const TieredPlanCard = ({ plan }) => {
     const selectedTier = plan.tiers.find(t => t.id === selectedTierId) || plan.tiers[0];
     const isOfferActiveForSelected = selectedTier.hasOffer && selectedTier.offerEndTime && new Date(selectedTier.offerEndTime.toDate()) > new Date();
     const finalCheckoutLink = isOfferActiveForSelected && selectedTier.offerCheckoutLink ? selectedTier.offerCheckoutLink : selectedTier.checkoutLink;
+    
+    // Find the first tier with an active, time-limited offer to display a banner timer
+    const firstActiveOfferTier = plan.tiers.find(tier => 
+        tier.hasOffer && tier.offerEndTime && new Date(tier.offerEndTime.toDate()) > new Date()
+    );
 
     return (
         <div className={`relative bg-gradient-to-br from-gray-800 to-gray-900 rounded-2xl p-6 flex flex-col w-full md:w-[360px] transition-all duration-300 ease-in-out hover:scale-105 ${plan.isRecommended ? 'border-2 border-amber-400 shadow-[0_0_20px_rgba(252,211,77,0.4)]' : 'border border-gray-700'}`}>
@@ -117,6 +122,14 @@ const TieredPlanCard = ({ plan }) => {
             <div className="text-center mt-2 flex-grow-0">
                 <h2 className="text-xl font-bold text-white">{plan.name}</h2>
             </div>
+            
+            {/* Display Countdown timer for the first active offer */}
+            {firstActiveOfferTier && (
+                 <CountdownTimer 
+                    targetDate={firstActiveOfferTier.offerEndTime.toDate()} 
+                    offerName={firstActiveOfferTier.offerName} 
+                />
+            )}
             
             <div className="my-6 space-y-3">
                 {plan.tiers.map(tier => {
