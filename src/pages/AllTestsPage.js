@@ -42,14 +42,6 @@ const CountdownTimer = ({ targetDate, onComplete }) => {
     );
 };
 
-const ActionButton = ({ icon, text, onClick, className, disabled = false }) => (
-    <button onClick={onClick} disabled={disabled} className={`w-full text-sm font-semibold px-3 py-3 rounded-md transition-all duration-300 flex items-center justify-center space-x-2 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 ${className} ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}>
-        {icon}
-        <span>{text}</span>
-    </button>
-);
-
-
 // --- MAIN PAGE COMPONENT ---
 
 const AllTestsPage = ({ navigate, tests: initialTests = [], title, contentType }) => {
@@ -58,7 +50,7 @@ const AllTestsPage = ({ navigate, tests: initialTests = [], title, contentType }
     const [userStatus, setUserStatus] = useState(null);
     const [filterType, setFilterType] = useState('All');
     const [liveTests, setLiveTests] = useState({});
-    const [visibleCount, setVisibleCount] = useState(10); // State to track visible items
+    const [visibleCount, setVisibleCount] = useState(10);
 
     useEffect(() => {
         if (!userData?.uid) return;
@@ -82,7 +74,6 @@ const AllTestsPage = ({ navigate, tests: initialTests = [], title, contentType }
         return unsub;
     }, [userData?.uid]);
     
-    // Check for live tests
     useEffect(() => {
         const checkLiveStatus = () => {
             const now = new Date().getTime();
@@ -94,7 +85,7 @@ const AllTestsPage = ({ navigate, tests: initialTests = [], title, contentType }
             });
             setLiveTests(newLiveTests);
         };
-        const interval = setInterval(checkLiveStatus, 1000 * 60); // Check every minute
+        const interval = setInterval(checkLiveStatus, 1000 * 60);
         checkLiveStatus();
         return () => clearInterval(interval);
     }, [initialTests]);
@@ -111,7 +102,6 @@ const AllTestsPage = ({ navigate, tests: initialTests = [], title, contentType }
         return sorted.filter(test => test.type.toUpperCase() === filterType.toUpperCase());
     }, [initialTests, filterType, contentType]);
 
-
     const getIsLocked = (test, itemType) => {
         if (test.isFree) return false;
         if (!userStatus?.isSubscribed) return true;
@@ -123,6 +113,8 @@ const AllTestsPage = ({ navigate, tests: initialTests = [], title, contentType }
             case 'MOCK': return !access.mock;
             case 'SECTIONAL': return !access.sectional;
             case 'TEST': return !access.test;
+            // --- FIX: Check for the correct access control property ---
+            case '10MIN': return !access.ten_min_tests; 
             default: return true;
         }
     };
@@ -152,7 +144,7 @@ const AllTestsPage = ({ navigate, tests: initialTests = [], title, contentType }
                 props = isArticleRead 
                     ? { icon: <FaCheckCircle />, text: "Read", onClick: () => navigate('rdfcArticleViewer', { articleUrl: test.article.url, testId: test.id }), className: "bg-gray-600 text-gray-300 hover:bg-gray-500" }
                     : { icon: <FaBookOpen />, text: "View Article", onClick: () => handleViewArticle(test.article.url, test.id), className: "bg-sky-600 text-white hover:bg-sky-500" };
-            } else { // test button
+            } else {
                 const attempt = userAttempts[test.id];
                 if (attempt?.status === 'completed') props = { icon: <FaEye />, text: "Analysis", onClick: () => navigate('results', { attemptId: attempt.id }), className: "bg-green-600 text-white hover:bg-green-500" };
                 else if (attempt?.status === 'in-progress') props = { icon: <FaPlay />, text: "Continue", onClick: () => navigate('test', { testId: test.id }), className: "bg-orange-500 text-white hover:bg-orange-400" };
@@ -177,9 +169,6 @@ const AllTestsPage = ({ navigate, tests: initialTests = [], title, contentType }
 
     const renderRdfcMobileRow = (test) => {
         const { article } = test;
-        const isArticleLocked = getIsLocked(test, 'rdfc_article');
-        const isTestLocked = getIsLocked(test, 'rdfc_test');
-        
         return (
             <tr key={test.id} className="hover:bg-gray-700/50">
                 <td className="px-4 py-3 text-sm">
@@ -198,7 +187,7 @@ const AllTestsPage = ({ navigate, tests: initialTests = [], title, contentType }
     };
     
     const renderAddOnDesktopRow = (test) => {
-        const typeColors = { MOCK: 'bg-purple-700 text-purple-200', SECTIONAL: 'bg-teal-700 text-teal-200', TEST: 'bg-gray-600 text-gray-300' };
+        const typeColors = { MOCK: 'bg-purple-700 text-purple-200', SECTIONAL: 'bg-teal-700 text-teal-200', TEST: 'bg-gray-600 text-gray-300', '10MIN': 'bg-rose-700 text-rose-200' };
         return (
             <tr key={test.id} className="hover:bg-gray-700/50">
                 <td className="px-6 py-4 text-sm"><div className="flex items-center"><span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500 font-semibold">{test.title}</span>{test.isFree && <span className="ml-2 text-xs font-semibold rounded-full bg-green-700 text-green-200 px-2 py-1">Free</span>}</div></td>
@@ -210,7 +199,7 @@ const AllTestsPage = ({ navigate, tests: initialTests = [], title, contentType }
     };
     
     const renderAddOnMobileRow = (test) => {
-        const typeColors = { MOCK: 'bg-purple-700 text-purple-200', SECTIONAL: 'bg-teal-700 text-teal-200', TEST: 'bg-gray-600 text-gray-300' };
+        const typeColors = { MOCK: 'bg-purple-700 text-purple-200', SECTIONAL: 'bg-teal-700 text-teal-200', TEST: 'bg-gray-600 text-gray-300', '10MIN': 'bg-rose-700 text-rose-200' };
         return (
             <tr key={test.id} className="hover:bg-gray-700/50">
                 <td className="px-4 py-3 text-sm">
@@ -292,44 +281,33 @@ const AllTestsPage = ({ navigate, tests: initialTests = [], title, contentType }
             
             {contentType !== 'rdfc' && (
                 <div className="flex space-x-2 mb-6 p-2 bg-gray-800/50 rounded-lg self-start">
-                    {['All', 'Mock', 'Sectional', 'Test'].filter(type => {
+                    {['All', 'Mock', 'Sectional', '10Min', 'Test'].filter(type => {
                         if (type === 'All' && sortedAndFilteredTests.length > 0) return true;
                         if (initialTests.some(t => t.type.toUpperCase() === type.toUpperCase())) return true;
                         return false;
                     }).map(type => (
                         <button key={type} onClick={() => setFilterType(type)} className={`px-4 py-1.5 text-sm font-semibold rounded-full transition-colors ${filterType === type ? 'bg-blue-600 text-white' : 'text-gray-300 hover:bg-gray-700'}`}>
-                            {type}
+                            {type === '10Min' ? '10 Min Tests' : type}
                         </button>
                     ))}
                 </div>
             )}
 
-            {/* Desktop View */}
             <div className="hidden md:block">
                 {sortedAndFilteredTests.length > 0 ? (
                     contentType === 'rdfc'
                     ? renderDesktopTable(['Title', 'Article Name', 'Article Description', 'Article Action', 'Test Action'], renderRDFCDesktopRow)
                     : renderDesktopTable(['Title', 'Type', 'Description', 'Action'], renderAddOnDesktopRow)
-                ) : (
-                    <div className="text-center text-gray-500 p-12 bg-gray-800 rounded-lg">
-                        <p>No tests available in this category yet.</p>
-                    </div>
-                )}
+                ) : ( <div className="text-center text-gray-500 p-12 bg-gray-800 rounded-lg"><p>No tests available in this category yet.</p></div> )}
             </div>
 
-            {/* Mobile View */}
             <div className="md:hidden">
                 {sortedAndFilteredTests.length > 0 ? (
                     contentType === 'rdfc'
                     ? renderMobileTable(['Details', 'Actions'], renderRdfcMobileRow)
                     : renderMobileTable(['Details', 'Action'], renderAddOnMobileRow)
-                ) : (
-                    <div className="text-center text-gray-500 p-12 bg-gray-800 rounded-lg">
-                        <p>No tests available in this category yet.</p>
-                    </div>
-                )}
+                ) : ( <div className="text-center text-gray-500 p-12 bg-gray-800 rounded-lg"><p>No tests available in this category yet.</p></div> )}
             </div>
-
         </div>
     );
 };

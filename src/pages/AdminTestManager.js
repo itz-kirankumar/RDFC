@@ -6,7 +6,6 @@ import { Switch, Dialog, Transition } from '@headlessui/react';
 // --- Scheduling Modal Component ---
 const ScheduleModal = ({ isOpen, setIsOpen, test, onSave }) => {
     const [scheduleOption, setScheduleOption] = useState('immediately');
-    // MODIFICATION: Initialize with empty strings to prevent uncontrolled inputs
     const [scheduledDate, setScheduledDate] = useState('');
     const [scheduledTime, setScheduledTime] = useState('');
 
@@ -168,6 +167,8 @@ const AdminTestManager = ({ navigate }) => {
                 return 'bg-blue-200 text-blue-800';
             case 'SECTIONAL':
                 return 'bg-purple-200 text-purple-800';
+            case '10MIN': // New style for 10 Min Tests
+                return 'bg-rose-200 text-rose-800';
             case 'TEST':
                 return 'bg-green-200 text-green-800';
             default:
@@ -187,6 +188,8 @@ const AdminTestManager = ({ navigate }) => {
                     <button onClick={() => setFilter('TEST')} className={`px-4 py-2 text-sm rounded-md font-semibold transition-colors ${getButtonClass('TEST')}`}>Tests</button>
                     <button onClick={() => setFilter('SECTIONAL')} className={`px-4 py-2 text-sm rounded-md font-semibold transition-colors ${getButtonClass('SECTIONAL')}`}>Sectional</button>
                     <button onClick={() => setFilter('MOCK')} className={`px-4 py-2 text-sm rounded-md font-semibold transition-colors ${getButtonClass('MOCK')}`}>Mock</button>
+                    {/* --- NEW FILTER BUTTON --- */}
+                    <button onClick={() => setFilter('10MIN')} className={`px-4 py-2 text-sm rounded-md font-semibold transition-colors ${getButtonClass('10MIN')}`}>10 Min</button>
                 </div>
 
                 <button 

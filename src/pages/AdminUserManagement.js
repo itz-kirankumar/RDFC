@@ -21,7 +21,7 @@ const FormInput = ({ label, type = 'number', value, onChange, placeholder = '', 
     </div>
 );
 
-// --- MODIFICATION: Checkbox Component for Access Control ---
+// --- Access Control Checkbox Component ---
 const AccessCheckbox = ({ label, name, checked, onChange }) => (
     <label className="flex items-center space-x-3 p-2 rounded-md hover:bg-gray-700/50 cursor-pointer">
         <input
@@ -40,17 +40,21 @@ const AccessCheckbox = ({ label, name, checked, onChange }) => (
 const UserEditModal = ({ isOpen, setIsOpen, user, handleGrantAccess, handleRevokeAccess, plans, validityDays, setValidityDays, selectedPlanId, setSelectedPlanId, accessControl, setAccessControl }) => {
     const [pricePaid, setPricePaid] = useState('');
     
+    // Default access control structure including the new 'ten_min_tests'
+    const defaultAccess = { rdfc_articles: false, rdfc_tests: false, test: false, sectional: false, mock: false, ten_min_tests: false };
+
     useEffect(() => {
         if (user) {
             setValidityDays(user.expiryDate ? Math.ceil((user.expiryDate.toDate().getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)) : 30);
             setSelectedPlanId(user.planId || '');
             setPricePaid(user.planPrice || '');
-            setAccessControl(user.accessControl || { rdfc_articles: false, rdfc_tests: false, test: false, sectional: false, mock: false });
+            // Ensure the accessControl state includes the new field, even for older user documents
+            setAccessControl({ ...defaultAccess, ...(user.accessControl || {}) });
         } else {
             setValidityDays(30);
             setSelectedPlanId('');
             setPricePaid('');
-            setAccessControl({ rdfc_articles: false, rdfc_tests: false, test: false, sectional: false, mock: false });
+            setAccessControl(defaultAccess);
         }
     }, [user, setAccessControl, setValidityDays, setSelectedPlanId]);
 
@@ -59,7 +63,12 @@ const UserEditModal = ({ isOpen, setIsOpen, user, handleGrantAccess, handleRevok
     const handleAccessChange = (e) => {
         const { name, checked } = e.target;
         if (name === 'all') {
-            setAccessControl({ rdfc_articles: checked, rdfc_tests: checked, test: checked, sectional: checked, mock: checked });
+            // Update all access fields when 'All Access' is toggled
+            const allAccessState = Object.keys(defaultAccess).reduce((acc, key) => {
+                acc[key] = checked;
+                return acc;
+            }, {});
+            setAccessControl(allAccessState);
         } else {
             setAccessControl(prev => ({ ...prev, [name]: checked }));
         }
@@ -79,14 +88,15 @@ const UserEditModal = ({ isOpen, setIsOpen, user, handleGrantAccess, handleRevok
         
         finalPrice = parseInt(pricePaid);
         if (isNaN(finalPrice)) {
-            finalPrice = null; // Allow granting access without a price
+            finalPrice = null;
         }
         
         handleGrantAccess(user.id, user.email, validityDays, finalPlanId, finalPlanName, finalPrice, accessControl);
         setIsOpen(false);
     };
 
-    const allChecked = accessControl.rdfc_articles && accessControl.rdfc_tests && accessControl.test && accessControl.sectional && accessControl.mock;
+    // Check if all individual access controls are checked
+    const allChecked = Object.values(accessControl).every(v => v === true);
 
     return (
         <Transition appear show={isOpen} as={Fragment}>
@@ -108,6 +118,8 @@ const UserEditModal = ({ isOpen, setIsOpen, user, handleGrantAccess, handleRevok
                                     <AccessCheckbox label="RDFC Tests" name="rdfc_tests" checked={accessControl.rdfc_tests} onChange={handleAccessChange} />
                                     <AccessCheckbox label="Mock Tests" name="mock" checked={accessControl.mock} onChange={handleAccessChange} />
                                     <AccessCheckbox label="Sectional Tests" name="sectional" checked={accessControl.sectional} onChange={handleAccessChange} />
+                                    {/* --- NEW CHECKBOX FOR 10 MIN TESTS --- */}
+                                    <AccessCheckbox label="10 Min Tests" name="ten_min_tests" checked={accessControl.ten_min_tests} onChange={handleAccessChange} />
                                     <AccessCheckbox label="Other Add-On Tests" name="test" checked={accessControl.test} onChange={handleAccessChange} />
                                 </div>
                             </div>
@@ -230,7 +242,6 @@ const PremiumUserRow = ({ user, mySettledUsers, handleToggleMySettledStatus, han
 // --- Expiry Management Row Component (for 'Expiry' and 'Verified' tabs) ---
 const ExpiryManagementRow = ({ user, handleOpenModal, onMarkAsVerified, isVerifiedTab = false }) => {
     const now = new Date();
-    // Ensure expiryDate exists and has a toDate method before proceeding
     const expiry = user.expiryDate?.toDate ? user.expiryDate.toDate() : null;
     const diffTime = expiry ? expiry.getTime() - now.getTime() : -Infinity;
     const diffDays = Math.ceil(diffTime / (1000 * 3600 * 24));
@@ -251,7 +262,6 @@ const ExpiryManagementRow = ({ user, handleOpenModal, onMarkAsVerified, isVerifi
 
     return (
         <tr key={user.id}>
-            {/* UPDATED: Use user.name with a fallback to user.email */}
             <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">{user.name || user.email}</td>
             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400">{user.email}</td>
             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400">
@@ -292,7 +302,8 @@ export default function AdminUserManagement() {
     const usersPerPage = 10;
     const [totalUsersCount, setTotalUsersCount] = useState(0);
     const [totalPremiumUsersCount, setTotalPremiumUsersCount] = useState(0);
-    const [accessControl, setAccessControl] = useState({ rdfc_articles: false, rdfc_tests: false, test: false, sectional: false, mock: false });
+    // Add the new access control field to the initial state
+    const [accessControl, setAccessControl] = useState({ rdfc_articles: false, rdfc_tests: false, test: false, sectional: false, mock: false, ten_min_tests: false });
 
     useEffect(() => {
         const plansCol = collection(db, 'subscriptionPlans');
@@ -303,9 +314,6 @@ export default function AdminUserManagement() {
 
         const usersCol = collection(db, 'users');
         const unsubscribeUsers = onSnapshot(usersCol, (snapshot) => {
-            // REMOVED: Auto-revoke logic that was preventing expired users from showing up.
-            // This kind of logic is better suited for a backend function.
-
             const fetchedUsers = snapshot.docs.map(processUserData).filter(u => !u.isAdmin);
             setUsers(fetchedUsers);
             setTotalUsersCount(snapshot.docs.filter(doc => !doc.data().isAdmin).length);
@@ -317,14 +325,12 @@ export default function AdminUserManagement() {
         });
 
         if (userData?.uid) {
-            // Settled users listener
             const mySettledUsersColRef = collection(db, 'adminSettings', userData.uid, 'settledUsers');
             const unsubscribeMySettledUsers = onSnapshot(mySettledUsersColRef, (snapshot) => {
                 const settledUserIds = snapshot.docs.map(doc => doc.id);
                 setMySettledUsers(settledUserIds);
             }, (error) => console.error("Error fetching admin's settled users:", error));
 
-            // Verified expiry users listener
             const verifiedExpiryUsersColRef = collection(db, 'adminSettings', userData.uid, 'verifiedExpiryUsers');
             const unsubscribeVerifiedExpiryUsers = onSnapshot(verifiedExpiryUsersColRef, (snapshot) => {
                 const verifiedUserIds = snapshot.docs.map(doc => doc.id);
@@ -403,7 +409,6 @@ export default function AdminUserManagement() {
                     accessControl: null,
                 };
                 await updateDoc(userRef, updatedUserRefData);
-                // Clean up from admin-specific lists
                 await deleteDoc(mySettledUserRef).catch(()=>{}); 
                 await deleteDoc(verifiedUserRef).catch(()=>{}); 
 

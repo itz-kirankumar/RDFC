@@ -152,6 +152,7 @@ const CreateTestPage = ({ navigate, testToEdit }) => {
                             <label className="block text-sm font-medium text-gray-300">Test Type</label>
                             <select value={type} onChange={e => setType(e.target.value)} className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-white focus:ring focus:ring-gray-500 focus:ring-opacity-50">
                                 <option value="TEST">Test</option>
+                                <option value="10MIN">10 Min Test</option>
                                 <option value="SECTIONAL">Sectional</option>
                                 <option value="MOCK">Full Mock</option>
                             </select>

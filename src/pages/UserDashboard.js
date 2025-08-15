@@ -4,7 +4,7 @@ import { db } from '../firebase/config';
 import { useAuth } from '../contexts/AuthContext';
 import FeedbackForm from '../components/FeedbackForm';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FaEye, FaLock, FaPlay, FaCheckCircle, FaHourglassHalf, FaBookOpen, FaCrown, FaTachometerAlt, FaVial, FaCommentDots, FaHeadset, FaChevronDown, FaArrowLeft, FaArrowRight, FaChartLine, FaBullseye, FaStar, FaTrophy } from 'react-icons/fa';
+import { FaEye, FaLock, FaPlay, FaCheckCircle, FaHourglassHalf, FaBookOpen, FaCrown, FaTachometerAlt, FaVial, FaCommentDots, FaHeadset, FaChevronDown, FaArrowLeft, FaArrowRight, FaChartLine, FaBullseye, FaStar, FaTrophy, FaBolt } from 'react-icons/fa';
 
 
 // --- WIDGETS AND HELPERS START ---
@@ -346,10 +346,10 @@ const UserDashboard = ({ navigate }) => {
     const { metrics, leaderboard, currentUserEntry, loading: performanceLoading } = usePerformanceData(userData?.uid);
 
     const { 
-        rdfcTests, mockTests, sectionalTests, otherAddOnTests
+        rdfcTests, mockTests, sectionalTests, otherAddOnTests, tenMinTests
     } = useMemo(() => {
         if (!allTests || allTests.length === 0) {
-            return { rdfcTests: [], mockTests: [], sectionalTests: [], otherAddOnTests: [] };
+            return { rdfcTests: [], mockTests: [], sectionalTests: [], otherAddOnTests: [], tenMinTests: [] };
         }
         
         const rdfc = allTests.filter(test => linkedArticles[test.id]).sort((a,b) => {
@@ -367,7 +367,11 @@ const UserDashboard = ({ navigate }) => {
             if (a.isFree !== b.isFree) return a.isFree ? -1 : 1;
             return (b.createdAt?.toDate() || 0) - (a.createdAt?.toDate() || 0);
         });
-        const others = nonRdfcTests.filter(t => t.type?.toUpperCase() === 'TEST').sort((a, b) => {
+        const tenMins = nonRdfcTests.filter(t => t.type?.toUpperCase() === '10MIN').sort((a, b) => {
+            if (a.isFree !== b.isFree) return a.isFree ? -1 : 1;
+            return (b.createdAt?.toDate() || 0) - (a.createdAt?.toDate() || 0);
+        });
+        const others = nonRdfcTests.filter(t => !['MOCK', 'SECTIONAL', '10MIN'].includes(t.type?.toUpperCase())).sort((a, b) => {
             if (a.isFree !== b.isFree) return a.isFree ? -1 : 1;
             return (b.createdAt?.toDate() || 0) - (a.createdAt?.toDate() || 0);
         });
@@ -376,6 +380,7 @@ const UserDashboard = ({ navigate }) => {
             rdfcTests: rdfc,
             mockTests: mocks,
             sectionalTests: sectionals,
+            tenMinTests: tenMins,
             otherAddOnTests: others
         };
     }, [allTests, linkedArticles]);
@@ -388,7 +393,7 @@ const UserDashboard = ({ navigate }) => {
         const checkLiveStatus = () => {
             const now = new Date().getTime();
             const newLiveTests = {};
-            [...rdfcTests, ...mockTests, ...sectionalTests, ...otherAddOnTests].forEach(test => {
+            [...rdfcTests, ...mockTests, ...sectionalTests, ...otherAddOnTests, ...tenMinTests].forEach(test => {
                 if (test.liveAt?.toDate().getTime() <= now) {
                     newLiveTests[test.id] = true;
                 }
@@ -398,7 +403,7 @@ const UserDashboard = ({ navigate }) => {
         const interval = setInterval(checkLiveStatus, 1000 * 60);
         checkLiveStatus();
         return () => clearInterval(interval);
-    }, [rdfcTests, mockTests, sectionalTests, otherAddOnTests]);
+    }, [rdfcTests, mockTests, sectionalTests, otherAddOnTests, tenMinTests]);
 
     const loading = masterDataLoading || !userStatus;
 
@@ -423,6 +428,7 @@ const UserDashboard = ({ navigate }) => {
         switch (test.type?.toUpperCase()) {
             case 'MOCK': return !access.mock;
             case 'SECTIONAL': return !access.sectional;
+            case '10MIN': return !access.ten_min_tests;
             case 'TEST': return !access.test;
             default: return true;
         }
@@ -442,7 +448,7 @@ const UserDashboard = ({ navigate }) => {
             else if(type === 'article') {
                 if(isArticleRead) { text = "Article Read"; action = () => navigate('rdfcArticleViewer', { articleUrl: article.url, testId: test.id }); className = "bg-gray-600 hover:bg-gray-700 text-gray-300"; icon = <FaCheckCircle />; } 
                 else { text = "View Article"; action = () => handleViewArticle(article.url, test.id); className = "bg-blue-600 hover:bg-blue-700 text-white"; icon = <FaBookOpen />; }
-            } else { // type === 'test'
+            } else {
                 const attempt = userAttempts[test.id];
                 if (attempt?.status === 'completed') { text = "View Analysis"; action = () => navigate('results', { attemptId: attempt.id }); className = "bg-green-600 hover:bg-green-700 text-white"; icon = <FaEye />; } 
                 else if (attempt?.status === 'in-progress') { text = "Continue Test"; action = () => navigate('test', { testId: test.id }); className = "bg-orange-500 hover:bg-orange-600 text-white"; icon = <FaPlay />; } 
@@ -471,7 +477,7 @@ const UserDashboard = ({ navigate }) => {
     const renderAddOnTestRow = (test) => {
         const isScheduled = test.liveAt && test.liveAt.toDate() > new Date() && !liveTests[test.id];
         const isLocked = getIsLocked(test, test.type);
-        const typeColors = { MOCK: 'bg-purple-700 text-purple-200', SECTIONAL: 'bg-teal-700 text-teal-200', TEST: 'bg-gray-600 text-gray-300' };
+        const typeColors = { MOCK: 'bg-purple-700 text-purple-200', SECTIONAL: 'bg-teal-700 text-teal-200', TEST: 'bg-gray-600 text-gray-300', '10MIN': 'bg-rose-700 text-rose-200' };
 
         const renderCellContent = () => {
             if (isScheduled) return <div className="w-full h-10 flex items-center justify-center"><CountdownTimer targetDate={test.liveAt.toDate()} onComplete={() => updateLiveTests(test.id)} /></div>;
@@ -598,26 +604,13 @@ const UserDashboard = ({ navigate }) => {
         )
     };
     
-    // --- NEW LEADERBOARD ROW COMPONENT ---
     const LeaderboardRow = ({ entry, rank }) => {
         const isTopThree = rank <= 3;
 
         const rankStyles = [
-            { // Rank 1
-                bg: 'bg-gradient-to-br from-amber-400 to-yellow-500',
-                icon: 'text-white',
-                name: 'text-transparent bg-clip-text bg-gradient-to-r from-amber-300 to-yellow-400 font-bold',
-            },
-            { // Rank 2
-                bg: 'bg-gradient-to-br from-gray-300 to-gray-500',
-                icon: 'text-white',
-                name: 'text-transparent bg-clip-text bg-gradient-to-r from-gray-200 to-gray-400 font-semibold',
-            },
-            { // Rank 3
-                bg: 'bg-gradient-to-br from-orange-400 to-amber-600',
-                icon: 'text-white',
-                name: 'text-transparent bg-clip-text bg-gradient-to-r from-orange-300 to-amber-500 font-semibold',
-            }
+            { bg: 'bg-gradient-to-br from-amber-400 to-yellow-500', icon: 'text-white', name: 'text-transparent bg-clip-text bg-gradient-to-r from-amber-300 to-yellow-400 font-bold' },
+            { bg: 'bg-gradient-to-br from-gray-300 to-gray-500', icon: 'text-white', name: 'text-transparent bg-clip-text bg-gradient-to-r from-gray-200 to-gray-400 font-semibold' },
+            { bg: 'bg-gradient-to-br from-orange-400 to-amber-600', icon: 'text-white', name: 'text-transparent bg-clip-text bg-gradient-to-r from-orange-300 to-amber-500 font-semibold' }
         ];
 
         return (
@@ -627,13 +620,9 @@ const UserDashboard = ({ navigate }) => {
                         <div className={`w-8 h-8 rounded-full flex items-center justify-center shadow-lg ${rankStyles[rank - 1].bg}`}>
                             <FaTrophy className={`text-lg ${rankStyles[rank - 1].icon}`} />
                         </div>
-                    ) : (
-                        <span className="text-gray-500 font-bold text-lg">{rank}</span>
-                    )}
+                    ) : ( <span className="text-gray-500 font-bold text-lg">{rank}</span> )}
                 </div>
-                <p className={`flex-1 truncate ${isTopThree ? rankStyles[rank - 1].name : 'text-white'}`}>
-                    {entry.name}
-                </p>
+                <p className={`flex-1 truncate ${isTopThree ? rankStyles[rank - 1].name : 'text-white'}`}>{entry.name}</p>
                 <div className="font-bold text-lg text-cyan-400">{entry.score}</div>
             </div>
         );
@@ -665,16 +654,12 @@ const UserDashboard = ({ navigate }) => {
                     <div className="bg-gray-800 rounded-lg shadow-lg border border-gray-700 p-2 space-y-1">
                         {leaderboard.length > 0 ? (
                             <>
-                                {leaderboard.map((entry) => (
-                                    <LeaderboardRow key={entry.rank} entry={entry} rank={entry.rank} />
-                                ))}
+                                {leaderboard.map((entry) => ( <LeaderboardRow key={entry.rank} entry={entry} rank={entry.rank} /> ))}
                                 {currentUserEntry && (
                                     <>
                                         <hr className="border-gray-700 my-2" />
                                         <div className="flex items-center p-3 rounded-lg bg-blue-900/50 border border-blue-700 shadow-[0_0_15px_rgba(59,130,246,0.5)]">
-                                            <div className="flex items-center justify-center w-12 flex-shrink-0 text-lg font-bold text-white">
-                                                {currentUserEntry.rank}
-                                            </div>
+                                            <div className="flex items-center justify-center w-12 flex-shrink-0 text-lg font-bold text-white">{currentUserEntry.rank}</div>
                                             <p className="flex-1 font-bold text-white truncate">{currentUserEntry.name} (You)</p>
                                             <div className="font-bold text-lg text-white">{currentUserEntry.score}</div>
                                         </div>
@@ -787,7 +772,7 @@ const UserDashboard = ({ navigate }) => {
         const attempt = userAttempts[test.id];
         const isScheduled = test.liveAt && test.liveAt.toDate() > new Date();
         const isLocked = getIsLocked(test, test.type);
-        const typeColors = { MOCK: 'bg-purple-700 text-purple-200', SECTIONAL: 'bg-teal-700 text-teal-200', TEST: 'bg-gray-600 text-gray-300' };
+        const typeColors = { MOCK: 'bg-purple-700 text-purple-200', SECTIONAL: 'bg-teal-700 text-teal-200', TEST: 'bg-gray-600 text-gray-300', '10MIN': 'bg-rose-700 text-rose-200' };
 
         let text, action, className, icon;
         if (isScheduled) {
@@ -846,6 +831,7 @@ const UserDashboard = ({ navigate }) => {
                     <TabButton value="performance" label="Performance" icon={FaChartLine} />
                     {rdfcTests.length > 0 && <TabButton value="rdfc" label="RDFC" icon={FaBookOpen} />}
                     {anyTestsAvailable && <TabButton value="tests" label="Tests" icon={FaVial} />}
+                    {tenMinTests.length > 0 && <TabButton value="10min" label="10 Min Tests" icon={FaBolt} />}
                     {userStatus?.isSubscribed && !userStatus.hasSubmittedFeedback && <TabButton value="feedback" label="Feedback" icon={FaCommentDots} />}
                     <TabButton value="support" label="Support" icon={FaHeadset} />
                 </div>
@@ -871,6 +857,17 @@ const UserDashboard = ({ navigate }) => {
                             <TestSection title={`${testFilter.charAt(0).toUpperCase() + testFilter.slice(1)} Tests`} tests={testsForFilter[testFilter]} limit={10} contentType={testFilter} viewAllParams={{ title: `All ${testFilter}s`, contentType: testFilter }} navigate={navigate} renderDesktopRow={renderAddOnTestRow}/>
                         </div>
                     )}
+                    {activeTab === '10min' && tenMinTests.length > 0 && (
+                        <TestSection 
+                            title="10 Min Tests" 
+                            tests={tenMinTests} 
+                            limit={10} 
+                            contentType="10min" 
+                            viewAllParams={{ title: 'All 10 Min Tests', contentType: '10min' }} 
+                            navigate={navigate} 
+                            renderDesktopRow={renderAddOnTestRow}
+                        />
+                    )}
                     {activeTab === 'support' && ( <div className="bg-gray-800 rounded-lg p-8 text-center"><h2 className="text-2xl font-bold text-white mb-4">Support Center</h2><p className="text-gray-400 mb-6">Have questions or need assistance? We're here to help!</p><button onClick={() => navigate('support')} className="bg-blue-600 text-white px-6 py-2 rounded-md font-semibold hover:bg-blue-700 shadow-lg transition-all">Go to Support Page</button></div> )}
                     {activeTab === 'feedback' && ( <div className="pt-8 mb-12">{showFeedbackThanks ? (<div className="bg-gray-800 border-l-4 border-green-500 text-white p-6 rounded-lg shadow-lg my-8 text-center"><h3 className="text-xl font-bold">Thank You!</h3><p className="text-gray-300 mt-2">Your feedback is valuable to us and helps improve the platform for everyone.</p></div>) : (<FeedbackForm userStatus={userStatus} onSuccessfulSubmit={handleFeedbackSuccess} />)}</div> )}
                 </div>
@@ -884,6 +881,7 @@ const UserDashboard = ({ navigate }) => {
                 </div>
                 <AccordionSection title="Performance" icon={FaChartLine} sectionKey="performance"><PerformanceContent /></AccordionSection>
                 {rdfcTests.length > 0 && ( <AccordionSection title="RDFC Articles & Tests" icon={FaBookOpen} sectionKey="rdfc">{rdfcTests.slice(0, 10).map(test => <MobileRDFCListItem key={test.id} test={test} />)}{(rdfcTests.length > 10) && <button onClick={() => navigate('allTests', { tests: rdfcTests.map(t => ({...t, article: linkedArticles[t.id]})), title: 'All RDFC', contentType: 'rdfc' })} className="text-blue-400 font-semibold text-sm mt-2 w-full text-center">View All {rdfcTests.length} RDFC Tests...</button>}</AccordionSection> )}
+                {tenMinTests.length > 0 && ( <AccordionSection title="10 Min Tests" icon={FaBolt} sectionKey="10min">{tenMinTests.slice(0, 10).map(test => <MobileTestListItem key={test.id} test={test} />)}{(tenMinTests.length > 10) && <button onClick={() => navigate('allTests', { tests: tenMinTests, title: 'All 10 Min Tests', contentType: '10min' })} className="text-blue-400 font-semibold text-sm mt-2 w-full text-center">View All {tenMinTests.length} Tests...</button>}</AccordionSection> )}
                 {otherAddOnTests.length > 0 && ( <AccordionSection title="Add-On Tests" icon={FaVial} sectionKey="addon">{otherAddOnTests.slice(0, 10).map(test => <MobileTestListItem key={test.id} test={test} />)}{(otherAddOnTests.length > 10) && <button onClick={() => navigate('allTests', { tests: otherAddOnTests, title: 'All Add-On Tests', contentType: 'test' })} className="text-blue-400 font-semibold text-sm mt-2 w-full text-center">View All {otherAddOnTests.length} Add-Ons...</button>}</AccordionSection> )}
                 {sectionalTests.length > 0 && ( <AccordionSection title="Sectional Tests" icon={FaVial} sectionKey="sectional">{sectionalTests.slice(0, 10).map(test => <MobileTestListItem key={test.id} test={test} />)}{(sectionalTests.length > 10) && <button onClick={() => navigate('allTests', { tests: sectionalTests, title: 'All Sectional Tests', contentType: 'sectional' })} className="text-blue-400 font-semibold text-sm mt-2 w-full text-center">View All {sectionalTests.length} Sectionals...</button>}</AccordionSection> )}
                 {mockTests.length > 0 && ( <AccordionSection title="Mock Tests" icon={FaVial} sectionKey="mock">{mockTests.slice(0, 10).map(test => <MobileTestListItem key={test.id} test={test} />)}{(mockTests.length > 10) && <button onClick={() => navigate('allTests', { tests: mockTests, title: 'All Mock Tests', contentType: 'mock' })} className="text-blue-400 font-semibold text-sm mt-2 w-full text-center">View All {mockTests.length} Mocks...</button>}</AccordionSection> )}
