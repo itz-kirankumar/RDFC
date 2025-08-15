@@ -331,9 +331,7 @@ const LoginPage = ({ navigate }) => {
 
                 <section id="subscription" className="py-16 sm:py-20 bg-zinc-900">
                     <div className="container mx-auto px-4">
-                        <div className="text-center mb-12 md:mb-16">
-                            <h2 className="text-3xl sm:text-4xl font-extrabold text-white">Choose Your Plan</h2>
-                        </div>
+                        
                         <SubscriptionPage embedded={true} />
                     </div>
                 </section>
