@@ -66,7 +66,6 @@ export default function Earnings() {
                 if (myShare) {
                     setMySharePercentage(myShare.share);
                 } else {
-                     // FIX: If admin exists but not in shares, add them with 0 share initially
                     setMySharePercentage(0);
                 }
             } else {
@@ -92,10 +91,8 @@ export default function Earnings() {
             const adminIndex = newAdminShares.findIndex(share => share.uid === userData.uid);
 
             if (adminIndex > -1) {
-                // FIX: Update existing admin's share
                 newAdminShares[adminIndex] = { ...newAdminShares[adminIndex], share: parseInt(mySharePercentage) };
             } else {
-                // FIX: Add new admin to the shares list
                 newAdminShares.push({ uid: userData.uid, share: parseInt(mySharePercentage) });
             }
 
@@ -122,31 +119,35 @@ export default function Earnings() {
         }
     };
 
-    // Financial calculations
+    // --- UPDATED FINANCIAL CALCULATIONS ---
     const premiumUsers = users.filter(user => user.isSubscribed);
     const totalPremiumUsers = premiumUsers.length;
     const settledByMeCount = mySettledUsers.length;
     const myShareConfig = adminShares.find(share => share.uid === userData.uid);
     const myCurrentSharePercentage = myShareConfig ? myShareConfig.share : 0;
     const otherSharePercentage = 100 - myCurrentSharePercentage;
+    const DEDUCTION_RATE = 0.20; // 20% total deduction
 
     let totalEarningsExpected = 0;
-    let totalUnsettledValue = 0;
+    let grossUnsettledValue = 0;
     let unsettledUsersList = [];
 
     premiumUsers.forEach(user => {
         if (user.planPrice) {
             totalEarningsExpected += user.planPrice;
             if (!mySettledUsers.includes(user.id)) {
-                totalUnsettledValue += user.planPrice;
+                grossUnsettledValue += user.planPrice;
                 unsettledUsersList.push(user);
             }
         }
     });
 
+    const totalDeduction = grossUnsettledValue * DEDUCTION_RATE;
+    const netUnsettledAfterDeduction = grossUnsettledValue - totalDeduction;
+    
     const unsettledUsersCount = unsettledUsersList.length;
-    const myShareOfRemainingToSettle = (myCurrentSharePercentage / 100) * totalUnsettledValue;
-    const otherShareOfRemainingToSettle = (otherSharePercentage / 100) * totalUnsettledValue;
+    const myShareOfNetToSettle = (myCurrentSharePercentage / 100) * netUnsettledAfterDeduction;
+    const otherShareOfNetToSettle = (otherSharePercentage / 100) * netUnsettledAfterDeduction;
 
     if (loading) {
         return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-white"></div></div>;
@@ -163,11 +164,7 @@ export default function Earnings() {
             
             <div className="bg-gray-800 p-6 rounded-lg shadow-md mb-8">
                 <h2 className="text-2xl font-bold text-white mb-4">Financial Overview</h2>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
-                    <div className="bg-gray-700 p-4 rounded-lg text-center">
-                        <p className="text-gray-400 text-sm">Total Users</p>
-                        <p className="text-white text-2xl font-bold">{users.length}</p>
-                    </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
                     <div className="bg-gray-700 p-4 rounded-lg text-center">
                         <p className="text-gray-400 text-sm">Total Premium Users</p>
                         <p className="text-white text-2xl font-bold">{totalPremiumUsers}</p>
@@ -185,20 +182,27 @@ export default function Earnings() {
                         <p className="text-orange-400 text-2xl font-bold">{unsettledUsersCount}</p>
                     </div>
                     <div className="bg-gray-700 p-4 rounded-lg text-center">
-                        <p className="text-gray-400 text-sm">Total Unsettled Earnings</p>
-                        <p className="text-orange-400 text-2xl font-bold">₹{totalUnsettledValue.toLocaleString()}</p>
+                        <p className="text-gray-400 text-sm">Unsettled Earnings (Gross)</p>
+                        <p className="text-orange-400 text-2xl font-bold">₹{grossUnsettledValue.toLocaleString()}</p>
                     </div>
                     <div className="bg-gray-700 p-4 rounded-lg text-center">
-                        <p className="text-gray-400 text-sm">My Share of Unsettled Earnings ({myCurrentSharePercentage}%)</p>
-                        <p className="text-white text-2xl font-bold">₹{myShareOfRemainingToSettle.toLocaleString()}</p>
+                        <p className="text-gray-400 text-sm">Charges (2% + 18% GST)</p>
+                        <p className="text-red-400 text-2xl font-bold">- ₹{totalDeduction.toLocaleString()}</p>
+                    </div>
+                    <div className="bg-gray-700 p-4 rounded-lg text-center col-span-1 md:col-span-2 lg:col-span-2">
+                        <p className="text-gray-400 text-sm">Net Unsettled Earnings (After Deduction)</p>
+                        <p className="text-green-400 text-3xl font-bold">₹{netUnsettledAfterDeduction.toLocaleString()}</p>
                     </div>
                     <div className="bg-gray-700 p-4 rounded-lg text-center">
-                        <p className="text-gray-400 text-sm">Other Share of Unsettled Earnings ({otherSharePercentage}%)</p>
-                        <p className="text-white text-2xl font-bold">₹{otherShareOfRemainingToSettle.toLocaleString()}</p>
+                        <p className="text-gray-400 text-sm">My Share of Net ({myCurrentSharePercentage}%)</p>
+                        <p className="text-white text-2xl font-bold">₹{myShareOfNetToSettle.toLocaleString()}</p>
+                    </div>
+                    <div className="bg-gray-700 p-4 rounded-lg text-center">
+                        <p className="text-gray-400 text-sm">Other Share of Net ({otherSharePercentage}%)</p>
+                        <p className="text-white text-2xl font-bold">₹{otherShareOfNetToSettle.toLocaleString()}</p>
                     </div>
                 </div>
 
-                {/* New Section for Unsettled Users */}
                 <div className="mt-8">
                     <h3 className="text-xl font-bold text-white mb-4">Unsettled Users ({unsettledUsersCount})</h3>
                     {unsettledUsersCount > 0 ? (
