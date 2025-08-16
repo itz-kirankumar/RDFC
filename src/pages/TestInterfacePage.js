@@ -255,62 +255,58 @@ const NumberPad = ({ onNumberClick }) => {
     );
 };
 
-// --- Instructions Page Components ---
+// --- Instructions Page Components (Mobile Optimized) ---
 const InstructionsPage1 = ({ test, onNext, userData }) => (
-    <div className="flex flex-col items-center justify-center h-full bg-gray-100 p-4">
-        <div className="bg-white shadow-lg rounded-lg p-8 max-w-2xl w-full text-gray-800">
-            <div className="flex items-center justify-between mb-4">
-                <h2 className="text-2xl font-bold">General Instructions</h2>
-                <div className="flex items-center">
-                    <img src={userData.photoURL} alt="user" className="w-10 h-10 rounded-full mr-2"/>
-                    <p className="font-semibold">{userData.displayName}</p>
+    <div className="flex flex-col items-center justify-center h-full bg-gray-100 p-2 sm:p-4">
+        <div className="bg-white shadow-lg rounded-lg p-4 sm:p-6 md:p-8 max-w-2xl w-full text-gray-800 max-h-[95vh] overflow-y-auto">
+            <div className="flex flex-col items-start sm:flex-row sm:items-center sm:justify-between gap-4 mb-6 pb-4 border-b">
+                <h2 className="text-xl sm:text-2xl font-bold">General Instructions</h2>
+                <div className="flex items-center bg-gray-100 p-2 rounded-lg">
+                    <img src={userData.photoURL} alt="user" className="w-8 h-8 sm:w-10 sm:h-10 rounded-full mr-2"/>
+                    <p className="font-semibold text-sm sm:text-base">{userData.displayName}</p>
                 </div>
             </div>
-            <p className="mb-4">Welcome to the test! Please read the following instructions carefully before proceeding.</p>
+            <p className="mb-4 text-sm sm:text-base">Welcome to the test! Please read the following instructions carefully before proceeding.</p>
             
-            <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-md">
-                <h3 className="font-bold text-lg mb-2">Test Details:</h3>
+            <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-md text-sm sm:text-base">
+                <h3 className="font-bold text-base sm:text-lg mb-2">Test Details:</h3>
                 <p><strong>Test Title:</strong> {test.title}</p>
                 <p><strong>Total Duration:</strong> {test.sections.reduce((acc, sec) => acc + sec.duration, 0)} minutes</p>
                 <p><strong>Number of Sections:</strong> {test.sections.length}</p>
                 <p><strong>Total Questions:</strong> {test.sections.reduce((acc, sec) => acc + sec.questions.length, 0)}</p>
                 <p className="mt-2">This test consists of the following sections:</p>
-                <ul className="list-disc list-inside mt-1">
+                <ul className="list-disc list-inside mt-1 space-y-1">
                     {test.sections.map((section, index) => (
                         <li key={index}>{section.name} ({section.duration} minutes)</li>
                     ))}
                 </ul>
             </div>
 
-            <p className="mb-4">
-                1. The clock will be set at the server and will count down. When the timer reaches zero, the test will end by itself.
-            </p>
-            <p className="mb-4">
-                2. You can navigate between questions using the "Save & Next" button or by clicking on question numbers in the palette.
-            </p>
-            <p className="mb-4">
-                3. An on-screen calculator is provided for your convenience.
-            </p>
-            <div className="flex justify-end mt-6">
-                <button onClick={onNext} className="bg-blue-600 text-white px-6 py-3 rounded-md font-bold text-lg hover:bg-blue-700 transition-colors">Next</button>
+            <ol className="list-decimal list-inside space-y-3 text-sm sm:text-base">
+                <li>The clock will be set at the server and will count down. When the timer reaches zero, the test will end by itself.</li>
+                <li>You can navigate between questions using the "Save & Next" button or by clicking on question numbers in the palette.</li>
+                <li>An on-screen calculator is provided for your convenience.</li>
+            </ol>
+            <div className="flex justify-end mt-8">
+                <button onClick={onNext} className="w-full sm:w-auto bg-blue-600 text-white px-6 py-2 sm:py-3 rounded-md font-bold text-base sm:text-lg hover:bg-blue-700 transition-colors">Next</button>
             </div>
         </div>
     </div>
 );
 
 const InstructionsPage2 = ({ test, onPrevious, onStartTest, termsAccepted, setTermsAccepted, userData, isResuming }) => (
-    <div className="flex flex-col items-center justify-center h-full bg-gray-100 p-4">
-        <div className="bg-white shadow-lg rounded-lg p-8 max-w-2xl w-full text-gray-800">
-            <div className="flex items-center justify-between mb-4">
-                <h2 className="text-2xl font-bold">Other Important Instructions</h2>
-                <div className="flex items-center">
-                    <img src={userData.photoURL} alt="user" className="w-10 h-10 rounded-full mr-2"/>
-                    <p className="font-semibold">{userData.displayName}</p>
+    <div className="flex flex-col items-center justify-center h-full bg-gray-100 p-2 sm:p-4">
+        <div className="bg-white shadow-lg rounded-lg p-4 sm:p-6 md:p-8 max-w-2xl w-full text-gray-800 max-h-[95vh] overflow-y-auto">
+            <div className="flex flex-col items-start sm:flex-row sm:items-center sm:justify-between gap-4 mb-6 pb-4 border-b">
+                <h2 className="text-xl sm:text-2xl font-bold">Other Important Instructions</h2>
+                <div className="flex items-center bg-gray-100 p-2 rounded-lg">
+                    <img src={userData.photoURL} alt="user" className="w-8 h-8 sm:w-10 sm:h-10 rounded-full mr-2"/>
+                    <p className="font-semibold text-sm sm:text-base">{userData.displayName}</p>
                 </div>
             </div>
             
-            <p className="mb-4">Please note the following:</p>
-            <ul className="list-disc list-inside mb-6 space-y-2">
+            <p className="mb-4 text-sm sm:text-base">Please note the following:</p>
+            <ul className="list-disc list-inside mb-6 space-y-2 text-sm sm:text-base">
                 <li>Go through the various symbols used in the test interface (e.g., in the question palette) and understand their meaning before you start.</li>
                 <li>In MCQ-type questions, candidates will be given points for each correct answer. Negative marking may apply for incorrect answers, as specified in the test details.</li>
                 <li>For Numerical Answer Type (TITA) questions, you must input your answer using the provided on-screen number pad.</li>
@@ -319,27 +315,27 @@ const InstructionsPage2 = ({ test, onPrevious, onStartTest, termsAccepted, setTe
                 <li>No external/physical calculator is allowed. Use only the on-screen calculator provided.</li>
             </ul>
 
-            <div className="flex items-start mb-6">
+            <div className="flex items-start mb-6 p-3 bg-gray-50 rounded-lg border">
                 <input
                     type="checkbox"
                     id="acceptTerms"
                     checked={termsAccepted}
                     onChange={(e) => setTermsAccepted(e.target.checked)}
-                    className="mt-1 mr-2 h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                    className="mt-1 mr-3 h-5 w-5 flex-shrink-0 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
                 />
-                <label htmlFor="acceptTerms" className="text-gray-700 text-sm">
+                <label htmlFor="acceptTerms" className="text-gray-700 text-xs sm:text-sm">
                     I have read and understood all the instructions. I declare that I am not in possession of any prohibited gadget (like mobile phone, Bluetooth devices etc.) and that I will not carry any unauthorized material into the Examination Hall. I agree that in case of not adhering to the instructions, I shall be liable to be debarred from this Test and/or disciplinary action which may include ban from future Tests/Examinations.
                 </label>
             </div>
 
-            <div className="flex justify-between mt-6">
-                <button onClick={onPrevious} className="bg-gray-200 text-gray-800 px-6 py-3 rounded-md font-bold text-lg hover:bg-gray-300 transition-colors flex items-center">
+            <div className="flex flex-col-reverse sm:flex-row sm:justify-between gap-3 mt-8">
+                <button onClick={onPrevious} className="w-full sm:w-auto bg-gray-200 text-gray-800 px-6 py-2 sm:py-3 rounded-md font-bold text-base sm:text-lg hover:bg-gray-300 transition-colors flex items-center justify-center">
                     <FaChevronLeft className="mr-2"/> Previous
                 </button>
                 <button
                     onClick={onStartTest}
                     disabled={!termsAccepted}
-                    className={`px-6 py-3 rounded-md font-bold text-lg transition-colors ${termsAccepted ? 'bg-green-600 text-white hover:bg-green-700' : 'bg-gray-400 text-gray-700 cursor-not-allowed'}`}
+                    className={`w-full sm:w-auto px-6 py-2 sm:py-3 rounded-md font-bold text-base sm:text-lg transition-colors ${termsAccepted ? 'bg-green-600 text-white hover:bg-green-700' : 'bg-gray-400 text-gray-700 cursor-not-allowed'}`}
                 >
                     {isResuming ? 'Continue Test' : 'Start Test'}
                 </button>
@@ -740,6 +736,10 @@ const TestInterfacePage = ({ navigate, testId }) => {
         recordTimeSpentOnCurrentQuestion();
         setCurrentQuestionIndex(newIndex);
         resetQuestionTimerForNewQuestion();
+        // This is the change: automatically switch back to the question view on mobile.
+        if (isMobileDevice) {
+            setMobileView('question');
+        }
     };
     
     const updateQuestionStatus = useCallback((secIdx, qIdx, newStatus) => {
