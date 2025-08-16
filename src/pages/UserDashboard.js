@@ -831,7 +831,7 @@ const UserDashboard = ({ navigate }) => {
                     <TabButton value="performance" label="Performance" icon={FaChartLine} />
                     {rdfcTests.length > 0 && <TabButton value="rdfc" label="RDFC" icon={FaBookOpen} />}
                     {anyTestsAvailable && <TabButton value="tests" label="Tests" icon={FaVial} />}
-                    {tenMinTests.length > 0 && <TabButton value="10min" label="10 Min Tests" icon={FaBolt} />}
+                    {tenMinTests.length > 0 && <TabButton value="10min" label="10 Min RC Tests" icon={FaBolt} />}
                     {userStatus?.isSubscribed && !userStatus.hasSubmittedFeedback && <TabButton value="feedback" label="Feedback" icon={FaCommentDots} />}
                     <TabButton value="support" label="Support" icon={FaHeadset} />
                 </div>
@@ -859,11 +859,11 @@ const UserDashboard = ({ navigate }) => {
                     )}
                     {activeTab === '10min' && tenMinTests.length > 0 && (
                         <TestSection 
-                            title="10 Min Tests" 
+                            title="10 Min RC Tests" 
                             tests={tenMinTests} 
                             limit={10} 
                             contentType="10min" 
-                            viewAllParams={{ title: 'All 10 Min Tests', contentType: '10min' }} 
+                            viewAllParams={{ title: 'All 10 Min RC Tests', contentType: '10min' }} 
                             navigate={navigate} 
                             renderDesktopRow={renderAddOnTestRow}
                         />
@@ -881,7 +881,7 @@ const UserDashboard = ({ navigate }) => {
                 </div>
                 <AccordionSection title="Performance" icon={FaChartLine} sectionKey="performance"><PerformanceContent /></AccordionSection>
                 {rdfcTests.length > 0 && ( <AccordionSection title="RDFC Articles & Tests" icon={FaBookOpen} sectionKey="rdfc">{rdfcTests.slice(0, 10).map(test => <MobileRDFCListItem key={test.id} test={test} />)}{(rdfcTests.length > 10) && <button onClick={() => navigate('allTests', { tests: rdfcTests.map(t => ({...t, article: linkedArticles[t.id]})), title: 'All RDFC', contentType: 'rdfc' })} className="text-blue-400 font-semibold text-sm mt-2 w-full text-center">View All {rdfcTests.length} RDFC Tests...</button>}</AccordionSection> )}
-                {tenMinTests.length > 0 && ( <AccordionSection title="10 Min Tests" icon={FaBolt} sectionKey="10min">{tenMinTests.slice(0, 10).map(test => <MobileTestListItem key={test.id} test={test} />)}{(tenMinTests.length > 10) && <button onClick={() => navigate('allTests', { tests: tenMinTests, title: 'All 10 Min Tests', contentType: '10min' })} className="text-blue-400 font-semibold text-sm mt-2 w-full text-center">View All {tenMinTests.length} Tests...</button>}</AccordionSection> )}
+                {tenMinTests.length > 0 && ( <AccordionSection title="10 Min RC Tests" icon={FaBolt} sectionKey="10min">{tenMinTests.slice(0, 10).map(test => <MobileTestListItem key={test.id} test={test} />)}{(tenMinTests.length > 10) && <button onClick={() => navigate('allTests', { tests: tenMinTests, title: 'All 10 Min Tests', contentType: '10min' })} className="text-blue-400 font-semibold text-sm mt-2 w-full text-center">View All {tenMinTests.length} Tests...</button>}</AccordionSection> )}
                 {otherAddOnTests.length > 0 && ( <AccordionSection title="Add-On Tests" icon={FaVial} sectionKey="addon">{otherAddOnTests.slice(0, 10).map(test => <MobileTestListItem key={test.id} test={test} />)}{(otherAddOnTests.length > 10) && <button onClick={() => navigate('allTests', { tests: otherAddOnTests, title: 'All Add-On Tests', contentType: 'test' })} className="text-blue-400 font-semibold text-sm mt-2 w-full text-center">View All {otherAddOnTests.length} Add-Ons...</button>}</AccordionSection> )}
                 {sectionalTests.length > 0 && ( <AccordionSection title="Sectional Tests" icon={FaVial} sectionKey="sectional">{sectionalTests.slice(0, 10).map(test => <MobileTestListItem key={test.id} test={test} />)}{(sectionalTests.length > 10) && <button onClick={() => navigate('allTests', { tests: sectionalTests, title: 'All Sectional Tests', contentType: 'sectional' })} className="text-blue-400 font-semibold text-sm mt-2 w-full text-center">View All {sectionalTests.length} Sectionals...</button>}</AccordionSection> )}
                 {mockTests.length > 0 && ( <AccordionSection title="Mock Tests" icon={FaVial} sectionKey="mock">{mockTests.slice(0, 10).map(test => <MobileTestListItem key={test.id} test={test} />)}{(mockTests.length > 10) && <button onClick={() => navigate('allTests', { tests: mockTests, title: 'All Mock Tests', contentType: 'mock' })} className="text-blue-400 font-semibold text-sm mt-2 w-full text-center">View All {mockTests.length} Mocks...</button>}</AccordionSection> )}
