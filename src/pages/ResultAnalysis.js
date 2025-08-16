@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
+import { doc, getDoc, collection, query, where, getDocs, updateDoc } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import Scorecard from '../components/Scorecard';
 import { FaChartPie, FaCheckCircle, FaStopwatch, FaExpand } from 'react-icons/fa';
@@ -352,6 +352,7 @@ const ResultAnalysis = ({ navigate, attemptId }) => {
 
         fetchData();
     }, [attemptId, navigate]);
+    
 
     // --- FIX: Centralized all calculations in a top-level useMemo hook to fix conditional hook error ---
     const analysisData = useMemo(() => {
@@ -405,6 +406,25 @@ const ResultAnalysis = ({ navigate, attemptId }) => {
         };
 
     }, [attempt, test, allAttempts]);
+
+    useEffect(() => {
+        const backfillScore = async () => {
+            // Check if attempt is loaded and if totalScore property is missing
+            if (attempt && !attempt.hasOwnProperty('totalScore') && attemptId) {
+                try {
+                    const attemptRef = doc(db, 'attempts', attemptId);
+                    // Use the score calculated by the useMemo hook above
+                    await updateDoc(attemptRef, {
+                        totalScore: analysisData.totalScore
+                    });
+                } catch (error) {
+                    console.error("Failed to backfill total score:", error);
+                }
+            }
+        };
+
+        backfillScore();
+    }, [attempt, attemptId, analysisData.totalScore]);
 
     const handleCloseToDashboard = () => {
         if (document.fullscreenElement) document.exitFullscreen();

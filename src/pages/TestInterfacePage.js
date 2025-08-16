@@ -495,7 +495,34 @@ const TestInterfacePage = ({ navigate, testId }) => {
 
         // Record the final time spent on the last question.
         recordTimeSpentOnCurrentQuestion();
-        
+        let calculatedTotalScore = 0;
+        if (test && test.sections) {
+            test.sections.forEach((section, secIdx) => {
+                let correct = 0;
+                let incorrectMcq = 0;
+                section.questions.forEach((q, qIdx) => {
+                    const userAnswer = answers?.[secIdx]?.[qIdx];
+                    const isAttempted = userAnswer !== undefined && userAnswer !== null && userAnswer !== '';
+
+                    if (isAttempted) {
+                        const isCorrect = q.type === 'TITA'
+                            ? String(userAnswer).toLowerCase() === String(q.correctOption).toLowerCase()
+                            : userAnswer === q.correctOption;
+
+                        if (isCorrect) {
+                            correct++;
+                        } else {
+                            // Negative marking only for incorrect MCQs
+                            if (q.type !== 'TITA') {
+                                incorrectMcq++;
+                            }
+                        }
+                    }
+                });
+                const sectionScore = (correct * 3) - (incorrectMcq * 1);
+                calculatedTotalScore += sectionScore;
+            });
+        }
         // Prepare the final data to be saved to Firestore.
         // We only save the raw data. The results page will handle calculations.
         const finalAttemptData = {
