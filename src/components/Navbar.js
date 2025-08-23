@@ -6,7 +6,7 @@ import { db } from '../firebase/config';
 import { motion, useAnimation } from 'framer-motion';
 import Confetti from 'react-confetti';
 
-// --- CONFIG (can be shared with StreaksPage) ---
+// --- CONFIG ---
 const ACHIEVEMENTS_CONFIG = {
     'streak-master': { tiers: [{ level: 'Bronze', goal: 7, reward: '+2 Freezes' }, { level: 'Silver', goal: 14, reward: 'New Badge' }, { level: 'Gold', goal: 30, reward: 'Profile Flair' }] },
     'perfect-week': { tiers: [{ level: 'Bronze', goal: 1, reward: '+1 Freeze' }, { level: 'Silver', goal: 2, reward: '+2 Freezes' }, { level: 'Gold', goal: 4, reward: 'Epic Badge' }] }
@@ -19,7 +19,7 @@ const STREAK_MESSAGES = {
     NEW_USER: { title: "Start a Streak!", message: "Complete your first test to begin." }
 };
 
-// --- CORE LOGIC: Streak and Achievement Calculation (MOVED to a single function) ---
+// --- CORE LOGIC: Streak and Achievement Calculation ---
 const processUserData = async (user, userData, attempts) => {
     if (!user || !userData || !attempts) return;
 
@@ -77,10 +77,7 @@ const processUserData = async (user, userData, attempts) => {
     // Check for a perfect week achievement
     if (uniqueDaysThisWeek.size === 7) {
         const lastPerfectWeekDate = userData.achievements?.['perfect-week']?.lastAwarded?.toDate();
-        const startOfLastPerfectWeek = new Date(lastPerfectWeekDate);
-        startOfLastPerfectWeek.setDate(lastPerfectWeekDate.getDate() - lastPerfectWeekDate.getDay());
         
-        // A week is considered complete if the streak includes the full week and no freezes were used
         const wasFreezeUsedThisWeek = userData.lastFreezeUsed?.toDate() >= startOfWeek;
 
         if (!wasFreezeUsedThisWeek && (!lastPerfectWeekDate || lastPerfectWeekDate.getTime() < startOfWeek.getTime())) {
@@ -88,7 +85,6 @@ const processUserData = async (user, userData, attempts) => {
             updates['achievements.perfect-week.lastAwarded'] = serverTimestamp();
             justCompletedPerfectWeek = true;
 
-            // Grant the +2 freezes reward
             updates.streakFreezes = increment(2);
         }
     }
@@ -119,6 +115,30 @@ const Navbar = ({ navigate, bannerHeight = 0 }) => {
     const [showConfetti, setShowConfetti] = useState(false);
     const [showDiscoveryTooltip, setShowDiscoveryTooltip] = useState(false);
     const fireControls = useAnimation();
+    const [scrolled, setScrolled] = useState(false);
+
+    // Re-implemented scroll behavior to match the requested design.
+    useEffect(() => {
+        const handleScroll = () => {
+            if (window.scrollY > (50 + bannerHeight)) {
+                setScrolled(true);
+            } else {
+                setScrolled(false);
+            }
+        };
+
+        if (!user) {
+            window.addEventListener('scroll', handleScroll);
+        } else {
+            setScrolled(true); 
+        }
+
+        return () => {
+            if (!user) {
+                window.removeEventListener('scroll', handleScroll);
+            }
+        };
+    }, [user, bannerHeight]);
 
     // Grant 3 initial freezes if not already set
     useEffect(() => {
@@ -205,15 +225,17 @@ const Navbar = ({ navigate, bannerHeight = 0 }) => {
     return (
         <>
             {showConfetti && <Confetti recycle={false} numberOfPieces={400} onConfettiComplete={() => setShowConfetti(false)} style={{ zIndex: 100 }} />}
-            <nav className={`fixed left-0 right-0 z-50 transition-all duration-300 ${user ? 'bg-gray-800 shadow-lg' : 'bg-transparent'}`}>
+            <nav className={`fixed left-0 right-0 z-50 transition-all duration-300 ${user ? 'bg-gray-800 shadow-lg top-0' : scrolled ? 'bg-gray-800 shadow-lg top-0' : 'bg-transparent'}`}
+                 style={{ top: scrolled || user ? '0px' : `${bannerHeight}px` }}>
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                    <div className="h-16 flex items-center justify-between">
-                        <span onClick={() => navigate('home')} className="text-xl sm:text-2xl font-bold tracking-wider cursor-pointer bg-gradient-to-r from-amber-300 via-amber-500 to-amber-300 text-transparent bg-clip-text animate-shine-pulse">
+                    <div className={`h-16 flex items-center ${user ? 'justify-between' : 'justify-center'}`}>
+                        <span onClick={() => user ? navigate('home') : null}
+                            className={`text-xl sm:text-2xl font-bold tracking-wider ${user ? 'cursor-pointer' : ''} bg-gradient-to-r from-amber-300 via-amber-500 to-amber-300 text-transparent bg-clip-text animate-shine-pulse`}>
                             RDFC<span className="text-gray-400"> Test</span>
                         </span>
                         {user && userData && (
                             <div className="ml-4 flex items-center">
-                                <div className="relative group flex items-center mr-3 cursor-pointer" onClick={handleStreakClick}>
+                                <div className="relative flex items-center mr-3 cursor-pointer group" onClick={handleStreakClick}>
                                     <motion.div animate={fireControls}><FaFire className={`w-5 h-5 mr-1 transition-colors ${streakStatus === STREAK_MESSAGES.AT_RISK ? 'text-gray-400' : 'text-orange-400'}`} /></motion.div>
                                     <motion.span key={userData.currentStreak || 0} initial={{ y: -20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ duration: 0.3 }} className={`font-semibold text-lg transition-colors ${streakStatus === STREAK_MESSAGES.AT_RISK ? 'text-gray-300' : 'text-orange-400'}`}>{userData.currentStreak || 0}</motion.span>
                                     <div className="absolute top-full left-1/2 -translate-x-1/2 z-10 mt-2 w-64 p-3 text-sm text-white bg-gray-900 rounded-lg shadow-lg opacity-0 group-hover:opacity-100 scale-95 group-hover:scale-100 transition-all duration-200 pointer-events-none">
