@@ -22,7 +22,9 @@ import AllTestimonialsPage from './pages/AllTestimonialsPage';
 import LegalPage from './pages/LegalPage';
 import AdminVocabManager from './pages/AdminVocabManager';
 import SupportPage from './pages/SupportPage';
-import AdminSupportManager from './pages/AdminSupportManager'; // New Import
+import AdminSupportManager from './pages/AdminSupportManager';
+// NEW: Import the StreaksPage
+import StreaksPage from './pages/StreaksPage';
 
 const MainRouter = () => {
     const { user, userData, loading } = useAuth();
@@ -53,7 +55,7 @@ const MainRouter = () => {
     let showNavbar = true;
 
     if (userData?.isAdmin) {
-        // Admin routes updated
+        // Admin routes
         switch (currentPage) {
             case 'home': pageComponent = <AdminDashboard navigate={navigate} />; break;
             case 'manageTests': pageComponent = <AdminTestManager navigate={navigate} />; break;
@@ -66,7 +68,7 @@ const MainRouter = () => {
             case 'manageReviews': pageComponent = <AdminReviewsManager navigate={navigate} />; break;
             case 'allTestimonials': pageComponent = <AllTestimonialsPage navigate={navigate} />; break;
             case 'manageVocab': pageComponent = <AdminVocabManager navigate={navigate} />; break; 
-            case 'manageSupport': pageComponent = <AdminSupportManager navigate={navigate} />; break; // New Route
+            case 'manageSupport': pageComponent = <AdminSupportManager navigate={navigate} />; break;
             case 'legal': 
                 pageComponent = <LegalPage navigate={navigate} pageData={pageData} />; 
                 showNavbar = false;
@@ -74,9 +76,10 @@ const MainRouter = () => {
             default: pageComponent = <AdminDashboard navigate={navigate} />;
         }
     } else {
-        // User routes updated
+        // User routes
         switch (currentPage) {
             case 'home': pageComponent = <UserDashboard navigate={navigate} />; break;
+            case 'streaks': pageComponent = <StreaksPage navigate={navigate} />; break; // NEW ROUTE
             case 'test': pageComponent = <TestInterfacePage navigate={navigate} {...pageData} />; break;
             case 'results': 
                 pageComponent = <ResultAnalysis navigate={navigate} {...pageData} />; 
