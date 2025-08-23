@@ -32,7 +32,7 @@ const Navbar = ({ navigate, bannerHeight = 0 }) => {
         };
     }, [user, bannerHeight]);
 
-    // Fetch RDFC map once
+    // Fetch RDFC map once user is available
     useEffect(() => {
         const fetchRdfcMap = async () => {
             try {
@@ -56,8 +56,13 @@ const Navbar = ({ navigate, bannerHeight = 0 }) => {
                 console.error("Error fetching RDFC map:", error);
             }
         };
-        fetchRdfcMap();
-    }, []);
+        
+        // ++ FIX APPLIED HERE ++
+        // Only run the fetch function if a user is logged in.
+        if (user) {
+            fetchRdfcMap();
+        }
+    }, [user]); // Depend on the user object to re-run when login state changes.
 
     // Listen to attempts
     useEffect(() => {
