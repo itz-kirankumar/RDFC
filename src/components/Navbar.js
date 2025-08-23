@@ -1,16 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { FaFire } from 'react-icons/fa';
-import { collection, query, where, onSnapshot, orderBy, getDocs, doc } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, orderBy } from 'firebase/firestore';
 import { db } from '../firebase/config';
 
 const Navbar = ({ navigate, bannerHeight = 0 }) => {
     const { user, userData, signOut } = useAuth();
     const [scrolled, setScrolled] = useState(false);
     const [currentStreak, setCurrentStreak] = useState(0);
-    const [rdfcMap, setRdfcMap] = useState({});
     const [attempts, setAttempts] = useState([]);
-    const [readArticles, setReadArticles] = useState({});
 
     useEffect(() => {
         const handleScroll = () => {
@@ -32,38 +30,6 @@ const Navbar = ({ navigate, bannerHeight = 0 }) => {
         };
     }, [user, bannerHeight]);
 
-    // Fetch RDFC map once user is available
-    useEffect(() => {
-        const fetchRdfcMap = async () => {
-            try {
-                const testsQuery = query(collection(db, 'tests'), where('isPublished', '==', true));
-                const articlesQuery = collection(db, 'rdfcArticles');
-
-                const [testsSnapshot, articlesSnapshot] = await Promise.all([
-                    getDocs(testsQuery),
-                    getDocs(articlesQuery)
-                ]);
-
-                const rdfcIds = new Set(articlesSnapshot.docs.map(doc => doc.id));
-                const map = {};
-                testsSnapshot.docs.forEach(doc => {
-                    if (rdfcIds.has(doc.id)) {
-                        map[doc.id] = doc.data().createdAt?.toDate();
-                    }
-                });
-                setRdfcMap(map);
-            } catch (error) {
-                console.error("Error fetching RDFC map:", error);
-            }
-        };
-        
-        // ++ FIX APPLIED HERE ++
-        // Only run the fetch function if a user is logged in.
-        if (user) {
-            fetchRdfcMap();
-        }
-    }, [user]); // Depend on the user object to re-run when login state changes.
-
     // Listen to attempts
     useEffect(() => {
         if (!user?.uid) {
@@ -84,61 +50,21 @@ const Navbar = ({ navigate, bannerHeight = 0 }) => {
         return unsubscribe;
     }, [user]);
 
-    // Listen to user document for readArticles
-    useEffect(() => {
-        if (!user?.uid) {
-            setReadArticles({});
-            return;
-        }
-        const userRef = doc(db, 'users', user.uid);
-        const unsubscribe = onSnapshot(userRef, (docSnap) => {
-            if (docSnap.exists()) {
-                const data = docSnap.data();
-                setReadArticles(data.readArticles || {});
-            } else {
-                setReadArticles({});
-            }
-        }, (error) => {
-            console.error("Error fetching user readArticles:", error);
-        });
-        return unsubscribe;
-    }, [user]);
-
-    // Calculate streak when attempts, readArticles, or rdfcMap changes
+    // Calculate streak based on test completions
     useEffect(() => {
         const today = new Date();
         today.setHours(0, 0, 0, 0);
 
         const completedDates = new Set();
         attempts.forEach(attempt => {
-            const testId = attempt.testId;
-            const publishDate = rdfcMap[testId];
-            if (publishDate) {
-                const publishedDay = new Date(publishDate);
-                publishedDay.setHours(0, 0, 0, 0);
+            if (attempt.completedAt) {
                 const completedDay = new Date(attempt.completedAt.toDate());
                 completedDay.setHours(0, 0, 0, 0);
-                if (completedDay.getTime() === publishedDay.getTime()) {
-                    completedDates.add(publishedDay.toISOString().split('T')[0]);
-                }
+                completedDates.add(completedDay.toISOString().split('T')[0]);
             }
         });
 
-        const viewedDates = new Set();
-        Object.entries(readArticles).forEach(([articleId, value]) => {
-            if (value) {
-                const publishDate = rdfcMap[articleId];
-                if (publishDate) {
-                    const publishedDay = new Date(publishDate);
-                    publishedDay.setHours(0, 0, 0, 0);
-                    viewedDates.add(publishedDay.toISOString().split('T')[0]);
-                }
-            }
-        });
-
-        const bothDates = new Set([...completedDates].filter(date => viewedDates.has(date)));
-
-        const sortedDates = Array.from(bothDates).sort((a, b) => b.localeCompare(a));
+        const sortedDates = Array.from(completedDates).sort((a, b) => b.localeCompare(a));
 
         let calculatedStreak = 0;
         let lastDate = null;
@@ -158,7 +84,7 @@ const Navbar = ({ navigate, bannerHeight = 0 }) => {
                 }
             } else {
                 const previousDay = new Date(lastDate);
-                previousDay.setDate(lastDate.getDate() - 1);
+                previousDay.setDate(previousDay.getDate() - 1);
                 if (currentDate.getTime() === previousDay.getTime()) {
                     calculatedStreak++;
                 } else {
@@ -169,7 +95,7 @@ const Navbar = ({ navigate, bannerHeight = 0 }) => {
         }
 
         setCurrentStreak(calculatedStreak);
-    }, [attempts, readArticles, rdfcMap]);
+    }, [attempts]);
 
     const navbarClasses = `
         fixed left-0 right-0 z-50 transition-all duration-300
