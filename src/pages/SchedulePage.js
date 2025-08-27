@@ -34,18 +34,12 @@ const mockSchedule = [
 
 
 const SchedulePage = ({ navigate }) => {
-    const [activeTab, setActiveTab] = useState('sectionals');
+    const [activeTab, setActiveTab] = React.useState('sectionals');
 
     const scheduleData = {
         sectionals: sectionalSchedule,
         mocks: mockSchedule,
     };
-
-    const today = useMemo(() => {
-        const d = new Date();
-        d.setHours(0, 0, 0, 0); // Normalize to the beginning of the day
-        return d;
-    }, []);
 
     const TabButton = ({ scheduleType, label }) => (
         <button
@@ -61,13 +55,16 @@ const SchedulePage = ({ navigate }) => {
     );
 
     const ScheduleList = ({ schedule }) => (
-        <div className="bg-gray-800 shadow-lg rounded-lg border border-gray-700 mt-4">
+        <div className="bg-gray -800 shadow-lg rounded-lg border border-gray-700 mt-4">
             <ul className="divide-y divide-gray-700">
                 {schedule.map((item, index) => {
-                    const releaseDate = new Date(item.releaseDate);
-                    const isLive = releaseDate <= today;
-                    const formattedDate = releaseDate.toLocaleDateString('en-US', {
-                        weekday: 'short', year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC'
+                    // Combine date with 7:00 PM in IST
+                    const releaseDateTime = new Date(`${item.releaseDate}T19:00:00+05:30`);
+                    const now = new Date();
+                    const isLive = releaseDateTime <= now;
+
+                    const formattedDate = releaseDateTime.toLocaleDateString('en-US', {
+                        weekday: 'short', year: 'numeric', month: 'short', day: 'numeric', timeZone: 'Asia/Kolkata'
                     });
 
                     return (
@@ -76,7 +73,7 @@ const SchedulePage = ({ navigate }) => {
                                 <FaCalendarAlt className={`mr-4 flex-shrink-0 text-xl ${isLive ? 'text-green-400' : 'text-yellow-400'}`} />
                                 <div className="flex-grow">
                                     <p className="text-white font-semibold text-lg">{item.title}</p>
-                                    <p className="text-gray-400">{formattedDate}</p>
+                                    <p className="text-gray-400">{formattedDate} at 7:00 PM IST</p>
                                 </div>
                             </div>
                             {isLive ? (
@@ -102,7 +99,7 @@ const SchedulePage = ({ navigate }) => {
                     <span>Back to Dashboard</span>
                 </button>
                 <a 
-                    href="https://drive.google.com/file/d/1dbhZLSVtpAH4UC9wQuYLB3-U_2Ho_5cn/preview" 
+                    href="https://docs.google.com/document/d/1NFuykwd9NY6O1zPWg70HrU_Z2spxunw2NdsDAYkGUeo/edit?usp=sharing" 
                     target="_blank" 
                     rel="noopener noreferrer"
                     className="flex items-center space-x-2 bg-gray-700 hover:bg-gray-600 text-white font-semibold px-4 py-2 rounded-lg transition-colors"
