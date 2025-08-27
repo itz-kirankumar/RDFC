@@ -99,7 +99,7 @@ const SchedulePage = ({ navigate }) => {
                     <span>Back to Dashboard</span>
                 </button>
                 <a 
-                    href="https://docs.google.com/document/d/1NFuykwd9NY6O1zPWg70HrU_Z2spxunw2NdsDAYkGUeo/edit?usp=sharing" 
+                    href="https://drive.google.com/file/d/1dbhZLSVtpAH4UC9wQuYLB3-U_2Ho_5cn/preview" 
                     target="_blank" 
                     rel="noopener noreferrer"
                     className="flex items-center space-x-2 bg-gray-700 hover:bg-gray-600 text-white font-semibold px-4 py-2 rounded-lg transition-colors"
