@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { collection, query, where, onSnapshot, doc, updateDoc } from 'firebase/firestore';
 import { db } from '../firebase/config';
-import { FaEye, FaLock, FaPlay, FaCheckCircle, FaBookOpen, FaHourglassHalf, FaArrowLeft } from 'react-icons/fa';
+import { FaEye, FaLock, FaPlay, FaCheckCircle, FaBookOpen, FaArrowLeft } from 'react-icons/fa';
 
 // --- HELPER COMPONENTS ---
 
@@ -48,7 +48,6 @@ const AllTestsPage = ({ navigate, tests: initialTests = [], title, contentType }
     const { userData } = useAuth();
     const [userAttempts, setUserAttempts] = useState({});
     const [userStatus, setUserStatus] = useState(null);
-    const [filterType, setFilterType] = useState('All');
     const [liveTests, setLiveTests] = useState({});
     const [visibleCount, setVisibleCount] = useState(10);
 
@@ -90,17 +89,12 @@ const AllTestsPage = ({ navigate, tests: initialTests = [], title, contentType }
         return () => clearInterval(interval);
     }, [initialTests]);
 
-    const sortedAndFilteredTests = useMemo(() => {
-        const sorted = [...initialTests].sort((a, b) => {
+    const sortedTests = useMemo(() => {
+        return [...initialTests].sort((a, b) => {
             if (a.isFree !== b.isFree) return a.isFree ? -1 : 1;
             return (b.createdAt?.toDate() || 0) - (a.createdAt?.toDate() || 0);
         });
-
-        if (contentType === 'rdfc' || filterType === 'All') {
-            return sorted;
-        }
-        return sorted.filter(test => test.type.toUpperCase() === filterType.toUpperCase());
-    }, [initialTests, filterType, contentType]);
+    }, [initialTests]);
 
     const getIsLocked = (test, itemType) => {
         if (test.isFree) return false;
@@ -113,7 +107,6 @@ const AllTestsPage = ({ navigate, tests: initialTests = [], title, contentType }
             case 'MOCK': return !access.mock;
             case 'SECTIONAL': return !access.sectional;
             case 'TEST': return !access.test;
-            // --- FIX: Check for the correct access control property ---
             case '10MIN': return !access.ten_min_tests; 
             default: return true;
         }
@@ -230,10 +223,10 @@ const AllTestsPage = ({ navigate, tests: initialTests = [], title, contentType }
                     </tr>
                 </thead>
                 <tbody className="bg-gray-800 divide-y divide-gray-700">
-                    {sortedAndFilteredTests.slice(0, visibleCount).map(test => renderRow(test))}
+                    {sortedTests.slice(0, visibleCount).map(test => renderRow(test))}
                 </tbody>
             </table>
-            {sortedAndFilteredTests.length > visibleCount && (
+            {sortedTests.length > visibleCount && (
                 <div className="p-4 bg-gray-800 text-center">
                     <button onClick={() => setVisibleCount(prev => prev + 10)} className="text-sm font-semibold text-blue-400 hover:text-blue-300">
                         Load more...
@@ -252,10 +245,10 @@ const AllTestsPage = ({ navigate, tests: initialTests = [], title, contentType }
                     </tr>
                 </thead>
                 <tbody className="bg-gray-800 divide-y divide-gray-700">
-                    {sortedAndFilteredTests.slice(0, visibleCount).map(test => renderRow(test))}
+                    {sortedTests.slice(0, visibleCount).map(test => renderRow(test))}
                 </tbody>
             </table>
-            {sortedAndFilteredTests.length > visibleCount && (
+            {sortedTests.length > visibleCount && (
                 <div className="p-4 bg-gray-800 text-center">
                     <button onClick={() => setVisibleCount(prev => prev + 10)} className="text-sm font-semibold text-blue-400 hover:text-blue-300">
                         Load more...
@@ -278,23 +271,9 @@ const AllTestsPage = ({ navigate, tests: initialTests = [], title, contentType }
                     <button onClick={() => navigate('subscription')} className="bg-white text-amber-700 px-6 py-2 rounded-md font-bold hover:bg-gray-200 transition-transform transform hover:scale-105">Subscribe Now</button>
                 </div>
             )}
-            
-            {contentType !== 'rdfc' && (
-                <div className="flex space-x-2 mb-6 p-2 bg-gray-800/50 rounded-lg self-start">
-                    {['All', 'Mock', 'Sectional', '10Min', 'Test'].filter(type => {
-                        if (type === 'All' && sortedAndFilteredTests.length > 0) return true;
-                        if (initialTests.some(t => t.type.toUpperCase() === type.toUpperCase())) return true;
-                        return false;
-                    }).map(type => (
-                        <button key={type} onClick={() => setFilterType(type)} className={`px-4 py-1.5 text-sm font-semibold rounded-full transition-colors ${filterType === type ? 'bg-blue-600 text-white' : 'text-gray-300 hover:bg-gray-700'}`}>
-                            {type === '10Min' ? '10 Min Tests' : type}
-                        </button>
-                    ))}
-                </div>
-            )}
 
             <div className="hidden md:block">
-                {sortedAndFilteredTests.length > 0 ? (
+                {sortedTests.length > 0 ? (
                     contentType === 'rdfc'
                     ? renderDesktopTable(['Title', 'Article Name', 'Article Description', 'Article Action', 'Test Action'], renderRDFCDesktopRow)
                     : renderDesktopTable(['Title', 'Type', 'Description', 'Action'], renderAddOnDesktopRow)
@@ -302,7 +281,7 @@ const AllTestsPage = ({ navigate, tests: initialTests = [], title, contentType }
             </div>
 
             <div className="md:hidden">
-                {sortedAndFilteredTests.length > 0 ? (
+                {sortedTests.length > 0 ? (
                     contentType === 'rdfc'
                     ? renderMobileTable(['Details', 'Actions'], renderRdfcMobileRow)
                     : renderMobileTable(['Details', 'Action'], renderAddOnMobileRow)

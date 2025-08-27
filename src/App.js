@@ -23,8 +23,8 @@ import LegalPage from './pages/LegalPage';
 import AdminVocabManager from './pages/AdminVocabManager';
 import SupportPage from './pages/SupportPage';
 import AdminSupportManager from './pages/AdminSupportManager';
-// NEW: Import the StreaksPage
 import StreaksPage from './pages/StreaksPage';
+import SchedulePage from './pages/SchedulePage'; // Import the new page
 
 const MainRouter = () => {
     const { user, userData, loading } = useAuth();
@@ -79,7 +79,8 @@ const MainRouter = () => {
         // User routes
         switch (currentPage) {
             case 'home': pageComponent = <UserDashboard navigate={navigate} />; break;
-            case 'streaks': pageComponent = <StreaksPage navigate={navigate} />; break; // NEW ROUTE
+            case 'streaks': pageComponent = <StreaksPage navigate={navigate} />; break;
+            case 'schedule': pageComponent = <SchedulePage navigate={navigate} />; break; // Add this route
             case 'test': pageComponent = <TestInterfacePage navigate={navigate} {...pageData} />; break;
             case 'results': 
                 pageComponent = <ResultAnalysis navigate={navigate} {...pageData} />; 

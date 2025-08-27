@@ -4,8 +4,7 @@ import { db } from '../firebase/config';
 import { useAuth } from '../contexts/AuthContext';
 import FeedbackForm from '../components/FeedbackForm';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FaEye, FaLock, FaPlay, FaCheckCircle, FaHourglassHalf, FaBookOpen, FaCrown, FaTachometerAlt, FaVial, FaCommentDots, FaHeadset, FaChevronDown, FaArrowLeft, FaArrowRight, FaChartLine, FaBullseye, FaStar, FaTrophy, FaBolt } from 'react-icons/fa';
-
+import { FaEye, FaLock, FaPlay, FaCheckCircle, FaHourglassHalf, FaBookOpen, FaCrown, FaTachometerAlt, FaVial, FaCommentDots, FaHeadset, FaChevronDown, FaArrowRight, FaChartLine, FaBullseye, FaStar, FaTrophy, FaBolt, FaCalendarAlt } from 'react-icons/fa';
 
 // --- WIDGETS AND HELPERS START ---
 
@@ -337,7 +336,6 @@ const UserDashboard = ({ navigate }) => {
     const [liveTests, setLiveTests] = useState({});
     const [showFeedbackThanks, setShowFeedbackThanks] = useState(false);
     const [activeTab, setActiveTab] = useState('dashboard');
-    const [testFilter, setTestFilter] = useState('test');
     const [openAccordion, setOpenAccordion] = useState(null);
 
     const { allTests, linkedArticles, loading: masterDataLoading } = useMasterData();
@@ -504,7 +502,7 @@ const UserDashboard = ({ navigate }) => {
                     </div>
                  </td>
                  <td className="px-6 py-4 text-sm text-gray-400">
-                     <span className={`inline-block px-2 py-1 text-xs font-semibold rounded-full ${typeColors[test.type.toUpperCase()] || typeColors.TEST}`}>{test.type}</span>
+                      <span className={`inline-block px-2 py-1 text-xs font-semibold rounded-full ${typeColors[test.type.toUpperCase()] || typeColors.TEST}`}>{test.type}</span>
                  </td>
                  <td className="px-6 py-4 text-sm text-gray-400 max-w-xs truncate">{test.description}</td>
                  <td className="px-6 py-4 text-sm">{renderCellContent()}</td>
@@ -543,9 +541,21 @@ const UserDashboard = ({ navigate }) => {
                 </div>
             );
         } else {
-            return <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold bg-gray-700 text-gray-300">Standard User</span>;
+            return (
+                <div className="flex items-center space-x-3">
+                     <style jsx>{` @keyframes shine { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } } .subscribe-button { background: linear-gradient(90deg, #ffde5e, #ffef97, #ffde5e); background-size: 200% 100%; animation: shine 4s linear infinite; color: #2d3748; font-weight: 700; box-shadow: 0 2px 4px rgba(0,0,0,0.2); } `}</style>
+                    <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold bg-gray-700 text-gray-300">Standard User</span>
+                    <button 
+                        onClick={() => navigate('subscription')}
+                        className="subscribe-button text-gray-900 px-4 py-2 rounded-md font-bold hover:opacity-90 transition-opacity transform hover:scale-105"
+                    >
+                        Subscribe Now
+                    </button>
+                </div>
+            );
         }
     };
+
     
     const handleFeedbackSuccess = () => {
         setShowFeedbackThanks(true);
@@ -809,14 +819,6 @@ const UserDashboard = ({ navigate }) => {
     if (loading) {
         return <div className="text-center text-gray-400 p-8">Loading Dashboard...</div>;
     }
-    
-    const testsForFilter = {
-        mock: mockTests || [],
-        sectional: sectionalTests || [],
-        test: otherAddOnTests || [],
-    };
-
-    const anyTestsAvailable = mockTests.length > 0 || sectionalTests.length > 0 || otherAddOnTests.length > 0;
 
     return (
         <div className="max-w-7xl mx-auto px-4">
@@ -830,8 +832,10 @@ const UserDashboard = ({ navigate }) => {
                     <TabButton value="dashboard" label="Dashboard" icon={FaTachometerAlt} />
                     <TabButton value="performance" label="Performance" icon={FaChartLine} />
                     {rdfcTests.length > 0 && <TabButton value="rdfc" label="RDFC" icon={FaBookOpen} />}
-                    {anyTestsAvailable && <TabButton value="tests" label="Tests" icon={FaVial} />}
-                    {tenMinTests.length > 0 && <TabButton value="10min" label="10 Min RC Tests" icon={FaBolt} />}
+                    {tenMinTests.length > 0 && <TabButton value="10min" label="10 Min RC" icon={FaBolt} />}
+                    {otherAddOnTests.length > 0 && <TabButton value="addons" label="Add-Ons" icon={FaVial} />}
+                    {sectionalTests.length > 0 && <TabButton value="sectionals" label="Sectionals" icon={FaVial} />}
+                    {mockTests.length > 0 && <TabButton value="mocks" label="Mocks" icon={FaVial} />}
                     {userStatus?.isSubscribed && !userStatus.hasSubmittedFeedback && <TabButton value="feedback" label="Feedback" icon={FaCommentDots} />}
                     <TabButton value="support" label="Support" icon={FaHeadset} />
                 </div>
@@ -846,27 +850,36 @@ const UserDashboard = ({ navigate }) => {
                         </div>
                     )}
                     {activeTab === 'performance' && <PerformanceContent />}
-                    {activeTab === 'rdfc' && rdfcTests.length > 0 && ( <TestSection title="RDFC Articles & Tests" tests={rdfcTests} limit={10} contentType="rdfc" viewAllParams={{ title: 'All RDFC Articles & Tests', contentType: 'rdfc' }} navigate={navigate} renderDesktopRow={renderRDFCDesktopRow}/> )}
-                    {activeTab === 'tests' && anyTestsAvailable && (
+                    {activeTab === 'rdfc' && <TestSection title="RDFC Articles & Tests" tests={rdfcTests} limit={10} contentType="rdfc" viewAllParams={{ title: 'All RDFC Articles & Tests', contentType: 'rdfc' }} navigate={navigate} renderDesktopRow={renderRDFCDesktopRow}/>}
+                    {activeTab === '10min' && <TestSection title="10 Min RC Tests" tests={tenMinTests} limit={10} contentType="10min" viewAllParams={{ title: 'All 10 Min RC Tests', contentType: '10min' }} navigate={navigate} renderDesktopRow={renderAddOnTestRow} />}
+                    {activeTab === 'addons' && <TestSection title="Add-On Tests" tests={otherAddOnTests} limit={10} contentType="test" viewAllParams={{ title: 'All Add-On Tests', contentType: 'test' }} navigate={navigate} renderDesktopRow={renderAddOnTestRow} />}
+                    {activeTab === 'sectionals' && (
                         <div>
-                            <div className="flex items-center space-x-2 mb-6">
-                                {otherAddOnTests.length > 0 && ( <button onClick={() => setTestFilter('test')} className={`px-4 py-1.5 text-sm font-semibold rounded-full transition-colors ${testFilter === 'test' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}>Add-Ons</button> )}
-                                {sectionalTests.length > 0 && ( <button onClick={() => setTestFilter('sectional')} className={`px-4 py-1.5 text-sm font-semibold rounded-full transition-colors ${testFilter === 'sectional' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}>Sectionals</button> )}
-                                {mockTests.length > 0 && ( <button onClick={() => setTestFilter('mock')} className={`px-4 py-1.5 text-sm font-semibold rounded-full transition-colors ${testFilter === 'mock' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}>Mocks</button> )}
+                             <div className="flex justify-end mb-4">
+                                <button 
+                                    onClick={() => navigate('schedule')}
+                                    className="flex items-center space-x-2 bg-green-600 hover:bg-green-700 text-white font-semibold px-4 py-2 rounded-lg transition-colors"
+                                >
+                                    <FaCalendarAlt />
+                                    <span>View Schedule</span>
+                                </button>
                             </div>
-                            <TestSection title={`${testFilter.charAt(0).toUpperCase() + testFilter.slice(1)} Tests`} tests={testsForFilter[testFilter]} limit={10} contentType={testFilter} viewAllParams={{ title: `All ${testFilter}s`, contentType: testFilter }} navigate={navigate} renderDesktopRow={renderAddOnTestRow}/>
+                            <TestSection title="Sectional Tests" tests={sectionalTests} limit={10} contentType="sectional" viewAllParams={{ title: 'All Sectional Tests', contentType: 'sectional' }} navigate={navigate} renderDesktopRow={renderAddOnTestRow} />
                         </div>
                     )}
-                    {activeTab === '10min' && tenMinTests.length > 0 && (
-                        <TestSection 
-                            title="10 Min RC Tests" 
-                            tests={tenMinTests} 
-                            limit={10} 
-                            contentType="10min" 
-                            viewAllParams={{ title: 'All 10 Min RC Tests', contentType: '10min' }} 
-                            navigate={navigate} 
-                            renderDesktopRow={renderAddOnTestRow}
-                        />
+                    {activeTab === 'mocks' && (
+                        <div>
+                             <div className="flex justify-end mb-4">
+                                <button 
+                                    onClick={() => navigate('schedule')}
+                                    className="flex items-center space-x-2 bg-green-600 hover:bg-green-700 text-white font-semibold px-4 py-2 rounded-lg transition-colors"
+                                >
+                                    <FaCalendarAlt />
+                                    <span>View Schedule</span>
+                                </button>
+                            </div>
+                            <TestSection title="Mock Tests" tests={mockTests} limit={10} contentType="mock" viewAllParams={{ title: 'All Mock Tests', contentType: 'mock' }} navigate={navigate} renderDesktopRow={renderAddOnTestRow} />
+                        </div>
                     )}
                     {activeTab === 'support' && ( <div className="bg-gray-800 rounded-lg p-8 text-center"><h2 className="text-2xl font-bold text-white mb-4">Support Center</h2><p className="text-gray-400 mb-6">Have questions or need assistance? We're here to help!</p><button onClick={() => navigate('support')} className="bg-blue-600 text-white px-6 py-2 rounded-md font-semibold hover:bg-blue-700 shadow-lg transition-all">Go to Support Page</button></div> )}
                     {activeTab === 'feedback' && ( <div className="pt-8 mb-12">{showFeedbackThanks ? (<div className="bg-gray-800 border-l-4 border-green-500 text-white p-6 rounded-lg shadow-lg my-8 text-center"><h3 className="text-xl font-bold">Thank You!</h3><p className="text-gray-300 mt-2">Your feedback is valuable to us and helps improve the platform for everyone.</p></div>) : (<FeedbackForm userStatus={userStatus} onSuccessfulSubmit={handleFeedbackSuccess} />)}</div> )}
