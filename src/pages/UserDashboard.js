@@ -884,7 +884,7 @@ const UserDashboard = ({ navigate }) => {
         return <div className="text-center text-gray-400 p-8">Loading Dashboard...</div>;
     }
 
-    const recentTests = [...mockTests, ...sectionalTests, ...tenMinTests].sort((a,b) => (b.createdAt?.toDate() || 0) - (a.createdAt?.toDate() || 0)).slice(0,3);
+    const recentTests = [...mockTests, ...sectionalTests, ...tenMinTests, ...rdfcTests, ...otherAddOnTests].sort((a,b) => (b.createdAt?.toDate() || 0) - (a.createdAt?.toDate() || 0)).slice(0,3);
 
     return (
         <div className="max-w-7xl mx-auto px-4">
