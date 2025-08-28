@@ -201,8 +201,9 @@ const AnalysisView = ({ test, attempt, allAttempts, currentQuestion, setCurrentQ
                 {showPassagePanel && (
                     <div className={`bg-white shadow-md rounded-lg p-4 md:p-6 flex-1 overflow-y-auto min-h-0 ${mobileView === 'passage' ? 'flex' : 'hidden'} md:flex flex-col`}>
                         <h2 className="font-bold mb-2 text-gray-900">Directions for question {currentQuestion.qIdx + 1}</h2>
-                        {activeQuestion.passageImageUrl && <img src={activeQuestion.passageImageUrl} alt="Passage" className="mb-4 rounded max-w-full"/>}
-                        <div className="prose max-w-none text-gray-800 whitespace-pre-wrap">{activeQuestion.passage}</div>
+                        {/* FIX: Reordered to show text before image */}
+                        <div className="prose max-w-none text-gray-800 whitespace-pre-wrap mb-4">{activeQuestion.passage}</div>
+                        {activeQuestion.passageImageUrl && <img src={activeQuestion.passageImageUrl} alt="Passage" className="rounded max-w-full"/>}
                     </div>
                 )}
                 <div className={`bg-white shadow-md rounded-lg p-4 md:p-6 flex-1 overflow-y-auto min-h-0 ${mobileView === 'question' ? 'flex' : 'hidden'} md:flex flex-col`}>
@@ -212,8 +213,10 @@ const AnalysisView = ({ test, attempt, allAttempts, currentQuestion, setCurrentQ
                             {isOriginalUnattempted ? 'Not Attempted' : (isOriginalCorrect ? 'Correct' : 'Incorrect')}
                         </span>
                     </div>
-                    {activeQuestion.questionImageUrl && <img src={activeQuestion.questionImageUrl} alt="Question" className="mb-4 rounded max-w-full"/>}
-                    <p className="text-gray-900 whitespace-pre-wrap mb-6">{activeQuestion.questionText}</p>
+                    {/* FIX: Reordered to show text before image */}
+                    <p className="text-gray-900 whitespace-pre-wrap mb-4">{activeQuestion.questionText}</p>
+                    {activeQuestion.questionImageUrl && <img src={activeQuestion.questionImageUrl} alt="Question" className="mb-6 rounded max-w-full"/>}
+                    
                     <div className="space-y-3">
                         <h3 className="text-lg font-semibold text-gray-900 mb-2">Your Answer:</h3>
                         {activeQuestion.type === 'TITA' ? (
@@ -239,8 +242,9 @@ const AnalysisView = ({ test, attempt, allAttempts, currentQuestion, setCurrentQ
                         {showExplanationContent && (
                             <div className="mt-4 p-4 bg-gray-100 rounded-md border border-gray-200">
                                 <p className="font-semibold text-sm text-gray-800">Explanation:</p>
-                                {activeQuestion.solutionImageUrl && <img src={activeQuestion.solutionImageUrl} alt="Solution" className="mt-2 rounded max-w-full"/>}
+                                {/* FIX: Reordered to show text before image */}
                                 <p className="text-sm text-gray-600 whitespace-pre-wrap mt-2">{activeQuestion.solution}</p>
+                                {activeQuestion.solutionImageUrl && <img src={activeQuestion.solutionImageUrl} alt="Solution" className="mt-2 rounded max-w-full"/>}
                             </div>
                         )}
                     </div>

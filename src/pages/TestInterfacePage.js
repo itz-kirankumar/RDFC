@@ -57,14 +57,16 @@ const QuestionPaperModal = ({ isOpen, onClose, section }) => {
                                     {(q.passage || q.passageImageUrl) && (
                                         <div className="mb-4 p-3 bg-gray-200 rounded">
                                             <h3 className="font-bold mb-2 text-gray-900">Directions for Question {index + 1}:</h3>
-                                            {q.passageImageUrl && <img src={q.passageImageUrl} alt={`Passage for Q${index + 1}`} className="max-w-full h-auto mb-2 rounded"/>}
+                                            {/* FIX: Reordered to show text before image */}
                                             {q.passage && <div className="prose max-w-none text-gray-800 whitespace-pre-wrap">{q.passage}</div>}
+                                            {q.passageImageUrl && <img src={q.passageImageUrl} alt={`Passage for Q${index + 1}`} className="max-w-full h-auto mt-2 rounded"/>}
                                         </div>
                                     )}
                                     <p className="font-semibold text-gray-900 mb-2">Question {index + 1}:</p>
-                                    {q.questionImageUrl && <img src={q.questionImageUrl} alt={`Question ${index + 1}`} className="max-w-full h-auto mb-4 rounded"/>}
+                                    {/* FIX: Reordered to show text before image */}
                                     <p className="text-gray-800 whitespace-pre-wrap mb-4">{q.questionText}</p>
-                                    {q.type !== 'TITA' && q.options && (<div className="space-y-2 text-sm">{q.options.map((option, optIndex) => (<p key={optIndex} className="text-gray-600 ml-4">{String.fromCharCode(97 + optIndex)}) {option}</p>))}</div>)}
+                                    {q.questionImageUrl && <img src={q.questionImageUrl} alt={`Question ${index + 1}`} className="max-w-full h-auto mt-4 rounded"/>}
+                                    {q.type !== 'TITA' && q.options && (<div className="space-y-2 text-sm mt-4">{q.options.map((option, optIndex) => (<p key={optIndex} className="text-gray-600 ml-4">{String.fromCharCode(97 + optIndex)}) {option}</p>))}</div>)}
                                 </div>
                             ))}
                         </div>
@@ -907,6 +909,12 @@ const TestInterfacePage = ({ navigate, testId }) => {
                 </div>
             );
         }
+        // INSERT THIS CODE
+        if (!currentSection || !currentQuestion) {
+            // This handles brief moments during state transitions (like switching sections)
+            // where the question data might not be immediately available.
+            return <div className="text-center text-gray-400 p-8">Loading question...</div>;
+        }
 
         const timerValue = sectionTimers[currentSectionIndex] || 0;
         const minutes = Math.floor(timerValue / 60);
@@ -975,8 +983,9 @@ const TestInterfacePage = ({ navigate, testId }) => {
                             <div className="absolute inset-0 z-0" style={watermarkStyle}></div>
                             <div className="relative z-10">
                                 <h2 className="font-bold mb-2">Directions</h2>
-                                {currentQuestion.passageImageUrl && <img src={currentQuestion.passageImageUrl} alt="Passage" className="max-w-full h-auto mb-4 rounded"/>}
+                                {/* FIX: Reordered to show text before image */}
                                 <div className="prose max-w-none text-gray-800 whitespace-pre-wrap">{currentQuestion.passage}</div>
+                                {currentQuestion.passageImageUrl && <img src={currentQuestion.passageImageUrl} alt="Passage" className="max-w-full h-auto mt-4 rounded"/>}
                             </div>
                         </div>
                     )}
@@ -985,23 +994,27 @@ const TestInterfacePage = ({ navigate, testId }) => {
                         <div className="absolute inset-0 z-0" style={watermarkStyle}></div>
                         <div className="relative z-10">
                             <h2 className="font-bold mb-4">Question No. {currentQuestionIndex + 1}</h2>
-                            {currentQuestion.questionImageUrl && <img src={currentQuestion.questionImageUrl} alt="Question" className="max-w-full h-auto mb-4 rounded"/>}
-                            <div className="prose max-w-none text-gray-800 mb-6 whitespace-pre-wrap">{currentQuestion.questionText}</div>
-                            {currentQuestion.type === 'TITA' ? (
-                                <>
-                                    <input type="text" value={answers[currentSectionIndex]?.[currentQuestionIndex] || ''} readOnly className="p-2 border-2 rounded-md w-full" placeholder="Input answer using number pad..."/>
-                                    <NumberPad onNumberClick={handleTitaChange} />
-                                </>
-                            ) : (
-                                <div className="space-y-3">
-                                    {currentQuestion.options.map((option, index) => (
-                                        <div key={index} onClick={() => handleOptionSelect(index)} className={`flex items-start p-3 border-2 rounded-lg cursor-pointer transition-colors ${answers[currentSectionIndex]?.[currentQuestionIndex] === index ? 'bg-blue-50 border-blue-500' : 'border-gray-300 hover:bg-gray-50'}`}>
-                                            <input type="radio" name={`q_${currentQuestionIndex}`} checked={answers[currentSectionIndex]?.[currentQuestionIndex] === index} readOnly className="mt-1 mr-3 h-4 w-4 text-blue-600 border-gray-300 focus:ring-blue-500"/>
-                                            <label className="flex-1">{option}</label>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
+                            {/* FIX: Reordered to show text before image */}
+                            <div className="prose max-w-none text-gray-800 mb-4 whitespace-pre-wrap">{currentQuestion.questionText}</div>
+                            {currentQuestion.questionImageUrl && <img src={currentQuestion.questionImageUrl} alt="Question" className="max-w-full h-auto mt-4 rounded"/>}
+                            
+                            <div className="mt-6">
+                                {currentQuestion.type === 'TITA' ? (
+                                    <>
+                                        <input type="text" value={answers[currentSectionIndex]?.[currentQuestionIndex] || ''} readOnly className="p-2 border-2 rounded-md w-full" placeholder="Input answer using number pad..."/>
+                                        <NumberPad onNumberClick={handleTitaChange} />
+                                    </>
+                                ) : (
+                                    <div className="space-y-3">
+                                        {currentQuestion.options.map((option, index) => (
+                                            <div key={index} onClick={() => handleOptionSelect(index)} className={`flex items-start p-3 border-2 rounded-lg cursor-pointer transition-colors ${answers[currentSectionIndex]?.[currentQuestionIndex] === index ? 'bg-blue-50 border-blue-500' : 'border-gray-300 hover:bg-gray-50'}`}>
+                                                <input type="radio" name={`q_${currentQuestionIndex}`} checked={answers[currentSectionIndex]?.[currentQuestionIndex] === index} readOnly className="mt-1 mr-3 h-4 w-4 text-blue-600 border-gray-300 focus:ring-blue-500"/>
+                                                <label className="flex-1">{option}</label>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     </div>
 
