@@ -299,6 +299,27 @@ const ResultAnalysis = ({ navigate, attemptId }) => {
     const [currentQuestion, setCurrentQuestion] = useState({ secIdx: 0, qIdx: 0 });
     const analysisContainerRef = useRef(null);
 
+    // --- UPDATED: useEffect to disable right-click and selection globally ---
+    useEffect(() => {
+        const handleContextMenu = (e) => {
+            e.preventDefault(); // Prevents the context menu (right-click menu)
+        };
+        
+        const handleSelectStart = (e) => {
+            e.preventDefault(); // Prevents text selection
+        };
+
+        // Attach listeners to the entire document
+        document.addEventListener('contextmenu', handleContextMenu);
+        document.addEventListener('selectstart', handleSelectStart);
+
+        // Cleanup function to remove global listeners when the component unmounts
+        return () => {
+            document.removeEventListener('contextmenu', handleContextMenu);
+            document.removeEventListener('selectstart', handleSelectStart);
+        };
+    }, []); // Empty dependency array ensures this runs only once on mount
+
     const handleFullscreen = useCallback(() => {
         if (analysisContainerRef.current) {
             if (!document.fullscreenElement) {
@@ -437,7 +458,12 @@ const ResultAnalysis = ({ navigate, attemptId }) => {
     const showPassagePanel = (test.sections[currentQuestion.secIdx]?.questions[currentQuestion.qIdx]?.passage || test.sections[currentQuestion.secIdx]?.questions[currentQuestion.qIdx]?.passageImageUrl);
 
     return (
-        <div ref={analysisContainerRef} className="h-screen flex flex-col bg-white text-gray-800 font-sans">
+        // --- MODIFIED: The inline style still helps prevent text selection by CSS ---
+        <div 
+            ref={analysisContainerRef} 
+            className="h-screen flex flex-col bg-white text-gray-800 font-sans"
+            style={{ userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}
+        >
             {view === 'summary' ? (
                 <Scorecard 
                     test={test} 
