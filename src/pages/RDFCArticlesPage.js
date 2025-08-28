@@ -12,15 +12,11 @@ const RDFCArticlesPage = ({ navigate }) => {
     const [articleDescription, setArticleDescription] = useState('');
     const [selectedTestId, setSelectedTestId] = useState('');
     const [isEditing, setIsEditing] = useState(false);
-    // New state for managing table sorting
     const [sortConfig, setSortConfig] = useState({ key: 'testCreatedAt', direction: 'descending' });
 
     useEffect(() => {
-        // Fetch tests and order them by creation date to always show the latest first.
         const fetchTests = async () => {
             try {
-                // MODIFICATION: Added query and orderBy to fetch tests in descending order of creation.
-                // This assumes your test documents have a 'createdAt' timestamp field.
                 const testsQuery = query(collection(db, 'tests'), orderBy('createdAt', 'desc'));
                 const testsSnapshot = await getDocs(testsQuery);
                 setTests(testsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
@@ -51,7 +47,6 @@ const RDFCArticlesPage = ({ navigate }) => {
         return () => unsubscribe();
     }, []);
 
-    // Auto-populate form when selecting a test that already has a linked article
     useEffect(() => {
         if (selectedTestId) {
             const article = linkedArticles[selectedTestId];
@@ -74,23 +69,18 @@ const RDFCArticlesPage = ({ navigate }) => {
         }
     }, [selectedTestId, linkedArticles]);
 
-    // MODIFICATION: Filter tests to show only unlinked ones. The list is already sorted by latest.
     const unlinkedTests = tests.filter(test => !linkedArticles[test.id]);
 
-    // MODIFICATION: Memoized and sorted list of linked articles for efficient rendering and organization.
     const sortedLinkedArticleList = useMemo(() => {
-        // First, create a combined list of articles with their corresponding test data.
         let combinedList = Object.values(linkedArticles).map(article => {
             const test = tests.find(t => t.id === article.id);
             return {
                 ...article,
                 testTitle: test?.title || 'N/A',
-                // Include the test's creation date for default sorting.
                 testCreatedAt: test?.createdAt,
             };
         });
 
-        // Then, sort this list based on the current sortConfig state.
         if (sortConfig.key) {
             combinedList.sort((a, b) => {
                 if (a[sortConfig.key] < b[sortConfig.key]) {
@@ -105,7 +95,6 @@ const RDFCArticlesPage = ({ navigate }) => {
         return combinedList;
     }, [linkedArticles, tests, sortConfig]);
 
-    // MODIFICATION: New function to handle requests to sort the table.
     const requestSort = (key) => {
         let direction = 'ascending';
         if (sortConfig.key === key && sortConfig.direction === 'ascending') {
@@ -114,7 +103,6 @@ const RDFCArticlesPage = ({ navigate }) => {
         setSortConfig({ key, direction });
     };
 
-    // MODIFICATION: Helper function to get the sorting indicator for table headers.
     const getSortIndicator = (key) => {
         if (sortConfig.key === key) {
             return sortConfig.direction === 'ascending' ? '▲' : '▼';
@@ -162,23 +150,23 @@ const RDFCArticlesPage = ({ navigate }) => {
     };
 
     if (loading) {
-        return <div className="text-center text-gray-400">Loading...</div>;
+        return <div className="text-center text-gray-400 p-8">Loading...</div>;
     }
 
     return (
-        <div className="max-w-7xl mx-auto">
+        <div className="max-w-7xl mx-auto p-4 md:p-0">
             <div className="flex justify-between items-center mb-6">
-                <h1 className="text-3xl font-bold text-white">RDFC Articles Manager</h1>
+                <h1 className="text-2xl md:text-3xl font-bold text-white">RDFC Articles</h1>
                 <button
                     onClick={() => navigate('home')}
-                    className="bg-gray-800 text-white px-6 py-2 rounded-md font-semibold hover:bg-gray-700 shadow transition-all transform hover:scale-105"
+                    className="bg-gray-800 text-white px-4 py-2 rounded-md font-semibold hover:bg-gray-700 shadow text-sm md:text-base"
                 >
-                    &larr; Back to Dashboard
+                    &larr; Dashboard
                 </button>
             </div>
 
-            <div className="bg-gray-800 p-6 rounded-lg shadow-md mb-8">
-                <h2 className="text-2xl font-bold text-white mb-4">{isEditing ? 'Edit Article Link' : 'Link New Article'}</h2>
+            <div className="bg-gray-800 p-4 md:p-6 rounded-lg shadow-md mb-8">
+                <h2 className="text-xl md:text-2xl font-bold text-white mb-4">{isEditing ? 'Edit Article Link' : 'Link New Article'}</h2>
                 <form onSubmit={handleLinkArticle} className="space-y-4">
                     <div className="flex flex-col md:flex-row gap-4">
                         <select
@@ -187,7 +175,6 @@ const RDFCArticlesPage = ({ navigate }) => {
                             className="flex-1 rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-white focus:ring focus:ring-gray-500 focus:ring-opacity-50"
                         >
                             <option value="">Select a Test</option>
-                            {/* The unlinkedTests array is now sorted by the latest test */}
                             {unlinkedTests.map(test => (
                                 <option key={test.id} value={test.id}>{test.title}</option>
                             ))}
@@ -200,7 +187,7 @@ const RDFCArticlesPage = ({ navigate }) => {
                             value={articleUrl}
                             onChange={(e) => setArticleUrl(e.target.value)}
                             placeholder="Paste Google Drive Link"
-                            className="flex-1 mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-white focus:ring focus:ring-gray-500 focus:ring-opacity-50"
+                            className="flex-1 rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-white focus:ring focus:ring-gray-500 focus:ring-opacity-50"
                             required
                         />
                     </div>
@@ -209,7 +196,7 @@ const RDFCArticlesPage = ({ navigate }) => {
                         value={articleName}
                         onChange={(e) => setArticleName(e.target.value)}
                         placeholder="Article Name"
-                        className="w-full mt-1 block rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-white focus:ring focus:ring-gray-500 focus:ring-opacity-50"
+                        className="w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-white focus:ring focus:ring-gray-500 focus:ring-opacity-50"
                         required
                     />
                     <textarea
@@ -217,7 +204,7 @@ const RDFCArticlesPage = ({ navigate }) => {
                         onChange={(e) => setArticleDescription(e.target.value)}
                         placeholder="Article Description"
                         rows="3"
-                        className="w-full mt-1 block rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-white focus:ring focus:ring-gray-500 focus:ring-opacity-50"
+                        className="w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-white focus:ring focus:ring-gray-500 focus:ring-opacity-50"
                         required
                     />
                     <button type="submit" className="w-full bg-white text-gray-900 px-6 py-2 rounded-md font-semibold hover:bg-gray-200 shadow">
@@ -226,44 +213,59 @@ const RDFCArticlesPage = ({ navigate }) => {
                 </form>
             </div>
 
-            <h2 className="text-2xl font-bold text-white mb-4">Linked Articles</h2>
+            <h2 className="text-xl md:text-2xl font-bold text-white mb-4">Linked Articles ({sortedLinkedArticleList.length})</h2>
             <div className="bg-gray-800 shadow-md rounded-lg overflow-hidden">
-                <div className="overflow-x-auto">
+                {/* --- MOBILE CARD VIEW --- */}
+                <div className="md:hidden">
+                    <div className="p-4 space-y-4">
+                        {sortedLinkedArticleList.map(article => (
+                            <div key={article.id} className="bg-gray-700 rounded-lg p-4 flex flex-col space-y-3 shadow">
+                                <div>
+                                    <p className="text-xs text-gray-400">Test Title</p>
+                                    <h3 className="font-bold text-white break-words">{article.testTitle}</h3>
+                                </div>
+                                <div className="space-y-3 border-t border-gray-600 pt-3">
+                                    <div>
+                                        <p className="text-xs text-gray-400">Article Name</p>
+                                        <p className="text-sm text-gray-200">{article.name}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-xs text-gray-400">Description</p>
+                                        <p className="text-sm text-gray-300 break-words">{article.description}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-xs text-gray-400">Link</p>
+                                        <a href={article.url} target="_blank" rel="noopener noreferrer" className="text-blue-400 break-all hover:underline">{article.url}</a>
+                                    </div>
+                                </div>
+                                <div className="flex justify-end items-center space-x-2 border-t border-gray-600 pt-3">
+                                    <button onClick={() => setSelectedTestId(article.id)} className="bg-gray-600 text-white px-4 py-2 rounded-md text-sm font-semibold hover:bg-gray-500">Edit</button>
+                                    <button onClick={() => handleUnlinkArticle(article.id)} className="bg-red-600 text-white px-4 py-2 rounded-md text-sm font-semibold hover:bg-red-500">Unlink</button>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+
+                {/* --- DESKTOP TABLE VIEW --- */}
+                <div className="hidden md:block overflow-x-auto">
                     <table className="min-w-full divide-y divide-gray-700">
                         <thead className="bg-gray-700">
                             <tr>
-                                {/* MODIFICATION: Table headers are now clickable buttons for sorting */}
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">
-                                    <button onClick={() => requestSort('testTitle')} className="flex items-center space-x-1">
-                                        <span>Test Title</span>
-                                        <span>{getSortIndicator('testTitle')}</span>
-                                    </button>
-                                </th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">
-                                    <button onClick={() => requestSort('name')} className="flex items-center space-x-1">
-                                        <span>Article Name</span>
-                                        <span>{getSortIndicator('name')}</span>
-                                    </button>
-                                </th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase"><button onClick={() => requestSort('testTitle')} className="flex items-center space-x-1"><span>Test Title</span><span>{getSortIndicator('testTitle')}</span></button></th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase"><button onClick={() => requestSort('name')} className="flex items-center space-x-1"><span>Article Name</span><span>{getSortIndicator('name')}</span></button></th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Article Description</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Google Drive Link</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Actions</th>
                             </tr>
                         </thead>
                         <tbody className="bg-gray-800 divide-y divide-gray-700">
-                            {/* MODIFICATION: Mapping over the new sorted list */}
                             {sortedLinkedArticleList.map(article => (
                                 <tr key={article.id}>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">{article.testTitle}</td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400">
-                                        {article.name}
-                                    </td>
-                                    <td className="px-6 py-4 text-sm text-gray-400">
-                                        {article.description}
-                                    </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400">
-                                        <a href={article.url} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300 truncate">{article.url}</a>
-                                    </td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400">{article.name}</td>
+                                    <td className="px-6 py-4 text-sm text-gray-400 max-w-xs truncate">{article.description}</td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400"><a href={article.url} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:text-blue-300 truncate max-w-xs inline-block">{article.url}</a></td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-4">
                                         <button onClick={() => setSelectedTestId(article.id)} className="text-gray-300 hover:text-white">Edit</button>
                                         <button onClick={() => handleUnlinkArticle(article.id)} className="text-red-500 hover:text-red-400">Unlink</button>
@@ -273,6 +275,12 @@ const RDFCArticlesPage = ({ navigate }) => {
                         </tbody>
                     </table>
                 </div>
+
+                {sortedLinkedArticleList.length === 0 && (
+                    <div className="text-center py-10">
+                        <p className="text-gray-400">No articles have been linked to tests yet.</p>
+                    </div>
+                )}
             </div>
         </div>
     );

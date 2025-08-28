@@ -1,40 +1,34 @@
 import React, { useState, useEffect, Fragment } from 'react';
-import { collection, doc, updateDoc, onSnapshot, setDoc, deleteDoc, query, orderBy, serverTimestamp, Timestamp, addDoc } from 'firebase/firestore';
+import { collection, doc, updateDoc, onSnapshot, addDoc, deleteDoc, query, orderBy, serverTimestamp, Timestamp } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { Dialog, Transition } from '@headlessui/react';
 import { nanoid } from 'nanoid';
+import { TrashIcon, PencilIcon, PlusIcon } from '@heroicons/react/24/solid';
+
 
 // --- Reusable Form Input Component ---
-const FormInput = ({ label, type = 'text', value, onChange, placeholder = '', step, min, ...props }) => (
+const FormInput = ({ label, type = 'text', value, onChange, placeholder = '', ...props }) => (
     <div>
-        <label className="block text-sm font-medium text-gray-300">{label}</label>
+        <label className="block text-sm font-medium text-gray-300 mb-1">{label}</label>
         <input
             type={type}
             value={value}
             onChange={onChange}
             placeholder={placeholder}
-            step={step}
-            min={min}
-            className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-white focus:ring focus:ring-gray-500 focus:ring-opacity-50"
+            className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-blue-500 focus:ring focus:ring-blue-500 focus:ring-opacity-50 transition"
             {...props}
         />
     </div>
 );
 
-// --- Plan Management Modal with Tiered Offers ---
+// --- Plan Management Modal ---
 const PlanManagementModal = ({ isOpen, setIsOpen, planToEdit, handleSavePlan }) => {
     const [editMode, setEditMode] = useState(false);
     const [currentPlanId, setCurrentPlanId] = useState(null);
-
-    // Main Plan States
     const [planName, setPlanName] = useState('');
     const [isRecommended, setIsRecommended] = useState(false);
     const [order, setOrder] = useState('');
-    
-    // State for Features (Simplified: Title Only)
     const [features, setFeatures] = useState([{ id: nanoid(), title: '' }]);
-    
-    // State for Pricing Tiers (with integrated offer logic)
     const [tiers, setTiers] = useState([]);
 
     const initialTierState = {
@@ -58,29 +52,15 @@ const PlanManagementModal = ({ isOpen, setIsOpen, planToEdit, handleSavePlan }) 
             setIsRecommended(planToEdit.isRecommended || false);
             setOrder(planToEdit.order || '');
             setFeatures(planToEdit.features?.map(f => ({ id: f.id || nanoid(), title: f.title })) || [{ id: nanoid(), title: '' }]);
+            
+            const loadedTiers = planToEdit.tiers?.map(t => ({
+                ...initialTierState,
+                ...t,
+                offerEndTime: t.offerEndTime ? new Date(t.offerEndTime.toDate()).toISOString().slice(0, 16) : '',
+            })) || [];
+            
+            setTiers(loadedTiers.length > 0 ? loadedTiers : [initialTierState]);
 
-            // Handle both old and new data structures for backward compatibility
-            if (planToEdit.tiers && planToEdit.tiers.length > 0) {
-                 setTiers(planToEdit.tiers.map(t => ({
-                    ...initialTierState,
-                    ...t,
-                    offerEndTime: t.offerEndTime ? new Date(t.offerEndTime.toDate()).toISOString().slice(0, 16) : '',
-                 })));
-            } else {
-                // Convert old single-price structure to a single tier
-                setTiers([{
-                    id: nanoid(),
-                    durationText: planToEdit.durationText || '',
-                    price: planToEdit.price || '',
-                    originalPrice: planToEdit.originalPrice || '',
-                    checkoutLink: planToEdit.checkoutLink || '',
-                    hasOffer: planToEdit.hasOffer || false,
-                    offerName: planToEdit.offerName || '',
-                    offerPrice: planToEdit.offerPrice || '',
-                    offerEndTime: planToEdit.offerEndTime ? new Date(planToEdit.offerEndTime.toDate()).toISOString().slice(0, 16) : '',
-                    offerCheckoutLink: planToEdit.offerCheckoutLink || '',
-                }]);
-            }
         } else {
             resetForm();
         }
@@ -91,19 +71,33 @@ const PlanManagementModal = ({ isOpen, setIsOpen, planToEdit, handleSavePlan }) 
         setIsRecommended(false);
         setOrder('');
         setFeatures([{ id: nanoid(), title: '' }]);
-        setTiers([initialTierState]);
+        setTiers([{...initialTierState, id: nanoid()}]);
         setEditMode(false);
         setCurrentPlanId(null);
     };
 
-    // Feature Handlers
     const handleAddFeature = () => setFeatures([...features, { id: nanoid(), title: '' }]);
     const handleFeatureChange = (id, value) => setFeatures(features.map(f => (f.id === id ? { ...f, title: value } : f)));
     const handleRemoveFeature = (id) => setFeatures(features.filter(f => f.id !== id));
 
-    // Tier Handlers
     const handleAddTier = () => setTiers([...tiers, { ...initialTierState, id: nanoid() }]);
-    const handleTierChange = (id, field, value) => setTiers(tiers.map(t => (t.id === id ? { ...t, [field]: value } : t)));
+    const handleTierChange = (id, field, value) => {
+        setTiers(tiers.map(t => {
+            if (t.id === id) {
+                const updatedTier = { ...t, [field]: value };
+                if (field === 'hasOffer' && value === true && !t.offerEndTime) {
+                    const today = new Date();
+                    today.setHours(23, 59, 59, 999);
+                    const year = today.getFullYear();
+                    const month = String(today.getMonth() + 1).padStart(2, '0');
+                    const day = String(today.getDate()).padStart(2, '0');
+                    updatedTier.offerEndTime = `${year}-${month}-${day}T23:59`;
+                }
+                return updatedTier;
+            }
+            return t;
+        }));
+    };
     const handleRemoveTier = (id) => setTiers(tiers.filter(t => t.id !== id));
 
     const handleSave = () => {
@@ -147,7 +141,7 @@ const PlanManagementModal = ({ isOpen, setIsOpen, planToEdit, handleSavePlan }) 
                             <div className="p-4 border border-gray-700 rounded-lg space-y-4">
                                 <h4 className="text-white font-semibold">Main Plan Details</h4>
                                 <FormInput label="Plan Name" value={planName} onChange={e => setPlanName(e.target.value)} placeholder="e.g., RDFC Articles Access" />
-                                <div className="grid grid-cols-2 gap-4">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                     <FormInput label="Display Order" type="number" value={order} onChange={e => setOrder(e.target.value)} placeholder="e.g., 1" />
                                     <div className="flex items-end pb-2">
                                         <input type="checkbox" checked={isRecommended} onChange={e => setIsRecommended(e.target.checked)} className="rounded h-5 w-5 text-amber-500 focus:ring-amber-500" />
@@ -155,14 +149,13 @@ const PlanManagementModal = ({ isOpen, setIsOpen, planToEdit, handleSavePlan }) 
                                     </div>
                                 </div>
                             </div>
-                            
                             <div className="p-4 border border-gray-700 rounded-lg space-y-4">
                                 <h4 className="text-white font-semibold">Pricing Tiers</h4>
                                 {tiers.map((tier, index) => (
                                     <div key={tier.id} className="p-4 bg-gray-900/50 rounded-md space-y-4 relative border-l-4 border-gray-600">
                                         <div className="flex justify-between items-center">
                                             <p className="font-bold text-gray-300">Tier {index + 1}</p>
-                                            {tiers.length > 1 && <button onClick={() => handleRemoveTier(tier.id)} className="text-red-500 hover:text-red-400">Remove</button>}
+                                            {tiers.length > 1 && <button onClick={() => handleRemoveTier(tier.id)} className="text-red-500 hover:text-red-400 text-sm font-semibold">Remove</button>}
                                         </div>
                                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                                             <FormInput label="Duration Text" value={tier.durationText} onChange={e => handleTierChange(tier.id, 'durationText', e.target.value)} placeholder="for 1 Month"/>
@@ -188,7 +181,6 @@ const PlanManagementModal = ({ isOpen, setIsOpen, planToEdit, handleSavePlan }) 
                                 ))}
                                 <button onClick={handleAddTier} className="text-green-500 hover:text-green-400 font-semibold"> + Add Another Tier</button>
                             </div>
-
                             <div className="p-4 border border-gray-700 rounded-lg space-y-4">
                                 <h4 className="text-white font-semibold">Features (Bullet Points)</h4>
                                 {features.map(feature => (
@@ -196,7 +188,7 @@ const PlanManagementModal = ({ isOpen, setIsOpen, planToEdit, handleSavePlan }) 
                                         <div className="flex-grow">
                                             <FormInput label="" value={feature.title} onChange={e => handleFeatureChange(feature.id, e.target.value)} placeholder="Feature e.g., Access to all RDFC articles" />
                                         </div>
-                                        <button onClick={() => handleRemoveFeature(feature.id)} className="text-red-500 hover:text-red-400 self-end mb-1">Remove</button>
+                                        {features.length > 1 && <button onClick={() => handleRemoveFeature(feature.id)} className="text-red-500 hover:text-red-400 self-end mb-1 text-sm font-semibold">Remove</button>}
                                     </div>
                                 ))}
                                 <button onClick={handleAddFeature} className="text-green-500 hover:text-green-400 font-semibold">+ Add Feature</button>
@@ -204,7 +196,7 @@ const PlanManagementModal = ({ isOpen, setIsOpen, planToEdit, handleSavePlan }) 
                         </div>
                         <div className="mt-6 flex justify-end space-x-2">
                             <button type="button" className="inline-flex justify-center rounded-md bg-gray-700 px-4 py-2 text-sm font-medium text-white hover:bg-gray-600" onClick={() => {setIsOpen(false); resetForm();}}>Cancel</button>
-                            <button type="button" className="inline-flex justify-center rounded-md bg-white px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-200" onClick={handleSave}>{editMode ? 'Update Plan' : 'Add Plan'}</button>
+                            <button type="button" className="inline-flex justify-center rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700" onClick={handleSave}>{editMode ? 'Update Plan' : 'Add Plan'}</button>
                         </div>
                     </Dialog.Panel>
                 </div></div>
@@ -213,8 +205,7 @@ const PlanManagementModal = ({ isOpen, setIsOpen, planToEdit, handleSavePlan }) 
     );
 };
 
-
-// --- Banner Management Modal (Unchanged) ---
+// --- Banner Management Modal ---
 const BannerManagementModal = ({ isOpen, setIsOpen, bannerToEdit, handleSaveBanner }) => {
     const [editMode, setEditMode] = useState(false);
     const [currentBannerId, setCurrentBannerId] = useState(null);
@@ -273,7 +264,7 @@ const BannerManagementModal = ({ isOpen, setIsOpen, bannerToEdit, handleSaveBann
                         </div>
                         <div className="mt-6 flex justify-end space-x-2">
                             <button type="button" className="inline-flex justify-center rounded-md bg-gray-700 px-4 py-2 text-sm font-medium text-white hover:bg-gray-600" onClick={() => setIsOpen(false)}>Cancel</button>
-                            <button type="button" className="inline-flex justify-center rounded-md bg-white px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-200" onClick={handleSave}>{editMode ? 'Update' : 'Add'}</button>
+                            <button type="button" className="inline-flex justify-center rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700" onClick={handleSave}>{editMode ? 'Update' : 'Add'}</button>
                         </div>
                     </Dialog.Panel>
                 </div></div>
@@ -281,7 +272,6 @@ const BannerManagementModal = ({ isOpen, setIsOpen, bannerToEdit, handleSaveBann
         </Transition>
     );
 };
-
 
 // --- Main Component ---
 export default function AdminSubscriptionManagement() {
@@ -296,8 +286,10 @@ export default function AdminSubscriptionManagement() {
     useEffect(() => {
         const plansQuery = query(collection(db, 'subscriptionPlans'), orderBy('order', 'asc'));
         const unsubscribePlans = onSnapshot(plansQuery, (snapshot) => { setPlans(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))); setLoading(false); }, (error) => { console.error("Error fetching plans:", error); setLoading(false); });
+        
         const bannersQuery = query(collection(db, 'banners'), orderBy('createdAt', 'desc'));
         const unsubscribeBanners = onSnapshot(bannersQuery, (snapshot) => { setBanners(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))); }, (error) => console.error("Error fetching banners:", error));
+        
         return () => { unsubscribePlans(); unsubscribeBanners(); };
     }, []);
 
@@ -306,47 +298,86 @@ export default function AdminSubscriptionManagement() {
 
     const handleSavePlan = async (planId, planData, isEdit) => {
         try {
-            if (isEdit) { await updateDoc(doc(db, 'subscriptionPlans', planId), planData); alert("Plan updated!"); }
-            else { await addDoc(collection(db, 'subscriptionPlans'), planData); alert("Plan added!"); }
+            if (isEdit) { await updateDoc(doc(db, 'subscriptionPlans', planId), planData); }
+            else { await addDoc(collection(db, 'subscriptionPlans'), planData); }
             setIsPlanModalOpen(false);
-        } catch (error) { console.error("Error saving plan:", error); alert("Failed to save plan."); }
+        } catch (error) { console.error("Error saving plan:", error); }
     };
 
     const handleDeletePlan = async (planId) => {
-        if (window.confirm("Are you sure?")) {
-            try { await deleteDoc(doc(db, 'subscriptionPlans', planId)); alert("Plan deleted!"); }
-            catch (error) { console.error("Error deleting plan:", error); alert("Failed to delete plan."); }
+        if (window.confirm("Are you sure you want to permanently delete this plan?")) {
+            try { await deleteDoc(doc(db, 'subscriptionPlans', planId)); }
+            catch (error) { console.error("Error deleting plan:", error); }
         }
     };
     
     const handleSaveBanner = async (bannerId, bannerData, isEdit) => {
         try {
-            if (isEdit) { await updateDoc(doc(db, 'banners', bannerId), bannerData); alert("Banner updated!"); }
-            else { await addDoc(collection(db, 'banners'), bannerData); alert("Banner added!"); }
+            if (isEdit) { await updateDoc(doc(db, 'banners', bannerId), bannerData); }
+            else { await addDoc(collection(db, 'banners'), bannerData); }
             setIsBannerModalOpen(false);
-        } catch (error) { console.error("Error saving banner:", error); alert("Failed to save banner."); }
+        } catch (error) { console.error("Error saving banner:", error); }
     };
 
     const handleDeleteBanner = async (bannerId) => {
-        if (window.confirm("Are you sure?")) {
-            try { await deleteDoc(doc(db, 'banners', bannerId)); alert("Banner deleted!"); }
-            catch (error) { console.error("Error deleting banner:", error); alert("Failed to delete banner."); }
+        if (window.confirm("Are you sure you want to permanently delete this banner?")) {
+            try { await deleteDoc(doc(db, 'banners', bannerId)); }
+            catch (error) { console.error("Error deleting banner:", error); }
         }
     };
 
-    if (loading) { return <div className="text-center p-8">Loading...</div>; }
+    if (loading) { return <div className="text-center p-8 text-gray-300">Loading...</div>; }
 
     return (
-        <div className="max-w-7xl mx-auto">
-            <h1 className="text-3xl font-bold text-white mb-6">Subscription Management</h1>
-            <div className="flex justify-between items-center mb-4">
-                <h2 className="text-2xl font-bold text-white">Plans</h2>
-                <button onClick={() => { setIsPlanModalOpen(true); setEditPlanData(null); }} className="bg-green-600 text-white font-bold py-2 px-4 rounded-md hover:bg-green-700">Add New Plan</button>
+        <div className="max-w-7xl mx-auto p-4 sm:p-6 bg-gray-900 min-h-screen text-white">
+            <h1 className="text-2xl sm:text-3xl font-bold text-white mb-6">Subscription Management</h1>
+            
+            {/* --- Plans Section --- */}
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-3">
+                <h2 className="text-xl sm:text-2xl font-bold text-white">Subscription Plans</h2>
+                <button onClick={() => { setIsPlanModalOpen(true); setEditPlanData(null); }} className="bg-blue-600 text-white font-bold py-2 px-4 rounded-md hover:bg-blue-700 flex items-center gap-2">
+                    <PlusIcon className="w-5 h-5" />
+                    <span>Add New Plan</span>
+                </button>
             </div>
-            <div className="bg-gray-800 shadow-md rounded-lg overflow-hidden mb-8">
+
+            {/* Mobile View: Plan Cards */}
+            <div className="md:hidden space-y-4 mb-8">
+                {plans.map(plan => (
+                    <div key={plan.id} className="bg-gray-800 rounded-lg p-4 shadow-lg">
+                        <div className="flex justify-between items-start">
+                            <div>
+                                <p className="text-lg font-bold text-white">{plan.name}</p>
+                                <p className="text-sm text-gray-400">Order: {plan.order}</p>
+                            </div>
+                            {plan.isRecommended && <span className="px-2 py-1 text-xs font-semibold rounded-full bg-green-800 text-green-100">Recommended</span>}
+                        </div>
+                        <div className="my-3 border-t border-gray-700"></div>
+                        <div className="space-y-1 text-sm text-gray-300 mb-4">
+                            <p><span className="font-semibold">Tiers:</span> {plan.tiers?.length || 0}</p>
+                        </div>
+                        <div className="flex justify-between items-center border-t border-gray-700 pt-3">
+                             <div className="flex items-center gap-2">
+                                <span className="text-sm font-medium text-gray-400">Active:</span>
+                                 <label className="relative inline-flex items-center cursor-pointer">
+                                    <input type="checkbox" checked={plan.isActive} onChange={() => handleTogglePlanActiveStatus(plan.id, plan.isActive)} className="sr-only peer" />
+                                    <div className="w-11 h-6 bg-gray-600 rounded-full peer peer-checked:after:translate-x-full after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                                </label>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <button onClick={() => { setIsPlanModalOpen(true); setEditPlanData(plan); }} className="p-2 rounded-md text-amber-400 hover:bg-gray-700"><PencilIcon className="w-5 h-5"/></button>
+                                <button onClick={() => handleDeletePlan(plan.id)} className="p-2 rounded-md text-red-500 hover:bg-gray-700"><TrashIcon className="w-5 h-5"/></button>
+                            </div>
+                        </div>
+                    </div>
+                ))}
+            </div>
+
+            {/* Desktop View: Plans Table */}
+            <div className="hidden md:block bg-gray-800 shadow-md rounded-lg overflow-hidden mb-8">
                 <div className="overflow-x-auto">
                     <table className="min-w-full divide-y divide-gray-700">
-                        <thead className="bg-gray-700">
+                        <thead className="bg-gray-700/50">
                             <tr>
                                 {['Order', 'Plan Name', 'Tiers', 'Recommended', 'Active', 'Actions'].map(h => 
                                     <th key={h} className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">{h}</th>
@@ -365,10 +396,10 @@ export default function AdminSubscriptionManagement() {
                                     <td className="px-6 py-4 text-sm">
                                         <label className="relative inline-flex items-center cursor-pointer">
                                             <input type="checkbox" checked={plan.isActive} onChange={() => handleTogglePlanActiveStatus(plan.id, plan.isActive)} className="sr-only peer" />
-                                            <div className="w-11 h-6 bg-gray-500 rounded-full peer peer-checked:after:translate-x-full after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                                            <div className="w-11 h-6 bg-gray-600 rounded-full peer peer-checked:after:translate-x-full after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
                                         </label>
                                     </td>
-                                    <td className="px-6 py-4 text-sm font-medium space-x-2">
+                                    <td className="px-6 py-4 text-sm font-medium space-x-4">
                                         <button onClick={() => { setIsPlanModalOpen(true); setEditPlanData(plan); }} className="text-amber-400 hover:text-amber-300">Edit</button>
                                         <button onClick={() => handleDeletePlan(plan.id)} className="text-red-500 hover:text-red-400">Delete</button>
                                     </td>
@@ -378,15 +409,46 @@ export default function AdminSubscriptionManagement() {
                     </table>
                 </div>
             </div>
-
-            <div className="flex justify-between items-center mb-4 mt-12">
-                <h2 className="text-2xl font-bold text-white">Banners</h2>
-                <button onClick={() => { setIsBannerModalOpen(true); setEditBannerData(null); }} className="bg-green-600 text-white font-bold py-2 px-4 rounded-md hover:bg-green-700">Add New Banner</button>
+            
+            {/* --- Banners Section --- */}
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 mt-12 gap-3">
+                <h2 className="text-xl sm:text-2xl font-bold text-white">Banners</h2>
+                <button onClick={() => { setIsBannerModalOpen(true); setEditBannerData(null); }} className="bg-blue-600 text-white font-bold py-2 px-4 rounded-md hover:bg-blue-700 flex items-center gap-2">
+                    <PlusIcon className="w-5 h-5" />
+                    <span>Add New Banner</span>
+                </button>
             </div>
-            <div className="bg-gray-800 shadow-md rounded-lg overflow-hidden mb-8">
+
+            {/* Mobile View: Banner Cards */}
+            <div className="md:hidden space-y-4">
+                {banners.map(banner => (
+                    <div key={banner.id} className="bg-gray-800 rounded-lg p-4 shadow-lg">
+                        <div>
+                            <p className="font-bold text-white">{banner.saleTitle || 'Banner'}</p>
+                            <p className="text-sm text-gray-300 truncate">{banner.text}</p>
+                        </div>
+                        <div className="flex justify-between items-center border-t border-gray-700 pt-3 mt-3">
+                            <div className="flex items-center gap-2">
+                                <span className="text-sm font-medium text-gray-400">Active:</span>
+                                <label className="relative inline-flex items-center cursor-pointer">
+                                    <input type="checkbox" checked={banner.isActive} onChange={() => handleToggleBannerActiveStatus(banner.id, banner.isActive)} className="sr-only peer" />
+                                    <div className="w-11 h-6 bg-gray-600 rounded-full peer peer-checked:after:translate-x-full after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                                </label>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <button onClick={() => { setIsBannerModalOpen(true); setEditBannerData(banner); }} className="p-2 rounded-md text-amber-400 hover:bg-gray-700"><PencilIcon className="w-5 h-5"/></button>
+                                <button onClick={() => handleDeleteBanner(banner.id)} className="p-2 rounded-md text-red-500 hover:bg-gray-700"><TrashIcon className="w-5 h-5"/></button>
+                            </div>
+                        </div>
+                    </div>
+                ))}
+            </div>
+
+            {/* Desktop View: Banners Table */}
+            <div className="hidden md:block bg-gray-800 shadow-md rounded-lg overflow-hidden mb-8">
                 <div className="overflow-x-auto">
                     <table className="min-w-full divide-y divide-gray-700">
-                        <thead className="bg-gray-700">
+                        <thead className="bg-gray-700/50">
                             <tr>
                                 {['Banner Text', 'Sale Title', 'Active', 'Actions'].map(h =>
                                     <th key={h} className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">{h}</th>
@@ -401,10 +463,10 @@ export default function AdminSubscriptionManagement() {
                                     <td className="px-6 py-4 text-sm">
                                         <label className="relative inline-flex items-center cursor-pointer">
                                             <input type="checkbox" checked={banner.isActive} onChange={() => handleToggleBannerActiveStatus(banner.id, banner.isActive)} className="sr-only peer" />
-                                            <div className="w-11 h-6 bg-gray-500 rounded-full peer peer-checked:after:translate-x-full after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                                            <div className="w-11 h-6 bg-gray-600 rounded-full peer peer-checked:after:translate-x-full after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
                                         </label>
                                     </td>
-                                    <td className="px-6 py-4 text-sm font-medium space-x-2">
+                                    <td className="px-6 py-4 text-sm font-medium space-x-4">
                                         <button onClick={() => { setIsBannerModalOpen(true); setEditBannerData(banner); }} className="text-amber-400 hover:text-amber-300">Edit</button>
                                         <button onClick={() => handleDeleteBanner(banner.id)} className="text-red-500 hover:text-red-400">Delete</button>
                                     </td>

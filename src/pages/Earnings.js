@@ -266,32 +266,57 @@ export default function Earnings() {
                 <div className="mt-8">
                     <h3 className="text-xl font-bold text-white mb-4">Unsettled Users ({financialData.unsettledUsersCount})</h3>
                     {financialData.unsettledUsersCount > 0 ? (
-                         <div className="bg-gray-700 rounded-lg overflow-hidden">
-                            <table className="min-w-full divide-y divide-gray-600">
-                                <thead className="bg-gray-600">
-                                    <tr>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Email</th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Plan</th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Price</th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="bg-gray-700 divide-y divide-gray-600">
-                                    {financialData.unsettledUsersList.map(user => (
-                                        <tr key={user.id}>
-                                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">{user.email}</td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400">{user.planName || 'N/A'}</td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400">₹{user.planPrice || '0'}</td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-sm">
-                                                <button onClick={() => handleToggleMySettledStatus(user.id, true)} className="bg-blue-600 text-white px-4 py-1 rounded-md text-xs font-semibold hover:bg-blue-700">
-                                                    Mark as Settled
-                                                </button>
-                                            </td>
+                         <>
+                            {/* --- MOBILE CARD VIEW --- */}
+                            <div className="md:hidden space-y-3">
+                                {financialData.unsettledUsersList.map(user => (
+                                    <div key={user.id} className="bg-gray-700 rounded-lg p-4 shadow-md">
+                                        <div className="flex justify-between items-center mb-2 pb-2 border-b border-gray-600">
+                                            <span className="text-sm font-medium text-white truncate">{user.email}</span>
+                                            <span className="text-sm font-bold text-gray-300">₹{user.planPrice || '0'}</span>
+                                        </div>
+                                        <div className="flex justify-between items-center mb-4">
+                                            <span className="text-xs text-gray-400">Plan</span>
+                                            <span className="text-xs text-gray-300">{user.planName || 'N/A'}</span>
+                                        </div>
+                                        <button 
+                                            onClick={() => handleToggleMySettledStatus(user.id, true)} 
+                                            className="w-full bg-blue-600 text-white px-4 py-2 rounded-md text-sm font-semibold hover:bg-blue-700 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 focus:ring-blue-500"
+                                        >
+                                            Mark as Settled
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+
+                            {/* --- DESKTOP TABLE VIEW --- */}
+                            <div className="hidden md:block bg-gray-700 rounded-lg overflow-hidden">
+                                <table className="min-w-full divide-y divide-gray-600">
+                                    <thead className="bg-gray-600">
+                                        <tr>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Email</th>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Plan</th>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Price</th>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Actions</th>
                                         </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                         </div>
+                                    </thead>
+                                    <tbody className="bg-gray-700 divide-y divide-gray-600">
+                                        {financialData.unsettledUsersList.map(user => (
+                                            <tr key={user.id}>
+                                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">{user.email}</td>
+                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400">{user.planName || 'N/A'}</td>
+                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400">₹{user.planPrice || '0'}</td>
+                                                <td className="px-6 py-4 whitespace-nowrap text-sm">
+                                                    <button onClick={() => handleToggleMySettledStatus(user.id, true)} className="bg-blue-600 text-white px-4 py-1 rounded-md text-xs font-semibold hover:bg-blue-700">
+                                                        Mark as Settled
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                         </>
                     ) : (
                         <p className="text-gray-400 text-center p-4">No unsettled users found.</p>
                     )}

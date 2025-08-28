@@ -1,73 +1,82 @@
 import React from 'react';
-import { FaTicketAlt } from 'react-icons/fa'; // Import an icon
+import { FaTicketAlt, FaUsers, FaListAlt, FaChartLine, FaTags, FaStar, FaSpellCheck } from 'react-icons/fa'; // Import more icons for visual appeal
 
 const AdminDashboard = ({ navigate }) => {
-    return (
-        <div className="max-w-7xl mx-auto space-y-8">
-            <h1 className="text-3xl font-bold text-white">Admin Dashboard</h1>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                <button 
-                    onClick={() => navigate('manageTests')} 
-                    className="bg-gray-800 p-6 rounded-lg shadow-md hover:shadow-xl hover:-translate-y-1 transition-all text-left"
-                >
-                    <h2 className="text-2xl font-bold text-white">Test Manager</h2>
-                    <p className="mt-2 text-gray-400">Create, edit, publish, and delete all Sectionals and Mock Tests.</p>
-                </button>
-                <button 
-                    onClick={() => navigate('manageRDFCArticles')} 
-                    className="bg-gray-800 p-6 rounded-lg shadow-md hover:shadow-xl hover:-translate-y-1 transition-all text-left"
-                >
-                    <h2 className="text-2xl font-bold text-white">RDFC Articles</h2>
-                    <p className="mt-2 text-gray-400">Link Google Drive articles to specific tests.</p>
-                </button>
-                <button 
-                    onClick={() => navigate('userManagement')} 
-                    className="bg-gray-800 p-6 rounded-lg shadow-md hover:shadow-xl hover:-translate-y-1 transition-all text-left"
-                >
-                    <h2 className="text-2xl font-bold text-white">User Management</h2>
-                    <p className="mt-2 text-gray-400">View all users and manually grant premium subscription access.</p>
-                </button>
-                <button 
-                    onClick={() => navigate('earnings')} 
-                    className="bg-gray-800 p-6 rounded-lg shadow-md hover:shadow-xl hover:-translate-y-1 transition-all text-left"
-                >
-                    <h2 className="text-2xl font-bold text-white">Earnings Dashboard</h2>
-                    <p className="mt-2 text-gray-400">Track earnings, settled payments, and manage revenue sharing.</p>
-                </button>
-                <button 
-                    onClick={() => navigate('manageSubscriptions')} 
-                    className="bg-gray-800 p-6 rounded-lg shadow-md hover:shadow-xl hover:-translate-y-1 transition-all text-left"
-                >
-                    <h2 className="text-2xl font-bold text-white">Subscription Plans</h2>
-                    <p className="mt-2 text-gray-400">Manage subscription plans, pricing, and features.</p>
-                </button>
-                <button 
-                    onClick={() => navigate('manageReviews')} 
-                    className="bg-gray-800 p-6 rounded-lg shadow-md hover:shadow-xl hover:-translate-y-1 transition-all text-left"
-                >
-                    <h2 className="text-2xl font-bold text-white">Manage Reviews</h2>
-                    <p className="mt-2 text-gray-400">Approve and manage user-submitted testimonials.</p>
-                </button>
-                
-                <button 
-                    onClick={() => navigate('manageVocab')} 
-                    className="bg-indigo-800 p-6 rounded-lg shadow-md hover:shadow-xl hover:-translate-y-1 transition-all text-left ring-2 ring-indigo-500"
-                >
-                    <h2 className="text-2xl font-bold text-white">Vocab Manager</h2>
-                    <p className="mt-2 text-gray-300">Create and manage daily vocabulary wordlists for users.</p>
-                </button>
+    
+    // Card component for consistency and cleaner code
+    const DashboardCard = ({ onClick, title, description, icon, special = false }) => (
+        <button 
+            onClick={onClick} 
+            className={`p-4 md:p-6 rounded-lg shadow-md hover:shadow-xl hover:-translate-y-1 transition-all text-left flex flex-col justify-between h-full
+                ${special 
+                    ? 'bg-indigo-800 ring-2 ring-indigo-500' 
+                    : 'bg-gray-800'
+                }`}
+        >
+            <div>
+                <h2 className="text-xl md:text-2xl font-bold text-white">{title}</h2>
+                <p className={`mt-2 ${special ? 'text-gray-300' : 'text-gray-400'}`}>{description}</p>
+            </div>
+            {icon && <div className="self-end mt-4">{icon}</div>}
+        </button>
+    );
 
-                {/* NEW SUPPORT MANAGER BUTTON */}
-                <button 
+    return (
+        // Added padding for mobile view
+        <div className="max-w-7xl mx-auto p-4 md:p-0 space-y-6 md:space-y-8">
+            {/* Adjusted font size for mobile */}
+            <h1 className="text-2xl md:text-3xl font-bold text-white">Admin Dashboard</h1>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <DashboardCard 
+                    onClick={() => navigate('manageTests')} 
+                    title="Test Manager"
+                    description="Create, edit, publish, and delete all Sectionals and Mock Tests."
+                    icon={<FaListAlt className="text-gray-500 text-3xl"/>}
+                />
+                 <DashboardCard 
+                    onClick={() => navigate('manageRDFCArticles')} 
+                    title="RDFC Articles"
+                    description="Link Google Drive articles to specific tests."
+                    icon={<FaSpellCheck className="text-gray-500 text-3xl"/>}
+                />
+                <DashboardCard 
+                    onClick={() => navigate('userManagement')} 
+                    title="User Management"
+                    description="View all users and manually grant premium subscription access."
+                    icon={<FaUsers className="text-gray-500 text-3xl"/>}
+                />
+                <DashboardCard 
+                    onClick={() => navigate('earnings')} 
+                    title="Earnings Dashboard"
+                    description="Track earnings, settled payments, and manage revenue sharing."
+                    icon={<FaChartLine className="text-gray-500 text-3xl"/>}
+                />
+                <DashboardCard 
+                    onClick={() => navigate('manageSubscriptions')} 
+                    title="Subscription Plans"
+                    description="Manage subscription plans, pricing, and features."
+                    icon={<FaTags className="text-gray-500 text-3xl"/>}
+                />
+                <DashboardCard 
+                    onClick={() => navigate('manageReviews')} 
+                    title="Manage Reviews"
+                    description="Approve and manage user-submitted testimonials."
+                    icon={<FaStar className="text-gray-500 text-3xl"/>}
+                />
+                <DashboardCard 
+                    onClick={() => navigate('manageVocab')} 
+                    title="Vocab Manager"
+                    description="Create and manage daily vocabulary wordlists for users."
+                    special // This prop applies the special styling
+                />
+                <DashboardCard 
                     onClick={() => navigate('manageSupport')} 
-                    className="bg-cyan-800 p-6 rounded-lg shadow-md hover:shadow-xl hover:-translate-y-1 transition-all text-left ring-2 ring-cyan-500 flex flex-col justify-between"
-                >
-                    <div>
-                      <h2 className="text-2xl font-bold text-white">Support Center</h2>
-                      <p className="mt-2 text-gray-300">View and respond to user support tickets.</p>
-                    </div>
-                    <FaTicketAlt className="text-cyan-400 text-3xl self-end mt-4"/>
-                </button>
+                    title="Support Center"
+                    description="View and respond to user support tickets."
+                    icon={<FaTicketAlt className="text-cyan-400 text-3xl"/>}
+                    // Using a different base style for this special card
+                    className="bg-cyan-800 ring-2 ring-cyan-500"
+                />
             </div>
         </div>
     );

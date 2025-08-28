@@ -2,9 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { addDoc, updateDoc, doc, serverTimestamp, collection } from 'firebase/firestore';
 import { db, SECTIONS } from '../firebase/config';
 import { Switch } from '@headlessui/react';
-import { TrashIcon, EyeIcon, EyeSlashIcon } from '@heroicons/react/24/outline'; // Using icons for better UI
+// ICONS: Added new icons for the mobile navigation tabs
+import { TrashIcon, EyeIcon, EyeSlashIcon, PencilSquareIcon, DocumentTextIcon, ListBulletIcon } from '@heroicons/react/24/outline';
 
-// --- Reusable Form Input Components ---
+// --- Reusable Form Input Components (No Changes) ---
 
 const FormInput = ({ label, type = 'text', value, onChange, required = false, placeholder = '' }) => (
     <div>
@@ -34,7 +35,6 @@ const FormTextarea = ({ label, value, onChange, required = false, rows = 3, plac
     </div>
 );
 
-// New Component for managing multiple image URLs with previews and delete buttons
 const MultiImageUrlManager = ({ label, urls, onChange }) => {
     const handleUrlChange = (index, newUrl) => {
         const updatedUrls = [...urls];
@@ -75,10 +75,8 @@ const MultiImageUrlManager = ({ label, urls, onChange }) => {
                 + Add Image URL
             </button>
 
-            {/* Previews Section */}
             <div className="mt-2 flex flex-wrap gap-2">
                 {urls.map((url, index) => {
-                    // Simple check for a valid image URL format for preview
                     const isValidUrl = url && /\.(jpeg|jpg|gif|png|webp)$/.test(url);
                     return isValidUrl ? (
                         <div key={`preview-${index}`} className="relative border border-gray-600 rounded p-1 bg-gray-800">
@@ -93,11 +91,10 @@ const MultiImageUrlManager = ({ label, urls, onChange }) => {
 
 
 const CreateTestPage = ({ navigate, testToEdit }) => {
-    // UPDATED: Image URL fields are now arrays
     const BLANK_QUESTION = { 
         type: 'MCQ', passage: '', passageImageUrls: [], 
         questionText: '', options: ['', '', '', ''], 
-        correctOption: '', // Default to empty string
+        correctOption: '',
         solution: '', questionImageUrls: [], solutionImageUrls: [] 
     };
 
@@ -111,33 +108,25 @@ const CreateTestPage = ({ navigate, testToEdit }) => {
     const [showNavigator, setShowNavigator] = useState(true);
     const [showPassage, setShowPassage] = useState(true);
 
+    // NEW STATE: Manages the active panel on mobile view
+    const [mobileView, setMobileView] = useState('question'); // 'question', 'passage', or 'navigator'
+
     useEffect(() => {
         if (testToEdit) {
             setTitle(testToEdit.title);
             setDescription(testToEdit.description);
             setType(testToEdit.type);
             setIsFree(testToEdit.isFree || false);
-            // UPDATED: Sanitize sections to handle both old (string) and new (array) image URL formats
             const sanitizedSections = testToEdit.sections.map(s => ({
                 ...s,
                 questions: s.questions.map(q => {
                     const newQ = { ...BLANK_QUESTION, ...q, correctOption: q.correctOption ?? '' };
-
-                    // Handle passage images (backward compatibility)
-                    newQ.passageImageUrls = Array.isArray(q.passageImageUrls) ? q.passageImageUrls 
-                                            : (q.passageImageUrl ? [q.passageImageUrl] : []);
-                    delete newQ.passageImageUrl; // Clean up old key
-
-                    // Handle question images
-                    newQ.questionImageUrls = Array.isArray(q.questionImageUrls) ? q.questionImageUrls 
-                                             : (q.questionImageUrl ? [q.questionImageUrl] : []);
+                    newQ.passageImageUrls = Array.isArray(q.passageImageUrls) ? q.passageImageUrls : (q.passageImageUrl ? [q.passageImageUrl] : []);
+                    delete newQ.passageImageUrl;
+                    newQ.questionImageUrls = Array.isArray(q.questionImageUrls) ? q.questionImageUrls : (q.questionImageUrl ? [q.questionImageUrl] : []);
                     delete newQ.questionImageUrl;
-
-                    // Handle solution images
-                    newQ.solutionImageUrls = Array.isArray(q.solutionImageUrls) ? q.solutionImageUrls
-                                             : (q.solutionImageUrl ? [q.solutionImageUrl] : []);
+                    newQ.solutionImageUrls = Array.isArray(q.solutionImageUrls) ? q.solutionImageUrls : (q.solutionImageUrl ? [q.solutionImageUrl] : []);
                     delete newQ.solutionImageUrl;
-
                     return newQ;
                 })
             }));
@@ -147,14 +136,12 @@ const CreateTestPage = ({ navigate, testToEdit }) => {
 
     useEffect(() => {
         const currentSectionName = sections[activeQuestion.sec]?.name;
-        // Automatically hide passage for Quantitative Aptitude (QA)
         setShowPassage(currentSectionName !== 'QA');
     }, [sections, activeQuestion]);
 
     const handleSectionChange = (secIndex, field, value) => {
         const newSections = [...sections];
         if (field === 'duration') {
-            // Prevent NaN from being stored if input is cleared
             newSections[secIndex][field] = parseInt(value, 10) || 0;
         } else {
             newSections[secIndex][field] = value;
@@ -166,14 +153,12 @@ const CreateTestPage = ({ navigate, testToEdit }) => {
         const newSections = [...sections];
         const question = newSections[secIndex].questions[qIndex];
         question[field] = value;
-
-        // BUG FIX: When changing question type, reset associated fields for data integrity
         if (field === 'type') {
             if (value === 'TITA') {
                 question.options = ['', '', '', ''];
-                question.correctOption = ''; // Reset to a text field
-            } else { // MCQ
-                question.correctOption = ''; // Reset to dropdown default
+                question.correctOption = '';
+            } else {
+                question.correctOption = '';
             }
         }
         setSections(newSections);
@@ -194,16 +179,10 @@ const CreateTestPage = ({ navigate, testToEdit }) => {
 
     const removeQuestion = (secIndex, qIndex) => {
         if (!window.confirm('Are you sure you want to delete this question? This cannot be undone.')) return;
-
         const newSections = [...sections];
         newSections[secIndex].questions.splice(qIndex, 1);
         setSections(newSections);
-
-        // Safely update the active question to prevent crashes
-        setActiveQuestion(prev => ({
-            ...prev,
-            q: Math.max(0, qIndex - 1)
-        }));
+        setActiveQuestion(prev => ({ ...prev, q: Math.max(0, qIndex - 1) }));
     };
 
     const addSection = () => {
@@ -212,10 +191,8 @@ const CreateTestPage = ({ navigate, testToEdit }) => {
     
     const removeSection = (secIndex) => {
         if (!window.confirm('Are you sure you want to delete this entire section? This cannot be undone.')) return;
-        
         const newSections = sections.filter((_, i) => i !== secIndex);
         setSections(newSections);
-        // Reset active question to a safe value
         setActiveQuestion({ sec: 0, q: 0 });
     };
 
@@ -224,43 +201,38 @@ const CreateTestPage = ({ navigate, testToEdit }) => {
             alert('Test Title is required.');
             return false;
         }
-
         for (let i = 0; i < sections.length; i++) {
             const section = sections[i];
             if (section.duration <= 0) {
                 alert(`Duration for Section ${i + 1} (${section.name}) must be a positive number.`);
                 return false;
             }
-
             for (let j = 0; j < section.questions.length; j++) {
                 const q = section.questions[j];
                 const qNum = `Section ${i + 1}, Question ${j + 1}`;
-                
                 if (!q.questionText.trim()) {
                     alert(`${qNum}: Question Text is required.`);
                     setActiveQuestion({ sec: i, q: j });
                     return false;
                 }
-
                 if (q.type === 'MCQ') {
                     if (q.options.some(opt => !opt.trim())) {
                         alert(`${qNum}: All four options are required for an MCQ.`);
                         setActiveQuestion({ sec: i, q: j });
                         return false;
                     }
-                    if (q.correctOption === '') { // Check against the default empty value
+                    if (q.correctOption === '') {
                         alert(`${qNum}: You must select a Correct Option for an MCQ.`);
                         setActiveQuestion({ sec: i, q: j });
                         return false;
                     }
-                } else { // TITA
+                } else {
                      if (`${q.correctOption}`.trim() === '') {
                         alert(`${qNum}: The Correct Answer is required for a TITA question.`);
                         setActiveQuestion({ sec: i, q: j });
                         return false;
                     }
                 }
-
                 if (!q.solution.trim()) {
                     alert(`${qNum}: A Detailed Solution is required.`);
                     setActiveQuestion({ sec: i, q: j });
@@ -273,8 +245,7 @@ const CreateTestPage = ({ navigate, testToEdit }) => {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        if (!validateTest()) return; // Stop submission if validation fails
-
+        if (!validateTest()) return;
         setLoading(true);
         const testData = { 
             title, description, type, isFree, 
@@ -282,7 +253,6 @@ const CreateTestPage = ({ navigate, testToEdit }) => {
             sections, 
             lastUpdated: serverTimestamp() 
         };
-        
         try {
             if (testToEdit) {
                 await updateDoc(doc(db, 'tests', testToEdit.id), testData);
@@ -304,10 +274,11 @@ const CreateTestPage = ({ navigate, testToEdit }) => {
     const activeQ = activeSec?.questions[activeQuestion.q];
 
     return (
-        <div className="max-w-full mx-auto">
+        <div className="max-w-full mx-auto p-2 sm:p-0">
             <div className="flex justify-between items-center mb-4">
                 <button onClick={() => navigate('manageTests')} className="text-sm text-gray-400 hover:text-white">&larr; Back to Test Manager</button>
-                <button onClick={() => setShowNavigator(!showNavigator)} className="text-sm text-gray-400 hover:text-white flex items-center">
+                {/* MODIFIED: Hide the desktop navigator toggle on small screens */}
+                <button onClick={() => setShowNavigator(!showNavigator)} className="text-sm text-gray-400 hover:text-white hidden sm:flex items-center">
                     {showNavigator ? 'Hide Navigator' : 'Show Navigator'} 
                     {showNavigator ? <EyeSlashIcon className="h-5 w-5 ml-1"/> : <EyeIcon className="h-5 w-5 ml-1" />}
                 </button>
@@ -334,26 +305,53 @@ const CreateTestPage = ({ navigate, testToEdit }) => {
                     </div>
                  </div>
 
-                <div className="mt-6 border-t border-gray-700 pt-6 flex gap-4">
-                    {/* Panel 1: Passage Editor (Conditional) */}
+                {/* --- NEW: Mobile Tab Navigator --- */}
+                <div className="sm:hidden mt-6 border-b border-gray-700 mb-4">
+                    <div className="flex items-stretch -mb-px">
+                        {/* Question Tab */}
+                        <button type="button" onClick={() => setMobileView('question')} className={`flex-1 p-3 text-sm font-medium border-b-2 ${mobileView === 'question' ? 'border-white text-white' : 'border-transparent text-gray-400'}`}>
+                            <PencilSquareIcon className="h-5 w-5 mx-auto mb-1" />
+                            Question
+                        </button>
+                        {/* Passage Tab (Conditional) */}
+                        {showPassage && (
+                             <button type="button" onClick={() => setMobileView('passage')} className={`flex-1 p-3 text-sm font-medium border-b-2 ${mobileView === 'passage' ? 'border-white text-white' : 'border-transparent text-gray-400'}`}>
+                                <DocumentTextIcon className="h-5 w-5 mx-auto mb-1" />
+                                Passage
+                            </button>
+                        )}
+                        {/* Navigator Tab */}
+                        <button type="button" onClick={() => setMobileView('navigator')} className={`flex-1 p-3 text-sm font-medium border-b-2 ${mobileView === 'navigator' ? 'border-white text-white' : 'border-transparent text-gray-400'}`}>
+                           <ListBulletIcon className="h-5 w-5 mx-auto mb-1" />
+                            Navigator
+                        </button>
+                    </div>
+                </div>
+
+                {/* --- MODIFIED: Main Content Area --- */}
+                {/* Now flex-col on mobile and flex-row on desktop (sm and up) */}
+                <div className="mt-6 border-t border-gray-700 pt-6 flex flex-col sm:flex-row gap-4">
+                    
+                    {/* Panel 1: Passage Editor (Conditional Visibility) */}
+                    {/* MODIFIED: Added classes to control visibility on mobile vs desktop */}
                     {showPassage && (
-                        <div className="w-1/3">
+                        <div className={`${mobileView === 'passage' ? 'block' : 'hidden'} sm:block sm:w-1/3 w-full`}>
                             <h3 className="text-lg font-semibold text-white mb-2">Passage / Set Info</h3>
                             <div className="space-y-4">
                                 <FormTextarea label="Passage Text (Optional)" value={activeQ?.passage || ''} onChange={e => handleQuestionChange(activeQuestion.sec, activeQuestion.q, 'passage', e.target.value)} rows={25} />
-                                {/* REPLACED */}
                                 <MultiImageUrlManager label="Passage Images (Optional)" urls={activeQ?.passageImageUrls || []} onChange={urls => handleQuestionChange(activeQuestion.sec, activeQuestion.q, 'passageImageUrls', urls)} />
                             </div>
                         </div>
                     )}
                     
-                    {/* Panel 2: Question Editor */}
-                    <div className="flex-1">
+                    {/* Panel 2: Question Editor (Conditional Visibility) */}
+                    {/* MODIFIED: Added classes to control visibility on mobile vs desktop */}
+                    <div className={`${mobileView === 'question' ? 'block' : 'hidden'} sm:block sm:flex-1 w-full`}>
                         <h3 className="text-lg font-semibold text-white mb-2">Question Editor</h3>
                         {activeQ ? (
                             <div className="border border-gray-700 p-3 rounded space-y-4 bg-gray-900/50">
                                 <div className="flex justify-between items-center">
-                                    <h4 className="font-semibold text-gray-300">Editing: Section {activeQuestion.sec + 1}, Question {activeQuestion.q + 1}</h4>
+                                    <h4 className="font-semibold text-gray-300">Section {activeQuestion.sec + 1}, Question {activeQuestion.q + 1}</h4>
                                     <div className="flex items-center gap-4">
                                         <label className="text-sm font-medium text-gray-300">Type:
                                             <select value={activeQ.type || 'MCQ'} onChange={e => handleQuestionChange(activeQuestion.sec, activeQuestion.q, 'type', e.target.value)} className="ml-2 rounded-md bg-gray-700 border-gray-600 text-white text-sm">
@@ -367,7 +365,6 @@ const CreateTestPage = ({ navigate, testToEdit }) => {
                                     </div>
                                 </div>
                                 <FormTextarea label="Question Text" value={activeQ.questionText} onChange={e => handleQuestionChange(activeQuestion.sec, activeQuestion.q, 'questionText', e.target.value)} required rows={4} />
-                                {/* REPLACED */}
                                 <MultiImageUrlManager label="Question Images (Optional)" urls={activeQ?.questionImageUrls || []} onChange={urls => handleQuestionChange(activeQuestion.sec, activeQuestion.q, 'questionImageUrls', urls)} />
                                 
                                 {activeQ.type === 'TITA' ? (
@@ -388,7 +385,6 @@ const CreateTestPage = ({ navigate, testToEdit }) => {
                                 )}
 
                                 <FormTextarea label="Detailed Solution" value={activeQ.solution} onChange={e => handleQuestionChange(activeQuestion.sec, activeQuestion.q, 'solution', e.target.value)} required rows={4} />
-                                {/* REPLACED */}
                                 <MultiImageUrlManager label="Solution Images (Optional)" urls={activeQ?.solutionImageUrls || []} onChange={urls => handleQuestionChange(activeQuestion.sec, activeQuestion.q, 'solutionImageUrls', urls)} />
                             </div>
                         ) : (
@@ -399,9 +395,10 @@ const CreateTestPage = ({ navigate, testToEdit }) => {
                         )}
                     </div>
 
-                    {/* Panel 3: Question Navigator (Conditional) */}
+                    {/* Panel 3: Question Navigator (Conditional Visibility) */}
+                    {/* MODIFIED: Added classes to control visibility on mobile vs desktop. Note 'sm:flex' for desktop. */}
                     {showNavigator && (
-                        <div className="w-56 flex-shrink-0">
+                        <div className={`${mobileView === 'navigator' ? 'block' : 'hidden'} sm:block sm:w-56 sm:flex-shrink-0 w-full`}>
                              <h3 className="text-lg font-semibold text-white mb-2">Navigator</h3>
                              <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-2">
                                 {sections.map((section, secIndex) => (
