@@ -22,7 +22,7 @@ const ACHIEVEMENTS_CONFIG = {
         title: 'Perfect Week',
         icon: FaShieldAlt,
         color: 'text-green-400',
-        description: (goal) => `Complete a test every day for ${goal} full week(s).`,
+        description: (goal) => `Complete a test without skipping a day for ${goal} full week(s).`,
         tiers: [
             { level: 'Bronze', goal: 1, reward: '+1 Freeze' },
             { level: 'Silver', goal: 2, reward: '+2 Freezes' },
@@ -101,31 +101,59 @@ const AchievementCard = ({ id, config, userAchievements, currentStreak }) => {
 const StreakLeaderboard = ({ currentUser }) => {
     const [leaders, setLeaders] = useState([]);
     const [userRank, setUserRank] = useState(null);
+    const [isUserInTop5, setIsUserInTop5] = useState(false);
+
     useEffect(() => {
         if (!currentUser?.uid) return;
+
         const q = query(collection(db, 'users'), orderBy('currentStreak', 'desc'), limit(5));
-        const unsubscribe = onSnapshot(q, async (snapshot) => {
-            const top5 = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            const top5 = snapshot.docs.map((doc, index) => ({ 
+                id: doc.id, 
+                rank: index + 1,
+                ...doc.data() 
+            }));
+            
             setLeaders(top5);
+
             const userInTop5 = top5.find(leader => leader.id === currentUser.uid);
+
             if (userInTop5) {
-                setUserRank(top5.indexOf(userInTop5) + 1);
+                setIsUserInTop5(true);
+                setUserRank(userInTop5.rank);
             } else {
-                const userStreak = currentUser.currentStreak || 0;
-                const rankQuery = query(collection(db, 'users'), where('currentStreak', '>', userStreak));
-                const countSnapshot = await getCountFromServer(rankQuery);
-                setUserRank(countSnapshot.data().count + 1);
+                setIsUserInTop5(false);
+                setUserRank(null);
             }
+        }, (error) => {
+            console.error("Error fetching leaderboard:", error);
         });
+
         return () => unsubscribe();
     }, [currentUser]);
+
     return (
         <div className="bg-gray-800 p-6 rounded-2xl h-full">
             <h2 className="text-xl font-bold mb-4 text-white flex items-center"><FaTrophy className="text-amber-400 mr-3" /> Streak Leaders</h2>
             <div className="space-y-3">
-                {leaders.map((leader, index) => (<div key={leader.id} className={`flex items-center p-2 rounded-lg ${leader.id === currentUser.uid ? 'bg-blue-500/30' : 'bg-gray-700/50'}`}><span className="font-bold text-lg w-8 text-center">{index + 1}</span><img src={leader.photoURL || 'https://placehold.co/32x32/7c3aed/ffffff?text=U'} alt={leader.displayName} className="w-8 h-8 rounded-full mr-3" /><span className="text-sm font-semibold flex-grow truncate">{leader.displayName}</span><div className="flex items-center font-bold text-orange-400"><FaFire className="mr-1" />{leader.currentStreak || 0}</div></div>))}
+                {leaders.map((leader, index) => (
+                    <div key={leader.id} className={`flex items-center p-2 rounded-lg ${leader.id === currentUser.uid ? 'bg-blue-500/30' : 'bg-gray-700/50'}`}>
+                        <span className="font-bold text-lg w-8 text-center">{index + 1}</span>
+                        <img src={leader.photoURL || 'https://placehold.co/32x32/7c3aed/ffffff?text=U'} alt={leader.displayName} className="w-8 h-8 rounded-full mr-3" />
+                        <span className="text-sm font-semibold flex-grow truncate">{leader.displayName}</span>
+                        <div className="flex items-center font-bold text-orange-400"><FaFire className="mr-1" />{leader.currentStreak || 0}</div>
+                    </div>
+                ))}
             </div>
-            {userRank && (<div className="mt-4 pt-4 border-t border-gray-700 text-center"><h3 className="text-md font-bold text-white">Your Rank is <span className="text-blue-400">#{userRank}</span></h3></div>)}
+            
+            <div className="mt-4 pt-4 border-t border-gray-700 text-center">
+                {isUserInTop5 ? (
+                    <h3 className="text-md font-bold text-white">Your Rank is <span className="text-blue-400">#{userRank}</span></h3>
+                ) : (
+                    <p className="text-sm text-gray-400">Your current streak is <span className="font-bold text-orange-400">{currentUser.currentStreak || 0}</span>. Keep going to make the leaderboard!</p>
+                )}
+            </div>
         </div>
     );
 };
@@ -161,8 +189,21 @@ const StreaksPage = ({ navigate }) => {
         return <div className="text-center p-10">Loading...</div>;
     }
     
-    // Determine which day a streak freeze was used
-    const lastFreezeUsedDay = userData.lastFreezeUsed?.toDate().getDay();
+    // FIX: Determine which day a streak freeze was used, ONLY if it was this week.
+    let lastFreezeUsedDayThisWeek = null;
+    if (userData.lastFreezeUsed) {
+        const lastFreezeDate = userData.lastFreezeUsed.toDate();
+        
+        const today = new Date();
+        const startOfWeek = new Date(today);
+        startOfWeek.setDate(today.getDate() - today.getDay());
+        startOfWeek.setHours(0, 0, 0, 0);
+
+        // Check if the freeze was used on or after the start of this week
+        if (lastFreezeDate >= startOfWeek) {
+            lastFreezeUsedDayThisWeek = lastFreezeDate.getDay();
+        }
+    }
 
     return (
         <div className="p-4 sm:p-6 max-w-7xl mx-auto">
@@ -180,7 +221,7 @@ const StreaksPage = ({ navigate }) => {
                 </div>
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-                    <WeeklyProgress completedDays={completedDays} frozenDay={lastFreezeUsedDay} />
+                    <WeeklyProgress completedDays={completedDays} frozenDay={lastFreezeUsedDayThisWeek} />
                     <StreakFreezeCard freezes={userData.streakFreezes || 0} lastFreezeUsed={userData.lastFreezeUsed} currentStreak={userData.currentStreak || 0} />
                 </div>
                 
