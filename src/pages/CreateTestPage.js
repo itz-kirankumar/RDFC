@@ -109,6 +109,7 @@ const CreateTestPage = ({ navigate, testToEdit }) => {
     const [mobileView, setMobileView] = useState('question');
 
     // --- UPDATED: CSV Parsing using Papaparse with Delimiter Detection ---
+    // --- UPDATED: CSV Parsing with Independent Passage Logic ---
     const handleCsvUpload = (event) => {
         const file = event.target.files[0];
         if (!file) return;
@@ -121,7 +122,6 @@ const CreateTestPage = ({ navigate, testToEdit }) => {
                 return;
             }
 
-            // --- Smart Delimiter Detection ---
             const firstLine = text.slice(0, text.indexOf('\n'));
             const delimiter = firstLine.includes(';') ? ';' : ',';
 
@@ -133,7 +133,7 @@ const CreateTestPage = ({ navigate, testToEdit }) => {
                     try {
                         if (results.errors.length > 0) {
                             console.error("CSV Parsing Errors:", results.errors);
-                            alert("Errors found in CSV file. Please check the console for details and ensure multi-line text is enclosed in double quotes.");
+                            alert("Errors found in CSV file. Please check the console for details.");
                             return;
                         }
 
@@ -145,8 +145,7 @@ const CreateTestPage = ({ navigate, testToEdit }) => {
                         
                         const newSectionsMap = new Map();
                         let currentSectionDetails = { name: '', duration: 40 };
-                        let currentPassageDetails = { text: '', imageUrls: [] };
-
+                        
                         const firstRow = dataRows[0];
                         setTitle(firstRow.testTitle || `Imported Test ${new Date().toLocaleDateString()}`);
                         setDescription(firstRow.testDescription || '');
@@ -155,12 +154,8 @@ const CreateTestPage = ({ navigate, testToEdit }) => {
                         dataRows.forEach((questionData, index) => {
                             if (questionData.sectionName) currentSectionDetails.name = questionData.sectionName;
                             if (questionData.sectionDuration) currentSectionDetails.duration = parseInt(questionData.sectionDuration, 10) || 40;
-                           
-                            // FIX: Trim key string inputs for robustness against whitespace.
-                            const questionText = (questionData.questionText || '').trim();
-                            const questionType = (questionData.questionType || '').trim().toUpperCase();
-                            const correctAnswer = (questionData.correctAnswer || '').trim();
-                            const solutionText = (questionData.solutionText || '').trim();
+
+                            const { questionText, questionType, correctAnswer, solutionText } = questionData;
 
                             if (!currentSectionDetails.name || !questionText || !questionType || !correctAnswer || !solutionText) {
                                 console.warn(`Skipping row #${index + 2} due to missing essential data.`);
@@ -173,41 +168,30 @@ const CreateTestPage = ({ navigate, testToEdit }) => {
                                     duration: currentSectionDetails.duration,
                                     questions: []
                                 });
-                                currentPassageDetails = { text: '', imageUrls: [] };
                             }
                             
-                            if (questionData.passageText) {
-                                currentPassageDetails = {
-                                    text: questionData.passageText.replace(/\\n/g, '\n'),
-                                    imageUrls: questionData.passageImageUrls ? questionData.passageImageUrls.split(';').map(url => url.trim()) : []
-                                };
-                            }
-
                             const newQuestion = { ...BLANK_QUESTION };
-                            newQuestion.passage = currentPassageDetails.text;
-                            newQuestion.passageImageUrls = currentPassageDetails.imageUrls;
+                            
+                            // --- LOGIC CHANGE ---
+                            // Directly assign passage from the current row. No more carry-over.
+                            newQuestion.passage = questionData.passageText ? questionData.passageText.replace(/\\n/g, '\n') : '';
+                            newQuestion.passageImageUrls = questionData.passageImageUrls ? questionData.passageImageUrls.split(';').map(url => url.trim()) : [];
+
                             newQuestion.questionText = questionText.replace(/\\n/g, '\n');
                             newQuestion.questionImageUrls = questionData.questionImageUrls ? questionData.questionImageUrls.split(';').map(url => url.trim()) : [];
-                            newQuestion.type = questionType === 'TITA' ? 'TITA' : 'MCQ';
+                            newQuestion.type = questionType.toUpperCase() === 'TITA' ? 'TITA' : 'MCQ';
                             newQuestion.solution = solutionText.replace(/\\n/g, '\n');
                             newQuestion.solutionImageUrls = questionData.solutionImageUrls ? questionData.solutionImageUrls.split(';').map(url => url.trim()) : [];
 
                             if (newQuestion.type === 'MCQ') {
-                                // FIX: Trim options to avoid issues with extra spaces.
-                                newQuestion.options = [
-                                    (questionData.option1 || '').trim(), 
-                                    (questionData.option2 || '').trim(), 
-                                    (questionData.option3 || '').trim(), 
-                                    (questionData.option4 || '').trim()
-                                ];
+                                newQuestion.options = [questionData.option1, questionData.option2, questionData.option3, questionData.option4];
                                 const correctOptionIndex = parseInt(correctAnswer, 10) - 1;
                                 if (isNaN(correctOptionIndex) || correctOptionIndex < 0 || correctOptionIndex > 3) {
                                      console.warn(`Skipping MCQ in row #${index + 2} due to invalid correctAnswer '${correctAnswer}'. It must be a number from 1 to 4.`);
                                      return;
                                 }
                                 newQuestion.correctOption = correctOptionIndex;
-                            } else { // TITA
-                                // FIX: Use the trimmed correctAnswer to validate. This now works even if the CSV has " 2 " instead of "2".
+                            } else { 
                                 if (!/^\d+$/.test(correctAnswer)) {
                                     console.warn(`Skipping TITA in row #${index + 2} due to non-numerical correctAnswer '${correctAnswer}'. TITA answers must be numbers (e.g., 1, 2, 3124).`);
                                     return;
