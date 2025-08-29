@@ -238,11 +238,13 @@ const useUserAttempts = (uid) => {
 };
 
 // --- UPGRADED usePerformanceData Hook ---
-const usePerformanceData = (uid, allTests) => {
+// --- UPGRADED usePerformanceData Hook ---
+const usePerformanceData = (uid, allTests, linkedArticles) => {
     const [data, setData] = useState({ loading: true, overall: null, byType: {} });
 
     useEffect(() => {
-        if (!uid || !allTests || allTests.length === 0) {
+        // Add linkedArticles to dependency check
+        if (!uid || !allTests || allTests.length === 0 || !linkedArticles) {
             setData({ loading: false, overall: null, byType: {} });
             return;
         }
@@ -260,32 +262,44 @@ const usePerformanceData = (uid, allTests) => {
                 }, {});
 
                 const byType = {};
-                // --- FIX #1 START: Create a score history for the 'Overall' category ---
                 const overallScoreHistory = [];
 
                 userAttempts.forEach(attempt => {
-                    const testInfo = testIdToInfoMap[attempt.testId];
+                    const testId = attempt.testId;
+                    const testInfo = testIdToInfoMap[testId];
                     if (!testInfo) return;
-                    
-                    const type = testInfo.type;
-                    if (!byType[type]) {
-                        byType[type] = { scores: [], totalScore: 0, count: 0, scoreHistory: [] };
+
+                    // --- NEW CATEGORIZATION LOGIC START ---
+                    let category;
+                    if (linkedArticles[testId]) {
+                        category = 'RDFC';
+                    } else {
+                        const type = testInfo.type?.toUpperCase() || 'TEST';
+                        if (['MOCK', 'SECTIONAL', '10MIN'].includes(type)) {
+                            category = type;
+                        } else {
+                            category = 'ADD-ON'; // Group all other tests into ADDONS
+                        }
+                    }
+                    // --- NEW CATEGORIZATION LOGIC END ---
+
+                    if (!byType[category]) {
+                        byType[category] = { scores: [], totalScore: 0, count: 0, scoreHistory: [] };
                     }
                     const score = typeof attempt.totalScore === 'number' ? attempt.totalScore : 0;
-                    byType[type].scores.push(score);
-                    byType[type].totalScore += score;
-                    byType[type].count += 1;
-                    
+                    byType[category].scores.push(score);
+                    byType[category].totalScore += score;
+                    byType[category].count += 1;
+
                     const scoreEntry = {
-                        // --- FIX #2: Removed .substring(0, 15) to show full test name ---
                         name: testInfo.title, 
                         score, 
                         date: attempt.completedAt?.toDate().toLocaleDateString()
                     };
-                    byType[type].scoreHistory.push(scoreEntry);
-                    overallScoreHistory.push(scoreEntry); // Add to overall history as well
+                    byType[category].scoreHistory.push(scoreEntry);
+                    overallScoreHistory.push(scoreEntry);
                 });
-                
+
                 Object.keys(byType).forEach(type => {
                     const d = byType[type];
                     d.metrics = {
@@ -295,10 +309,10 @@ const usePerformanceData = (uid, allTests) => {
                     };
                 });
 
+                // Leaderboard logic remains the same...
                 const allAttemptsQuery = query(collection(db, 'attempts'), where('status', '==', 'completed'));
                 const allAttemptsSnapshot = await getDocs(allAttemptsQuery);
                 const allAttempts = allAttemptsSnapshot.docs.map(doc => doc.data());
-                
                 const userScores = {};
                 allAttempts.forEach(attempt => {
                     const score = typeof attempt.totalScore === 'number' ? attempt.totalScore : 0;
@@ -307,10 +321,8 @@ const usePerformanceData = (uid, allTests) => {
                     userScores[attempt.userId].count += 1;
                     userScores[attempt.userId].scores.push(score);
                 });
-
                 const rankedUsers = Object.entries(userScores).map(([userId, data]) => ({ userId, totalScore: data.totalScore, testCount: data.count })).sort((a, b) => b.totalScore - a.totalScore);
                 const currentUserIndex = rankedUsers.findIndex(user => user.userId === uid);
-                
                 const top10Users = rankedUsers.slice(0, 10);
                 const userIdsToFetch = [...new Set(top10Users.map(u => u.userId).concat(uid))];
                 const userDocs = await Promise.all(userIdsToFetch.map(id => getDoc(doc(db, 'users', id))));
@@ -318,7 +330,6 @@ const usePerformanceData = (uid, allTests) => {
                     if (userDoc.exists()) acc[userDoc.id] = userDoc.data().displayName || 'Anonymous';
                     return acc;
                 }, {});
-                
                 const leaderboard = top10Users.map((user, index) => ({ name: usersMap[user.userId] || 'Anonymous', score: user.totalScore, rank: index + 1, userId: user.userId }));
                 const currentUserEntry = currentUserIndex !== -1 ? { name: usersMap[uid], score: rankedUsers[currentUserIndex].totalScore, rank: currentUserIndex + 1, userId: uid } : null;
 
@@ -333,7 +344,7 @@ const usePerformanceData = (uid, allTests) => {
                         },
                         leaderboard,
                         currentUserEntry,
-                        scoreHistory: overallScoreHistory // --- FIX #1 END: Attach the overall history ---
+                        scoreHistory: overallScoreHistory
                     }
                 });
 
@@ -344,7 +355,7 @@ const usePerformanceData = (uid, allTests) => {
         };
 
         fetchData();
-    }, [uid, allTests]);
+    }, [uid, allTests, linkedArticles]); // Add linkedArticles to dependency array
 
     return data;
 }
@@ -361,7 +372,7 @@ const UserDashboard = ({ navigate }) => {
     const { allTests, linkedArticles, loading: masterDataLoading } = useMasterData();
     const userStatus = useUserStatus(userData?.uid);
     const userAttempts = useUserAttempts(userData?.uid);
-    const performanceData = usePerformanceData(userData?.uid, allTests);
+    const performanceData = usePerformanceData(userData?.uid, allTests, linkedArticles);
 
     const { 
         rdfcTests, mockTests, sectionalTests, otherAddOnTests, tenMinTests
