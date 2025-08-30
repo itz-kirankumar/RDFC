@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { addDoc, updateDoc, doc, serverTimestamp, collection } from 'firebase/firestore';
 import { db, SECTIONS } from '../firebase/config';
 import { Switch } from '@headlessui/react';
-import { TrashIcon, EyeIcon, EyeSlashIcon, PencilSquareIcon, DocumentTextIcon, ListBulletIcon, ArrowUpOnSquareIcon } from '@heroicons/react/24/outline';
+import { TrashIcon, EyeIcon, EyeSlashIcon, PencilSquareIcon, DocumentTextIcon, ListBulletIcon, ArrowUpOnSquareIcon, ArrowDownOnSquareIcon } from '@heroicons/react/24/outline';
 import Papa from 'papaparse'; // Import Papaparse
 
 // --- Reusable Form Input Components (Unchanged) ---
@@ -243,6 +243,55 @@ const CreateTestPage = ({ navigate, testToEdit }) => {
         }
     };
 
+    const handleDownloadCsv = () => {
+        if (!testToEdit) return;
+
+        const csvDataRows = [];
+        sections.forEach(section => {
+            section.questions.forEach(q => {
+                const row = {
+                    testTitle: title,
+                    testDescription: description,
+                    testType: type,
+                    sectionName: section.name,
+                    sectionDuration: section.duration,
+                    passageText: q.passage ? q.passage.replace(/\n/g, '\\n') : '',
+                    passageImageUrls: (q.passageImageUrls || []).join(';'),
+                    questionText: q.questionText ? q.questionText.replace(/\n/g, '\\n') : '',
+                    questionImageUrls: (q.questionImageUrls || []).join(';'),
+                    questionType: q.type,
+                    option1: q.type === 'MCQ' ? (q.options[0] || '') : '',
+                    option2: q.type === 'MCQ' ? (q.options[1] || '') : '',
+                    option3: q.type === 'MCQ' ? (q.options[2] || '') : '',
+                    option4: q.type === 'MCQ' ? (q.options[3] || '') : '',
+                    correctAnswer: q.type === 'MCQ' ? (q.correctOption !== '' ? parseInt(q.correctOption, 10) + 1 : '') : q.correctOption,
+                    solutionText: q.solution ? q.solution.replace(/\n/g, '\\n') : '',
+                    solutionImageUrls: (q.solutionImageUrls || []).join(';')
+                };
+                csvDataRows.push(row);
+            });
+        });
+
+        if (csvDataRows.length === 0) {
+            alert("This test has no questions to export.");
+            return;
+        }
+
+        const csv = Papa.unparse(csvDataRows, { header: true });
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement("a");
+        if (link.download !== undefined) {
+            const url = URL.createObjectURL(blob);
+            const fileName = `${title.replace(/[^a-z0-9]/gi, '_').toLowerCase() || 'test_export'}.csv`;
+            link.setAttribute("href", url);
+            link.setAttribute("download", fileName);
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+    };
+
 
     useEffect(() => {
         if (testToEdit) {
@@ -425,9 +474,16 @@ const CreateTestPage = ({ navigate, testToEdit }) => {
                                <ArrowUpOnSquareIcon className="h-5 w-5"/><span>Import Test from CSV</span>
                             </label>
                             <input id="csv-upload" type="file" accept=".csv" className="hidden" onChange={handleCsvUpload} />
-                            <button type="button" onClick={downloadCsvTemplate} className="text-sm text-gray-400 hover:text-white underline">
-                                Download Template
-                            </button>
+                            <div className="flex flex-col items-start">
+                                <button type="button" onClick={downloadCsvTemplate} className="text-sm text-gray-400 hover:text-white underline">
+                                    Download Template
+                                </button>
+                                {testToEdit && (
+                                    <button type="button" onClick={handleDownloadCsv} className="text-sm text-gray-400 hover:text-white underline mt-1">
+                                        Download this test as CSV
+                                    </button>
+                                )}
+                            </div>
                         </div>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
