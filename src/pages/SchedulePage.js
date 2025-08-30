@@ -1,27 +1,32 @@
 import React, { useState, useMemo } from 'react';
 import { FaCalendarAlt, FaArrowLeft, FaExternalLinkAlt } from 'react-icons/fa';
 
+const now = new Date();
+
 const sectionalSchedule = [
-    { title: "VARC Sectional Core -- 01", releaseDate: "2025-08-27" },
-    { title: "VARC Sectional Core -- 02", releaseDate: "2025-08-30" },
-    { title: "VARC Sectional Core -- 03", releaseDate: "2025-09-03" },
-    { title: "VARC Sectional Core -- 04", releaseDate: "2025-09-07" },
-    { title: "VARC Sectional Core -- 05", releaseDate: "2025-09-11" },
-    { title: "VARC Sectional Core -- 06", releaseDate: "2025-09-15" },
-    { title: "VARC Sectional Core -- 07", releaseDate: "2025-09-19" },
-    { title: "VARC Sectional Core -- 08", releaseDate: "2025-09-23" },
-    { title: "VARC Sectional Core -- 09", releaseDate: "2025-09-27" },
-    { title: "VARC Sectional Core -- 10", releaseDate: "2025-10-01" },
-    { title: "VARC Sectional Core -- 11", releaseDate: "2025-10-05" },
-    { title: "VARC Sectional Core -- 12", releaseDate: "2025-10-09" },
-    { title: "VARC Sectional Core -- 13", releaseDate: "2025-10-13" },
-    { title: "VARC Sectional Core -- 14", releaseDate: "2025-10-17" },
-    { title: "VARC Sectional Core -- 15", releaseDate: "2025-10-21" },
-    { title: "VARC Sectional Challenging -- 01", releaseDate: "2025-10-23" },
-    { title: "VARC Sectional Challenging -- 02", releaseDate: "2025-11-02" },
-    { title: "VARC Sectional Challenging -- 03", releaseDate: "2025-11-13" },
-    { title: "VARC Sectional Challenging -- 04", releaseDate: "2025-11-25" },
-    { title: "VARC Sectional Challenging -- 05", releaseDate: "2025-11-27" }
+    // All Core tests are now live and have no specific release date
+    { title: "VARC Sectional Core -- 01", releaseDate: null },
+    { title: "VARC Sectional Core -- 02", releaseDate: null },
+    { title: "VARC Sectional Core -- 03", releaseDate: null },
+    { title: "VARC Sectional Core -- 04", releaseDate: null },
+    { title: "VARC Sectional Core -- 05", releaseDate: null },
+    { title: "VARC Sectional Core -- 06", releaseDate: null },
+    { title: "VARC Sectional Core -- 07", releaseDate: null },
+    { title: "VARC Sectional Core -- 08", releaseDate: null },
+    { title: "VARC Sectional Core -- 09", releaseDate: null },
+    { title: "VARC Sectional Core -- 10", releaseDate: null },
+    { title: "VARC Sectional Core -- 11", releaseDate: null },
+    { title: "VARC Sectional Core -- 12", releaseDate: null },
+    { title: "VARC Sectional Core -- 13", releaseDate: null },
+    { title: "VARC Sectional Core -- 14", releaseDate: null },
+    { title: "VARC Sectional Core -- 15", releaseDate: null },
+    
+    // Challenging tests released sequentially starting Oct 1st
+    { title: "VARC Sectional Challenging -- 01", releaseDate: "2025-10-01" },
+    { title: "VARC Sectional Challenging -- 02", releaseDate: "2025-10-03" },
+    { title: "VARC Sectional Challenging -- 03", releaseDate: "2025-10-05" },
+    { title: "VARC Sectional Challenging -- 04", releaseDate: "2025-10-07" },
+    { title: "VARC Sectional Challenging -- 05", releaseDate: "2025-10-09" }
 ];
 
 const mockSchedule = [
@@ -31,7 +36,6 @@ const mockSchedule = [
     { title: "Full-Length Mock -- 04", releaseDate: "2025-09-12" },
     { title: "Full-Length Mock -- 05", releaseDate: "2025-09-19" },
 ];
-
 
 const SchedulePage = ({ navigate }) => {
     const [activeTab, setActiveTab] = React.useState('sectionals');
@@ -55,17 +59,17 @@ const SchedulePage = ({ navigate }) => {
     );
 
     const ScheduleList = ({ schedule }) => (
-        <div className="bg-gray -800 shadow-lg rounded-lg border border-gray-700 mt-4">
+        <div className="bg-gray-800 shadow-lg rounded-lg border border-gray-700 mt-4">
             <ul className="divide-y divide-gray-700">
                 {schedule.map((item, index) => {
-                    // Combine date with 7:00 PM in IST
-                    const releaseDateTime = new Date(`${item.releaseDate}T19:00:00+05:30`);
-                    const now = new Date();
-                    const isLive = releaseDateTime <= now;
+                    const isCoreTest = item.title.includes("Core");
+                    const isLive = isCoreTest || (item.releaseDate && new Date(`${item.releaseDate}T19:00:00+05:30`) <= now);
 
-                    const formattedDate = releaseDateTime.toLocaleDateString('en-US', {
-                        weekday: 'short', year: 'numeric', month: 'short', day: 'numeric', timeZone: 'Asia/Kolkata'
-                    });
+                    const dateDisplay = isCoreTest
+                        ? "Available Instantly"
+                        : `${new Date(`${item.releaseDate}T19:00:00+05:30`).toLocaleDateString('en-US', {
+                            weekday: 'short', year: 'numeric', month: 'short', day: 'numeric', timeZone: 'Asia/Kolkata'
+                        })} at 7:00 PM IST`;
 
                     return (
                         <li key={index} className="flex items-center justify-between p-4">
@@ -73,7 +77,7 @@ const SchedulePage = ({ navigate }) => {
                                 <FaCalendarAlt className={`mr-4 flex-shrink-0 text-xl ${isLive ? 'text-green-400' : 'text-yellow-400'}`} />
                                 <div className="flex-grow">
                                     <p className="text-white font-semibold text-lg">{item.title}</p>
-                                    <p className="text-gray-400">{formattedDate} at 7:00 PM IST</p>
+                                    <p className="text-gray-400">{dateDisplay}</p>
                                 </div>
                             </div>
                             {isLive ? (
