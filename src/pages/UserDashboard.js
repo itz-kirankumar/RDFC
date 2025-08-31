@@ -4,13 +4,13 @@ import { db } from '../firebase/config';
 import { useAuth } from '../contexts/AuthContext';
 import FeedbackForm from '../components/FeedbackForm';
 import { motion, AnimatePresence } from 'framer-motion';
-// --- ICONS (Added more for new design) ---
-import { FaEye, FaLock, FaPlay, FaCheckCircle, FaHourglassHalf, FaBookOpen, FaCrown, FaTachometerAlt, FaVial, FaCommentDots, FaHeadset, FaChevronDown, FaArrowRight, FaChartLine, FaBullseye, FaStar, FaTrophy, FaBolt, FaCalendarAlt, FaChartPie } from 'react-icons/fa';
-// --- CHARTING LIBRARY (You must install this: npm install recharts) ---
+// --- ICONS ---
+import { FaEye, FaLock, FaPlay, FaCheckCircle, FaHourglassHalf, FaBookOpen, FaCrown, FaTachometerAlt, FaVial, FaCommentDots, FaHeadset, FaChevronDown, FaArrowRight, FaChartLine, FaBullseye, FaStar, FaTrophy, FaBolt, FaCalendarAlt, FaChartPie, FaArrowUp } from 'react-icons/fa';
+// --- CHARTING LIBRARY ---
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
 
-// --- WIDGETS AND HELPERS (Originals Preserved, VocabCard Updated) ---
+// --- (NEW) STYLED WIDGETS AND HELPERS ---
 
 const CountdownTimer = ({ targetDate, onComplete }) => {
     const calculateTimeLeft = () => {
@@ -18,35 +18,41 @@ const CountdownTimer = ({ targetDate, onComplete }) => {
         let timeLeft = {};
         if (difference > 0) {
             timeLeft = {
-                Days: Math.floor(difference / (1000 * 60 * 60 * 24)),
-                Hours: Math.floor((difference / (1000 * 60 * 60)) % 24),
-                Minutes: Math.floor((difference / 1000 / 60) % 60),
-                Seconds: Math.floor((difference / 1000) % 60)
+                DAYS: Math.floor(difference / (1000 * 60 * 60 * 24)),
+                HOURS: Math.floor((difference / (1000 * 60 * 60)) % 24),
+                MINUTES: Math.floor((difference / 1000 / 60) % 60),
+                SECONDS: Math.floor((difference / 1000) % 60)
             };
         }
         return timeLeft;
     };
     const [timeLeft, setTimeLeft] = useState(calculateTimeLeft());
+
     useEffect(() => {
         const timer = setTimeout(() => {
             const newTimeLeft = calculateTimeLeft();
             setTimeLeft(newTimeLeft);
-            if (!Object.keys(newTimeLeft).length) { onComplete(); }
+            if (!Object.keys(newTimeLeft).length && onComplete) { onComplete(); }
         }, 1000);
         return () => clearTimeout(timer);
     });
-    const timerComponents = Object.entries(timeLeft).map(([interval, value]) => (
-        <span key={interval} className="text-center p-1">
-            <span className="font-mono text-base sm:text-lg font-semibold">{String(value).padStart(2, '0')}</span>
-            <span className="text-xs uppercase block opacity-70">{interval}</span>
-        </span>
-    ));
+
+    if (!Object.keys(timeLeft).length) {
+        return <div className="text-center font-semibold text-green-400">Live Now</div>;
+    }
+    
     return (
-        <div className="flex justify-around items-center text-white w-full h-full bg-gray-700/50 rounded-md">
-            {timerComponents.length ? timerComponents : <span className="font-semibold">Loading...</span>}
+        <div className="grid grid-cols-4 gap-1 text-white" style={{width: '180px'}}>
+            {Object.entries(timeLeft).map(([interval, value]) => (
+                <div key={interval} className="flex flex-col items-center justify-center bg-gray-700/50 p-1 rounded">
+                    <span className="font-mono text-lg font-bold text-cyan-300">{String(value).padStart(2, '0')}</span>
+                    <span className="text-xs opacity-70" style={{fontSize: '0.6rem'}}>{interval}</span>
+                </div>
+            ))}
         </div>
     );
 };
+
 
 const ExamCountdownWidget = ({ title, targetDate }) => {
     const [timeLeft, setTimeLeft] = useState({ days: 0, hours: 0, minutes: 0, seconds: 0 });
@@ -168,13 +174,27 @@ const VocabCardWidget = () => {
     );
 };
 
-// --- CUSTOM HOOKS (Originals Restored, Performance Hook Upgraded) ---
+// --- CUSTOM HOOKS ---
+
+const useManagedTabs = () => {
+    const [managedTabs, setManagedTabs] = useState([]);
+    useEffect(() => {
+        const tabsQuery = query(collection(db, 'tabManager'), orderBy('order'));
+        const unsubscribe = onSnapshot(tabsQuery, (snapshot) => {
+            const tabs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            setManagedTabs(tabs);
+        });
+        return () => unsubscribe();
+    }, []);
+    return managedTabs;
+};
+
 
 const useMasterData = () => {
-    const [masterData, setMasterData] = useState({ allTests: [], linkedArticles: {}, loading: true });
+    const [masterData, setMasterData] = useState({ allTests: [], linkedMaterials: {}, loading: true });
 
     useEffect(() => {
-        const fetch = async () => {
+        const fetchData = async () => {
             try {
                 const testsQuery = query(collection(db, 'tests'), where("isPublished", "==", true));
                 const articlesQuery = collection(db, 'rdfcArticles');
@@ -185,16 +205,16 @@ const useMasterData = () => {
                 ]);
 
                 const fetchedTests = testsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                const fetchedArticles = {};
-                articlesSnapshot.forEach(doc => { fetchedArticles[doc.id] = doc.data(); });
+                const fetchedMaterials = {};
+                articlesSnapshot.forEach(doc => { fetchedMaterials[doc.id] = doc.data(); });
                 
-                setMasterData({ allTests: fetchedTests, linkedArticles: fetchedArticles, loading: false });
+                setMasterData({ allTests: fetchedTests, linkedMaterials: fetchedMaterials, loading: false });
             } catch (error) {
                 console.error("Error fetching master data:", error);
                 setMasterData(prev => ({ ...prev, loading: false }));
             }
         };
-        fetch();
+        fetchData();
     }, []);
 
     return masterData;
@@ -237,14 +257,11 @@ const useUserAttempts = (uid) => {
     return userAttempts;
 };
 
-// --- UPGRADED usePerformanceData Hook ---
-// --- UPGRADED usePerformanceData Hook ---
-const usePerformanceData = (uid, allTests, linkedArticles) => {
+const usePerformanceData = (uid, allTests, linkedMaterials, managedTabs) => {
     const [data, setData] = useState({ loading: true, overall: null, byType: {} });
 
     useEffect(() => {
-        // Add linkedArticles to dependency check
-        if (!uid || !allTests || allTests.length === 0 || !linkedArticles) {
+        if (!uid || !allTests || allTests.length === 0 || !linkedMaterials || !managedTabs || managedTabs.length === 0) {
             setData({ loading: false, overall: null, byType: {} });
             return;
         }
@@ -254,34 +271,36 @@ const usePerformanceData = (uid, allTests, linkedArticles) => {
             try {
                 const userAttemptsQuery = query(collection(db, 'attempts'), where('userId', '==', uid), where('status', '==', 'completed'));
                 const userAttemptsSnap = await getDocs(userAttemptsQuery);
-                const userAttempts = userAttemptsSnap.docs.map(doc => doc.data());
+                const userAttemptsData = userAttemptsSnap.docs.map(doc => doc.data());
 
-                const testIdToInfoMap = allTests.reduce((acc, test) => {
-                    acc[test.id] = { type: test.type?.toUpperCase() || 'TEST', title: test.title };
+                const testInfoMap = allTests.reduce((acc, test) => {
+                    acc[test.id] = test;
                     return acc;
                 }, {});
 
                 const byType = {};
                 const overallScoreHistory = [];
 
-                userAttempts.forEach(attempt => {
-                    const testId = attempt.testId;
-                    const testInfo = testIdToInfoMap[testId];
-                    if (!testInfo) return;
+                userAttemptsData.forEach(attempt => {
+                    const test = testInfoMap[attempt.testId];
+                    if (!test) return;
 
-                    // --- NEW CATEGORIZATION LOGIC START ---
-                    let category;
-                    if (linkedArticles[testId]) {
-                        category = 'RDFC';
-                    } else {
-                        const type = testInfo.type?.toUpperCase() || 'TEST';
-                        if (['MOCK', 'SECTIONAL', '10MIN'].includes(type)) {
-                            category = type;
-                        } else {
-                            category = 'ADD-ON'; // Group all other tests into ADDONS
-                        }
+                    let category = test.mainType;
+                    if (!category) {
+                         const oldType = test.type?.toUpperCase();
+                         if (linkedMaterials[test.id]) {
+                             category = 'RDFC';
+                         } else if (oldType === 'MOCK') {
+                             category = 'Mocks';
+                         } else if (oldType === 'SECTIONAL') {
+                             category = 'Sectionals';
+                         } else if (oldType === '10MIN') {
+                             category = '10 Min RC';
+                         } else {
+                             const foundTab = managedTabs.find(t => t.name.toUpperCase().includes(oldType || ''))
+                             category = foundTab ? foundTab.name : 'Add-Ons';
+                         }
                     }
-                    // --- NEW CATEGORIZATION LOGIC END ---
 
                     if (!byType[category]) {
                         byType[category] = { scores: [], totalScore: 0, count: 0, scoreHistory: [] };
@@ -292,7 +311,7 @@ const usePerformanceData = (uid, allTests, linkedArticles) => {
                     byType[category].count += 1;
 
                     const scoreEntry = {
-                        name: testInfo.title, 
+                        name: test.title, 
                         score, 
                         date: attempt.completedAt?.toDate().toLocaleDateString()
                     };
@@ -309,7 +328,6 @@ const usePerformanceData = (uid, allTests, linkedArticles) => {
                     };
                 });
 
-                // Leaderboard logic remains the same...
                 const allAttemptsQuery = query(collection(db, 'attempts'), where('status', '==', 'completed'));
                 const allAttemptsSnapshot = await getDocs(allAttemptsQuery);
                 const allAttempts = allAttemptsSnapshot.docs.map(doc => doc.data());
@@ -338,7 +356,7 @@ const usePerformanceData = (uid, allTests, linkedArticles) => {
                     byType,
                     overall: {
                         metrics: {
-                            testsCompleted: userAttempts.length,
+                            testsCompleted: userAttemptsData.length,
                             avgScore: userScores[uid] ? (userScores[uid].totalScore / userScores[uid].count).toFixed(1) : 0,
                             bestScore: userScores[uid] && userScores[uid].scores.length > 0 ? Math.max(...userScores[uid].scores) : 0
                         },
@@ -355,7 +373,7 @@ const usePerformanceData = (uid, allTests, linkedArticles) => {
         };
 
         fetchData();
-    }, [uid, allTests, linkedArticles]); // Add linkedArticles to dependency array
+    }, [uid, allTests, linkedMaterials, managedTabs]);
 
     return data;
 }
@@ -367,53 +385,75 @@ const UserDashboard = ({ navigate }) => {
     const [liveTests, setLiveTests] = useState({});
     const [showFeedbackThanks, setShowFeedbackThanks] = useState(false);
     const [activeTab, setActiveTab] = useState('dashboard');
+    const [activeSubTab, setActiveSubTab] = useState(null);
     const [openAccordion, setOpenAccordion] = useState(null);
 
-    const { allTests, linkedArticles, loading: masterDataLoading } = useMasterData();
+    const managedTabs = useManagedTabs();
+    const { allTests, linkedMaterials, loading: masterDataLoading } = useMasterData();
     const userStatus = useUserStatus(userData?.uid);
     const userAttempts = useUserAttempts(userData?.uid);
-    const performanceData = usePerformanceData(userData?.uid, allTests, linkedArticles);
+    const performanceData = usePerformanceData(userData?.uid, allTests, linkedMaterials, managedTabs);
 
-    const { 
-        rdfcTests, mockTests, sectionalTests, otherAddOnTests, tenMinTests
-    } = useMemo(() => {
-        if (!allTests || allTests.length === 0) {
-            return { rdfcTests: [], mockTests: [], sectionalTests: [], otherAddOnTests: [], tenMinTests: [] };
+    const getTestCategory = (test) => {
+        if (test.mainType) {
+            return { main: test.mainType, sub: test.subType || null };
         }
+        if (linkedMaterials[test.id]) return { main: 'RDFC', sub: null };
+        const oldType = test.type?.toUpperCase();
+        if (oldType === 'MOCK') return { main: 'Mocks', sub: null };
+        if (oldType === 'SECTIONAL') return { main: 'Sectionals', sub: null };
+        if (oldType === '10MIN') return { main: '10 Min RC', sub: null };
+        const foundTab = managedTabs.find(t => t.name.toUpperCase().includes(oldType || ''));
+        return { main: foundTab ? foundTab.name : 'Add-Ons', sub: null };
+    };
+
+    const testsByTab = useMemo(() => {
+        if (!allTests || !managedTabs?.length) return {};
         
-        const rdfc = allTests.filter(test => linkedArticles[test.id]).sort((a,b) => {
-            if (a.isFree !== b.isFree) return a.isFree ? -1 : 1;
-            return (b.createdAt?.toDate() || 0) - (a.createdAt?.toDate() || 0);
+        const grouped = managedTabs.reduce((acc, tab) => {
+            acc[tab.name] = { id: tab.id, tests: [], subTabs: {} };
+            if (tab.subTabs) {
+                tab.subTabs.forEach(sub => acc[tab.name].subTabs[sub.name] = { tests: [] });
+            }
+            return acc;
+        }, {});
+
+        allTests.forEach(test => {
+            const { main, sub } = getTestCategory(test);
+            if (grouped[main]) {
+                if (sub && grouped[main].subTabs[sub]) {
+                    grouped[main].subTabs[sub].tests.push(test);
+                } else {
+                    grouped[main].tests.push(test);
+                }
+            }
         });
         
-        const nonRdfcTests = allTests.filter(test => !linkedArticles[test.id]);
+        const sortFn = (a, b) => {
+            if (a.isFree !== b.isFree) return a.isFree ? -1 : 1;
+            return (b.createdAt?.toDate() || 0) - (a.createdAt?.toDate() || 0);
+        };
         
-        const mocks = nonRdfcTests.filter(t => t.type?.toUpperCase() === 'MOCK').sort((a, b) => {
-            if (a.isFree !== b.isFree) return a.isFree ? -1 : 1;
-            return (b.createdAt?.toDate() || 0) - (a.createdAt?.toDate() || 0);
-        });
-        const sectionals = nonRdfcTests.filter(t => t.type?.toUpperCase() === 'SECTIONAL').sort((a, b) => {
-            if (a.isFree !== b.isFree) return a.isFree ? -1 : 1;
-            return (b.createdAt?.toDate() || 0) - (a.createdAt?.toDate() || 0);
-        });
-        const tenMins = nonRdfcTests.filter(t => t.type?.toUpperCase() === '10MIN').sort((a, b) => {
-            if (a.isFree !== b.isFree) return a.isFree ? -1 : 1;
-            return (b.createdAt?.toDate() || 0) - (a.createdAt?.toDate() || 0);
-        });
-        const others = nonRdfcTests.filter(t => !['MOCK', 'SECTIONAL', '10MIN'].includes(t.type?.toUpperCase())).sort((a, b) => {
-            if (a.isFree !== b.isFree) return a.isFree ? -1 : 1;
-            return (b.createdAt?.toDate() || 0) - (a.createdAt?.toDate() || 0);
+        Object.values(grouped).forEach(tabData => {
+            tabData.tests.sort(sortFn);
+            Object.values(tabData.subTabs).forEach(subTabData => subTabData.tests.sort(sortFn));
         });
 
-        return {
-            rdfcTests: rdfc,
-            mockTests: mocks,
-            sectionalTests: sectionals,
-            tenMinTests: tenMins,
-            otherAddOnTests: others
-        };
-    }, [allTests, linkedArticles]);
+        return grouped;
+    }, [allTests, managedTabs, linkedMaterials]);
+
+    const visibleTabs = useMemo(() => managedTabs.filter(tab => {
+        const tabData = testsByTab[tab.name];
+        if (!tabData) return false;
+        const hasMainTests = tabData.tests.length > 0;
+        const hasSubTabTests = Object.values(tabData.subTabs).some(sub => sub.tests.length > 0);
+        return hasMainTests || hasSubTabTests;
+    }), [managedTabs, testsByTab]);
     
+    useEffect(() => {
+      setActiveSubTab(null);
+    }, [activeTab]);
+
     const updateLiveTests = (testId) => {
         setLiveTests(prev => ({...prev, [testId]: true}));
     };
@@ -434,109 +474,149 @@ const UserDashboard = ({ navigate }) => {
         return () => clearInterval(interval);
     }, [allTests]);
 
-    const loading = masterDataLoading || !userStatus;
+    const loading = masterDataLoading || !userStatus || managedTabs.length === 0;
 
-    const handleViewArticle = async (articleUrl, testId) => {
+    const handleViewMaterial = async (materialUrl, testId) => {
         if (!userData?.uid) return;
         try {
             const userRef = doc(db, 'users', userData.uid);
             await updateDoc(userRef, { [`readArticles.${testId}`]: true });
-            navigate('rdfcArticleViewer', { articleUrl, testId: testId });
+            navigate('rdfcArticleViewer', { articleUrl: materialUrl, testId: testId });
         } catch (error) {
-            console.error("Error marking article as read:", error);
+            console.error("Error marking material as read:", error);
         }
     };
 
-    const getIsLocked = (test, itemType) => {
+    const getIsLocked = (test) => {
         if (test.isFree) return false;
         if (!userStatus?.isSubscribed) return true;
+        
         const access = userStatus.accessControl;
         if (!access) return true;
-        if (itemType === 'rdfc_article') return !access.rdfc_articles;
-        if (itemType === 'rdfc_test') return !access.rdfc_tests;
-        switch (test.type?.toUpperCase()) {
-            case 'MOCK': return !access.mock;
-            case 'SECTIONAL': return !access.sectional;
-            case '10MIN': return !access.ten_min_tests;
-            case 'TEST': return !access.test;
-            default: return true;
+        
+        const { main, sub } = getTestCategory(test);
+        let requiredPermissionKey = sub ? `${main}/${sub}` : main;
+
+        if (access.validityMap && access.validityMap[requiredPermissionKey]) {
+            const expiry = access.validityMap[requiredPermissionKey];
+            if (expiry && expiry.toDate() > new Date()) return false;
         }
+
+        const hasOverallAccess = userStatus.expiryDate ? userStatus.expiryDate.toDate() > new Date() : true;
+        if (!hasOverallAccess) return true;
+
+        if (access[requiredPermissionKey] === true) return false;
+
+        const oldKeyMap = {
+            'RDFC': userStatus.rdfc_articles || userStatus.rdfc_tests,
+            'Mocks': userStatus.mock,
+            'Sectionals': userStatus.sectional,
+            'Add-Ons': userStatus.test,
+            '10 Min RC': userStatus.ten_min_tests
+        };
+        if (oldKeyMap[requiredPermissionKey]) return false;
+
+        return true;
     };
     
-    const renderRDFCDesktopRow = (test) => {
-        const article = linkedArticles[test.id];
-        const isScheduled = test.liveAt && test.liveAt.toDate() > new Date() && !liveTests[test.id];
+    const needsUpgrade = useMemo(() => {
+        if (!userStatus?.isSubscribed || !managedTabs?.length) {
+            return false;
+        }
         
-        const renderCellContent = (type) => {
-            if (isScheduled) return <div className="w-full h-10 flex items-center justify-center"><CountdownTimer targetDate={test.liveAt.toDate()} onComplete={() => updateLiveTests(test.id)} /></div>;
-            const isLocked = getIsLocked(test, `rdfc_${type}`);
-            const isArticleRead = userStatus?.readArticles?.[test.id];
-            let text, action, className, disabled = !article, icon;
+        const requiredAccessTabs = managedTabs.flatMap(tab => {
+            const main = tab.requiresAccess ? [tab.name] : [];
+            const subs = tab.subTabs?.filter(s => s.requiresAccess).map(s => `${tab.name}/${s.name}`) || [];
+            return [...main, ...subs];
+        });
 
-            if(isLocked) { text = "Unlock"; action = () => navigate('subscription'); className = "bg-amber-500 hover:bg-amber-400 text-gray-900"; icon = <FaLock />; } 
-            else if(type === 'article') {
-                if(isArticleRead) { text = "Article Read"; action = () => navigate('rdfcArticleViewer', { articleUrl: article.url, testId: test.id }); className = "bg-gray-600 hover:bg-gray-700 text-gray-300"; icon = <FaCheckCircle />; } 
-                else { text = "View Article"; action = () => handleViewArticle(article.url, test.id); className = "bg-blue-600 hover:bg-blue-700 text-white"; icon = <FaBookOpen />; }
-            } else {
-                const attempt = userAttempts[test.id];
-                if (attempt?.status === 'completed') { text = "View Analysis"; action = () => navigate('results', { attemptId: attempt.id }); className = "bg-green-600 hover:bg-green-700 text-white"; icon = <FaEye />; } 
-                else if (attempt?.status === 'in-progress') { text = "Continue Test"; action = () => navigate('test', { testId: test.id }); className = "bg-orange-500 hover:bg-orange-600 text-white"; icon = <FaPlay />; } 
-                else { text = "Start Test"; action = () => navigate('test', { testId: test.id }); className = "bg-blue-600 hover:bg-blue-700 text-white"; icon = <FaPlay />; }
-            }
-            return <button onClick={action} disabled={disabled} className={`text-xs px-3 py-1 rounded-full w-40 h-10 flex items-center justify-center space-x-2 ${className} ${isLocked ? 'opacity-60' : ''}`}>{icon} <span>{text}</span></button>;
+        if (requiredAccessTabs.length === 0) return false;
+
+        const access = userStatus.accessControl || {};
+        const oldKeyMap = {
+            'RDFC': userStatus.rdfc_articles || userStatus.rdfc_tests,
+            'Mocks': userStatus.mock,
+            'Sectionals': userStatus.sectional,
+            'Add-Ons': userStatus.test,
+            '10 Min RC': userStatus.ten_min_tests
         };
 
-        return (
-            <tr key={test.id} className="hover:bg-gray-700/50">
-                <td className="px-6 py-4 text-sm font-medium">
-                    <div className="flex items-center">
-                        <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-500 font-semibold">{test.title}</span>
-                        {test.isFree && <span className="ml-2 flex-shrink-0 text-xs font-semibold rounded-full bg-green-700 text-green-200 px-2 py-1">Free</span>}
-                        {isScheduled && <span className="ml-2 text-xs font-semibold rounded-full bg-cyan-700 text-cyan-200 px-2 py-1">Coming Soon</span>}
-                    </div>
-                </td>
-                <td className="px-6 py-4 text-sm text-gray-300">{article ? article.name : ''}</td>
-                <td className="px-6 py-4 text-sm text-gray-400">{article ? article.description : ''}</td>
-                <td className="px-6 py-4 text-sm">{renderCellContent('article')}</td>
-                <td className="px-6 py-4 text-sm">{renderCellContent('test')}</td>
-            </tr>
-        );
-    };
+        for (const key of requiredAccessTabs) {
+            const hasAccess = (access.validityMap && access.validityMap[key] && access.validityMap[key].toDate() > new Date()) ||
+                              (access[key] === true) ||
+                              (oldKeyMap[key] === true);
+            
+            if (!hasAccess) {
+                return true;
+            }
+        }
 
-    const renderAddOnTestRow = (test) => {
+        return false;
+    }, [userStatus, managedTabs]);
+    
+    const renderTestRow = (test, tabName) => {
+        const material = linkedMaterials[test.id];
         const isScheduled = test.liveAt && test.liveAt.toDate() > new Date() && !liveTests[test.id];
-        const isLocked = getIsLocked(test, test.type);
-        const typeColors = { MOCK: 'bg-purple-700 text-purple-200', SECTIONAL: 'bg-teal-700 text-teal-200', TEST: 'bg-gray-600 text-gray-300', '10MIN': 'bg-rose-700 text-rose-200' };
-
-        const renderCellContent = () => {
-            if (isScheduled) return <div className="w-full h-10 flex items-center justify-center"><CountdownTimer targetDate={test.liveAt.toDate()} onComplete={() => updateLiveTests(test.id)} /></div>;
-            let text, action, className, icon;
-
+        const isLocked = getIsLocked(test);
+        const { main, sub } = getTestCategory(test);
+        
+        const renderActionButtons = () => {
+            if (isScheduled) return <div className="flex items-center justify-center h-full"><CountdownTimer targetDate={test.liveAt.toDate()} onComplete={() => updateLiveTests(test.id)} /></div>;
+            
+            let buttons = [];
+            
             if (isLocked) {
-                text = "Unlock"; action = () => navigate('subscription'); className = "bg-amber-500 hover:bg-amber-400 text-gray-900"; icon = <FaLock />;
+                 if (userStatus?.isSubscribed) {
+                    buttons.push({ key: 'upgrade', text: "Upgrade", action: () => navigate('upgrade'), className: "action-btn-upgrade", icon: <FaArrowUp /> });
+                } else {
+                    buttons.push({ key: 'unlock', text: "Unlock", action: () => navigate('subscription'), className: "action-btn-unlock", icon: <FaLock /> });
+                }
             } else {
-                const attempt = userAttempts[test.id];
-                if (attempt?.status === 'completed') { text = "View Analysis"; action = () => navigate('results', { attemptId: attempt.id }); className = "bg-green-600 hover:bg-green-700 text-white"; icon = <FaEye />; }
-                else if (attempt?.status === 'in-progress') { text = "Continue Test"; action = () => navigate('test', { testId: test.id }); className = "bg-orange-500 hover:bg-orange-600 text-white"; icon = <FaPlay />; }
-                else { text = "Start Test"; action = () => navigate('test', { testId: test.id }); className = "bg-blue-600 hover:bg-blue-700 text-white"; icon = <FaPlay />; }
-            }
-            return <button onClick={action} className={`text-xs px-3 py-1 rounded-full w-40 h-10 flex items-center justify-center space-x-2 ${className} ${isLocked ? 'opacity-60' : ''}`}>{icon} <span>{text}</span></button>;
-        };
+                if (material) {
+                    const isMaterialRead = userStatus?.readArticles?.[test.id];
+                    const viewText = tabName === 'RDFC' ? 'View RDFC' : 'View Material';
+                    const readText = tabName === 'RDFC' ? 'RDFC Read' : 'Material Viewed';
 
+                    if(isMaterialRead){ buttons.push({ key: 'material', text: readText, action: () => navigate('rdfcArticleViewer', { articleUrl: material.url, testId: test.id }), className: "action-btn-viewed", icon: <FaCheckCircle /> }); }
+                    else { buttons.push({ key: 'material', text: viewText, action: () => handleViewMaterial(material.url, test.id), className: "action-btn-view", icon: <FaBookOpen /> }); }
+                }
+
+                const attempt = userAttempts[test.id];
+                if (attempt?.status === 'completed') { buttons.push({ key: 'test', text: "View Analysis", action: () => navigate('results', { attemptId: attempt.id }), className: "action-btn-analysis", icon: <FaEye /> }); }
+                else if (attempt?.status === 'in-progress') { buttons.push({ key: 'test', text: "Continue Test", action: () => navigate('test', { testId: test.id }), className: "action-btn-continue", icon: <FaPlay /> }); }
+                else { buttons.push({ key: 'test', text: "Start Test", action: () => navigate('test', { testId: test.id }), className: "action-btn-start", icon: <FaPlay /> }); }
+            }
+            
+            return (
+                <div className="flex items-center justify-center space-x-2 w-full">
+                    {buttons.map(btn => (
+                        <button key={btn.key} onClick={btn.action} className={`action-btn ${btn.className}`}>
+                            {btn.icon}<span className="btn-text">{btn.text}</span>
+                        </button>
+                    ))}
+                </div>
+            );
+        };
+    
+        const typeColors = { MOCKS: 'type-tag-mock', SECTIONALS: 'type-tag-sectional', 'ADD-ONS': 'type-tag-addon', '10 MIN RC': 'type-tag-10min', RDFC: 'type-tag-rdfc' };
+        const displayType = sub ? sub : main;
+    
         return (
-            <tr key={test.id} className="hover:bg-gray-700/50">
-                 <td className="px-6 py-4 text-sm font-medium">
-                    <div className="flex items-center">
-                        <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500 font-semibold">{test.title}</span>
-                        {test.isFree && <span className="ml-2 flex-shrink-0 text-xs font-semibold rounded-full bg-green-700 text-green-200 px-2 py-1">Free</span>}
-                        {isScheduled && <span className="ml-2 text-xs font-semibold rounded-full bg-cyan-700 text-cyan-200 px-2 py-1">Coming Soon</span>}
+            <tr key={test.id} className="hover:bg-gray-700/50 transition-colors">
+                 <td className="px-6 py-4 text-sm font-medium text-white">
+                    <div className="flex items-center space-x-2">
+                        <span className="font-semibold text-gray-100">{test.title}</span>
+                         {test.isFree && <span className="tag-green">Free</span>}
                     </div>
                  </td>
+                 {tabName === 'RDFC' && (
+                    <td className="px-6 py-4 text-sm text-gray-300">{material?.name || '-'}</td>
+                 )}
                  <td className="px-6 py-4 text-sm text-gray-400">
-                      <span className={`inline-block px-2 py-1 text-xs font-semibold rounded-full ${typeColors[test.type.toUpperCase()] || typeColors.TEST}`}>{test.type}</span>
+                      <span className={`tag-type ${typeColors[displayType.toUpperCase()] || 'type-tag-addon'}`}>{displayType}</span>
                  </td>
-                 <td className="px-6 py-4 text-sm text-gray-400 max-w-xs truncate">{test.description}</td>
-                 <td className="px-6 py-4 text-sm">{renderCellContent()}</td>
+                 <td className="px-6 py-4 text-sm text-gray-400 max-w-xs truncate">{test.description || (material ? material.description : '')}</td>
+                 <td className="px-6 py-4 text-sm text-center">{renderActionButtons()}</td>
             </tr>
         );
     };
@@ -545,24 +625,36 @@ const UserDashboard = ({ navigate }) => {
         if (!userStatus) return null;
 
         if (userStatus.isSubscribed) {
-            let daysRemaining = null;
-            if (userStatus.expiryDate && userStatus.expiryDate.toDate) {
+            let expiryText = '';
+            if(userStatus.accessControl?.validityMap) {
+                expiryText = 'Granular Validity';
+            }
+            else if (userStatus.expiryDate && userStatus.expiryDate.toDate) {
                 const expiryDate = userStatus.expiryDate.toDate();
                 const now = new Date();
                 const difference = expiryDate.getTime() - now.getTime();
                 if (difference > 0) {
-                    daysRemaining = Math.ceil(difference / (1000 * 60 * 60 * 24));
+                    const daysRemaining = Math.ceil(difference / (1000 * 60 * 60 * 24));
+                    expiryText = `Expires in: ${daysRemaining} day${daysRemaining !== 1 ? 's' : ''}`;
+                } else {
+                    expiryText = 'Expired';
                 }
             }
             return (
-                <div className="flex items-center space-x-3">
+                <div className="flex items-center flex-wrap gap-x-4 gap-y-2">
                     <style jsx>{` @keyframes shine { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } } .premium-badge { background: linear-gradient(90deg, #ffde5e, #ffef97, #ffde5e); background-size: 200% 100%; animation: shine 4s linear infinite; color: #2d3748; font-weight: 700; box-shadow: 0 2px 4px rgba(0,0,0,0.2); } `}</style>
                     <span className="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-semibold premium-badge space-x-2">
                         <FaCrown />
                         <span>Premium Member</span>
                     </span>
-                    {userStatus.planName && <span className="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-semibold bg-blue-600 text-white">{userStatus.planName}</span>}
-                    {daysRemaining !== null && (<span className="text-sm text-gray-400">Expires in: {daysRemaining} day{daysRemaining !== 1 ? 's' : ''}</span>)}
+                    {userStatus.planName && <span className="inline-flex items-center px-3 py-1 text-sm font-semibold bg-gray-700 text-gray-200 rounded">{userStatus.planName}</span>}
+                    {needsUpgrade && (
+                        <button onClick={() => navigate('upgrade')} className="bg-purple-600 hover:bg-purple-500 text-white font-semibold px-3 py-1 text-sm flex items-center space-x-2 rounded transition-colors">
+                            <FaArrowUp />
+                            <span>Upgrade Plan</span>
+                        </button>
+                    )}
+                    {expiryText && (<span className="text-sm text-gray-400">{expiryText}</span>)}
                 </div>
             );
         } else {
@@ -578,6 +670,13 @@ const UserDashboard = ({ navigate }) => {
     
     const handleFeedbackSuccess = () => {
         setShowFeedbackThanks(true);
+    };
+
+    const iconMap = {
+        'RDFC': FaBookOpen,
+        '10 Min RC': FaBolt,
+        'Mocks': FaTrophy,
+        'Sectionals': FaChartPie
     };
     
     const TabButton = ({ value, label, icon: Icon }) => {
@@ -595,21 +694,20 @@ const UserDashboard = ({ navigate }) => {
         );
     };
 
-    const TestSection = ({ title, tests, limit, contentType, viewAllParams, navigate, renderDesktopRow }) => {
+    const TestSection = ({ tab, tests, limit, navigate }) => {
         if (!tests || tests.length === 0) return null;
-        
-        const isRdfc = contentType === 'rdfc';
-        const headers = isRdfc 
-            ? ['Title', 'Article Name', 'Article Description', 'Article Action', 'Test Action'] 
-            : ['Title', 'Type', 'Description', 'Action'];
-
+        const isRdfc = tab.name.includes('RDFC');
+        const headers = ['Test Title'];
+        if(isRdfc) headers.push('Article Name');
+        headers.push('Type', 'Description', 'Actions');
+    
         return (
              <div className="mb-12">
                 <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-xl md:text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-500">{title}</h3>
+                    <h3 className="text-xl md:text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-500">{tab.name}</h3>
                      {tests.length > limit && (
                         <button 
-                            onClick={() => navigate('allTests', { ...viewAllParams, tests: tests.map(t => ({...t, article: linkedArticles[t.id]})) })} 
+                            onClick={() => navigate('allTests', { tests: tests.map(t => ({...t, material: linkedMaterials[t.id]})), title: `All ${tab.name}`, contentType: tab.name.toUpperCase().includes('RDFC') ? 'rdfc' : 'addon' })} 
                             className="text-sm font-semibold text-blue-400 hover:text-blue-300 flex items-center space-x-1"
                         >
                             <span>View All ({tests.length})</span> <FaArrowRight />
@@ -620,11 +718,11 @@ const UserDashboard = ({ navigate }) => {
                     <table className="min-w-full divide-y divide-gray-700">
                        <thead className="bg-gray-700/50">
                            <tr>
-                               {headers.map(h => <th key={h} className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">{h}</th>)}
+                               {headers.map(h => <th key={h} className={`px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider ${h === 'Actions' ? 'text-center' : ''}`}>{h}</th>)}
                            </tr>
                        </thead>
                         <tbody className="bg-gray-800 divide-y divide-gray-700">
-                           {tests.slice(0, limit).map(test => renderDesktopRow(test))}
+                           {tests.slice(0, limit).map(test => renderTestRow(test, tab.name))}
                         </tbody>
                     </table>
                 </div>
@@ -701,7 +799,6 @@ const UserDashboard = ({ navigate }) => {
 
         const availableFilters = ['OVERALL', ...Object.keys(byType)];
         const currentData = filter === 'OVERALL' ? overall : byType[filter];
-        // --- FIX #1: Use the correct scoreHistory based on the filter ---
         const scoreHistory = filter === 'OVERALL' ? overall?.scoreHistory : byType[filter]?.scoreHistory;
         
         if (!overall || overall.metrics.testsCompleted === 0) {
@@ -758,29 +855,34 @@ const UserDashboard = ({ navigate }) => {
 
     const TestCard = ({ test }) => {
         const isScheduled = test.liveAt && test.liveAt.toDate() > new Date() && !liveTests[test.id];
-        const isLocked = getIsLocked(test, test.type);
-        const typeColors = { MOCK: 'border-purple-500', SECTIONAL: 'border-teal-500', TEST: 'border-gray-500', '10MIN': 'border-rose-500' };
-
-        let text, action, className, icon;
+        const isLocked = getIsLocked(test);
+        const { main } = getTestCategory(test);
+        const typeColors = { MOCKS: 'border-purple-500', SECTIONALS: 'border-teal-500', 'ADD-ONS': 'border-gray-500', '10 MIN RC': 'border-rose-500', RDFC: 'border-pink-500' };
+        
+        let text, action, className, icon, iconClass;
         const attempt = userAttempts[test.id];
 
-        if (isScheduled) { text = "Coming Soon"; className = "bg-gray-600 text-gray-300 cursor-default"; icon = <FaHourglassHalf/>; action = () => {};
-        } else if (isLocked) { text = "Unlock"; action = () => navigate('subscription'); className = "bg-amber-500 text-gray-900"; icon = <FaLock />;
-        } else if (attempt?.status === 'completed') { text = "Analysis"; action = () => navigate('results', { attemptId: attempt.id }); className = "bg-green-600 hover:bg-green-700 text-white"; icon = <FaEye />;
-        } else if (attempt?.status === 'in-progress') { text = "Continue"; action = () => navigate('test', { testId: test.id }); className = "bg-orange-500 hover:bg-orange-600 text-white"; icon = <FaPlay />;
-        } else { text = "Start"; action = () => navigate('test', { testId: test.id }); className = "bg-blue-600 hover:bg-blue-700 text-white"; icon = <FaPlay />; }
+        if (isScheduled) { text = "Coming Soon"; className = "text-gray-400"; icon = <FaHourglassHalf/>; action = () => {}; iconClass="text-gray-400";
+        } else if (isLocked) { 
+             if (userStatus?.isSubscribed) { text = "Upgrade"; action = () => navigate('upgrade'); className = "text-purple-400"; icon = <FaArrowUp />; iconClass="text-purple-400"; } 
+             else { text = "Unlock"; action = () => navigate('subscription'); className = "text-amber-400"; icon = <FaLock />; iconClass="text-amber-400"; }
+        } else if (attempt?.status === 'completed') { text = "Analysis"; action = () => navigate('results', { attemptId: attempt.id }); className = "text-green-400"; icon = <FaEye />; iconClass="text-green-400";
+        } else if (attempt?.status === 'in-progress') { text = "Continue"; action = () => navigate('test', { testId: test.id }); className = "text-orange-400"; icon = <FaPlay />; iconClass="text-orange-400";
+        } else { text = "Start"; action = () => navigate('test', { testId: test.id }); className = "text-blue-400"; icon = <FaPlay />; iconClass="text-blue-400"; }
 
         return (
-            <div className={`bg-gray-800 rounded-lg p-4 flex flex-col justify-between shadow-lg border-l-4 ${typeColors[test.type?.toUpperCase()] || 'border-gray-600'}`}>
+            <div className={`bg-gray-800 rounded-lg p-4 flex flex-col justify-between shadow-lg border-l-4 transition-all hover:shadow-2xl hover:border-gray-400 ${typeColors[main.toUpperCase()] || 'border-gray-600'}`}>
                 <div>
                     <div className="flex items-center justify-between mb-2">
-                         <span className={`text-xs font-bold px-2 py-1 rounded-full ${typeColors[test.type?.toUpperCase()]?.replace('border', 'bg')}/20 ${typeColors[test.type?.toUpperCase()]?.replace('border', 'text')}`}>{test.type}</span>
-                         {test.isFree && <span className="text-xs font-semibold rounded-full bg-green-700 text-green-200 px-2 py-1">Free</span>}
+                         <span className={`tag-type ${typeColors[main.toUpperCase()]?.replace('border', 'bg')}/20 ${typeColors[main.toUpperCase()]?.replace('border', 'text')}`}>{main}</span>
+                         {test.isFree && <span className="tag-green">Free</span>}
                     </div>
                     <h4 className="font-bold text-white mb-1 truncate">{test.title}</h4>
                     <p className="text-sm text-gray-400 mb-4 h-10 overflow-hidden text-ellipsis">{test.description}</p>
                 </div>
-                <button onClick={action} className={`w-full mt-2 text-sm px-3 py-2 rounded-md flex items-center justify-center space-x-2 font-semibold ${className}`}>{icon} <span>{text}</span></button>
+                <button onClick={action} className={`w-full mt-2 text-sm px-3 py-2 rounded-md flex items-center justify-center space-x-2 font-semibold ${className} bg-gray-700/50 hover:bg-gray-700`}>
+                    <span className={iconClass}>{icon}</span> <span>{text}</span>
+                </button>
             </div>
         );
     };
@@ -818,74 +920,58 @@ const UserDashboard = ({ navigate }) => {
         )
     };
 
-    const MobileRDFCListItem = ({ test }) => {
-        const article = linkedArticles[test.id];
-        const attempt = userAttempts[test.id];
+    const MobileTestListItem = ({ test, tabName }) => {
+        const material = linkedMaterials[test.id];
         const isScheduled = test.liveAt && test.liveAt.toDate() > new Date();
-        const isArticleLocked = getIsLocked(test, 'rdfc_article');
-        const isTestLocked = getIsLocked(test, 'rdfc_test');
-        
-        const articleButton = () => {
-            if (isArticleLocked) return { text: "Unlock", action: () => navigate('subscription'), className: "bg-amber-500 text-gray-900" };
-            const isArticleRead = userStatus?.readArticles?.[test.id];
-            if (isArticleRead) return { text: "Read", action: () => navigate('rdfcArticleViewer', { articleUrl: article.url, testId: test.id }), className: "bg-gray-600 text-gray-300" };
-            return { text: "View", action: () => handleViewArticle(article.url, test.id), className: "bg-blue-600 text-white" };
+        const isLocked = getIsLocked(test);
+
+        const renderActionButtons = () => {
+            if (isLocked) {
+                let text, action, className, icon;
+                 if (userStatus?.isSubscribed) { text = "Upgrade"; action = () => navigate('upgrade'); className = "action-btn-upgrade"; icon = <FaArrowUp />; } 
+                 else { text = "Unlock"; action = () => navigate('subscription'); className = "action-btn-unlock"; icon = <FaLock />; }
+                 return <button onClick={action} className={`action-btn-mobile ${className}`}>{icon}<span>{text}</span></button>;
+            }
+
+            const isRdfc = tabName === 'RDFC';
+            let buttons = [];
+            if(material){
+                const isMaterialRead = userStatus?.readArticles?.[test.id];
+                const viewText = isRdfc ? 'View RDFC' : 'Material';
+                const readText = isRdfc ? 'RDFC Read' : 'Viewed';
+                if(isMaterialRead){ buttons.push({key: 'mat', text: readText, action: () => navigate('rdfcArticleViewer', { articleUrl: material.url, testId: test.id }), className: "action-btn-viewed"}); }
+                else { buttons.push({key: 'mat', text: viewText, action: () => handleViewMaterial(material.url, test.id), className: "action-btn-view"}); }
+            }
+            
+            const attempt = userAttempts[test.id];
+            if (attempt?.status === 'completed') { buttons.push({ key: 'test', text: "Analysis", action: () => navigate('results', { attemptId: attempt.id }), className: "action-btn-analysis" }); }
+            else if (attempt?.status === 'in-progress') { buttons.push({ key: 'test', text: "Continue", action: () => navigate('test', { testId: test.id }), className: "action-btn-continue" }); }
+            else { buttons.push({ key: 'test', text: "Start", action: () => navigate('test', { testId: test.id }), className: "action-btn-start" }); }
+            
+            return (
+                <div className="flex items-center space-x-2">
+                    {buttons.map(btn => <button key={btn.key} onClick={btn.action} className={`action-btn-mobile ${btn.className}`}>{btn.text}</button>)}
+                </div>
+            )
         };
-        const testButton = () => {
-            if (isTestLocked) return { text: "Unlock", action: () => navigate('subscription'), className: "bg-amber-500 text-gray-900" };
-            if (attempt?.status === 'completed') return { text: "Analysis", action: () => navigate('results', { attemptId: attempt.id }), className: "bg-green-600 text-white" };
-            if (attempt?.status === 'in-progress') return { text: "Continue", action: () => navigate('test', { testId: test.id }), className: "bg-orange-500 text-white" };
-            return { text: "Start", action: () => navigate('test', { testId: test.id }), className: "bg-blue-600 text-white" };
-        };
-        
-        const articleBtn = articleButton();
-        const testBtn = testButton();
+
+        const { main } = getTestCategory(test);
+        const typeColors = { MOCKS: 'type-tag-mock', SECTIONALS: 'type-tag-sectional', 'ADD-ONS': 'type-tag-addon', '10 MIN RC': 'type-tag-10min', RDFC: 'type-tag-rdfc' };
 
         return (
             <div className="flex items-center justify-between py-3 border-b border-gray-700 last:border-0">
                 <div className="flex-1 min-w-0 pr-2">
-                    <p className="text-white font-semibold truncate flex items-center">
-                        {test.title}
-                        {test.isFree && <span className="ml-2 flex-shrink-0 text-xs font-semibold rounded-full bg-green-700 text-green-200 px-2 py-1">Free</span>}
+                    <p className="text-white font-semibold truncate flex items-center space-x-2">
+                        <span>{test.title}</span>
+                        {test.isFree && <span className="tag-green">Free</span>}
                     </p>
-                    <p className="text-gray-400 text-sm">{article?.name || ''}</p>
+                    {tabName === 'RDFC' ? 
+                        <p className="text-gray-400 text-sm">{material?.name || ''}</p> 
+                        : <p className={`tag-type mt-1 ${typeColors[main.toUpperCase()] || 'type-tag-addon'}`}>{main}</p>
+                    }
                 </div>
                 <div className="flex-shrink-0 flex items-center space-x-2">
-                    {isScheduled ? (<div className="text-xs font-semibold rounded-full bg-cyan-700 text-cyan-200 px-2 py-1">Coming Soon</div>) : (
-                        <>
-                            <button onClick={articleBtn.action} disabled={!article} className={`text-xs px-2 py-1 rounded-full font-bold ${articleBtn.className}`}>{articleBtn.text}</button>
-                            <button onClick={testBtn.action} disabled={!article} className={`text-xs px-2 py-1 rounded-full font-bold ${testBtn.className}`}>{testBtn.text}</button>
-                        </>
-                    )}
-                </div>
-            </div>
-        );
-    };
-
-    const MobileTestListItem = ({ test }) => {
-        const attempt = userAttempts[test.id];
-        const isScheduled = test.liveAt && test.liveAt.toDate() > new Date();
-        const isLocked = getIsLocked(test, test.type);
-        const typeColors = { MOCK: 'bg-purple-700 text-purple-200', SECTIONAL: 'bg-teal-700 text-teal-200', TEST: 'bg-gray-600 text-gray-300', '10MIN': 'bg-rose-700 text-rose-200' };
-
-        let text, action, className, icon;
-        if (isScheduled) { text = "Coming Soon"; className = "bg-gray-600 text-gray-300 cursor-default"; icon = <FaHourglassHalf/>; action = () => {};
-        } else if (isLocked) { text = "Unlock"; action = () => navigate('subscription'); className = "bg-amber-500 text-gray-900"; icon = <FaLock />;
-        } else if (attempt?.status === 'completed') { text = "Analysis"; action = () => navigate('results', { attemptId: attempt.id }); className = "bg-green-600 text-white"; icon = <FaEye />;
-        } else if (attempt?.status === 'in-progress') { text = "Continue"; action = () => navigate('test', { testId: test.id }); className = "bg-orange-500 text-white"; icon = <FaPlay />;
-        } else { text = "Start"; action = () => navigate('test', { testId: test.id }); className = "bg-blue-600 text-white"; icon = <FaPlay />; }
-
-        return (
-            <div className="flex items-center justify-between py-3 border-b border-gray-700 last:border-0">
-                <div className="flex-1 min-w-0">
-                    <p className="text-white font-semibold truncate flex items-center">
-                        {test.title}
-                        {test.isFree && <span className="ml-2 flex-shrink-0 text-xs font-semibold rounded-full bg-green-700 text-green-200 px-2 py-1">Free</span>}
-                    </p>
-                    <p className={`text-sm inline-block px-2 py-1 text-xs font-semibold rounded-full ${typeColors[test.type.toUpperCase()] || typeColors.TEST}`}>{test.type}</p>
-                </div>
-                <div className="ml-4 flex-shrink-0">
-                    <button onClick={action} className={`text-xs px-3 py-1.5 rounded-full w-28 h-8 flex items-center justify-center space-x-2 font-bold ${className}`}>{icon}<span>{text}</span></button>
+                    {isScheduled ? (<div className="tag-green">Coming Soon</div>) : renderActionButtons() }
                 </div>
             </div>
         );
@@ -894,28 +980,135 @@ const UserDashboard = ({ navigate }) => {
     if (loading) {
         return <div className="text-center text-gray-400 p-8">Loading Dashboard...</div>;
     }
+    
+    const currentActiveTabData = managedTabs.find(t => t.name === activeTab);
+    const hasSubTabs = currentActiveTabData && currentActiveTabData.subTabs && currentActiveTabData.subTabs.length > 0;
 
-    const recentTests = [...mockTests, ...sectionalTests, ...tenMinTests, ...rdfcTests, ...otherAddOnTests].sort((a,b) => (b.createdAt?.toDate() || 0) - (a.createdAt?.toDate() || 0)).slice(0,3);
+    const allCategorizedTests = Object.values(testsByTab).flatMap(tab => {
+        const mainTests = tab.tests;
+        const subTabTests = tab.subTabs ? Object.values(tab.subTabs).flatMap(sub => sub.tests) : [];
+        return [...mainTests, ...subTabTests];
+    });
+    const recentTests = [...allCategorizedTests].sort((a,b) => (b.createdAt?.toDate() || 0) - (a.createdAt?.toDate() || 0)).slice(0,3);
 
     return (
         <div className="max-w-7xl mx-auto px-4">
+                   <style jsx>{`
+            .action-btn { 
+                @apply flex-1 text-sm px-4 py-2 rounded-lg flex items-center justify-center space-x-2 font-semibold 
+                transition-all duration-300; 
+                margin: 0 4px; /* Added margin for space between buttons */
+                background-color: rgba(59, 130, 246, 0.05); /* Lighter translucent blue background */
+                border: 1px solid rgba(59, 130, 246, 0.2); /* Subtle border */
+                min-width: 120px;
+            }
+            .action-btn .btn-text { @apply font-semibold; }
+            .action-btn-mobile { @apply text-xs px-3 py-1.5 rounded-md font-semibold transition-all duration-300 flex items-center justify-center space-x-1; }
+            
+            .action-btn-start, .action-btn-view { 
+                color: #60a5fa; 
+                background-color: rgba(59, 130, 246, 0.05);
+                border: 1px solid rgba(59, 130, 246, 0.2);
+            }
+            .action-btn-start:hover, .action-btn-view:hover { 
+                background-color: rgba(59, 130, 246, 0.15); 
+                box-shadow: 0 0 12px rgba(59, 130, 246, 0.4); 
+                transform: scale(1.05);
+            }
+
+            .action-btn-continue { 
+                color: #fb923c;
+                background-color: rgba(249, 115, 22, 0.05);
+                border: 1px solid rgba(249, 115, 22, 0.2);
+            }
+            .action-btn-continue:hover { 
+                background-color: rgba(249, 115, 22, 0.15); 
+                box-shadow: 0 0 12px rgba(249, 115, 22, 0.4); 
+                transform: scale(1.05);
+            }
+
+            .action-btn-analysis { 
+                color: #4ade80; 
+                background-color: rgba(34, 197, 94, 0.05);
+                border: 1px solid rgba(34, 197, 94, 0.2);
+            }
+            .action-btn-analysis:hover { 
+                background-color: rgba(34, 197, 94, 0.15); 
+                box-shadow: 0 0 12px rgba(34, 197, 94, 0.4); 
+                transform: scale(1.05);
+            }
+
+            .action-btn-viewed { 
+                color: #9ca3af; 
+                background-color: rgba(107, 114, 128, 0.05);
+                border: 1px solid rgba(107, 114, 128, 0.2);
+            }
+            .action-btn-viewed:hover { 
+                background-color: rgba(107, 114, 128, 0.15); 
+                transform: scale(1.05);
+            }
+
+            .action-btn-unlock { 
+                color: #facc15; 
+                background-color: rgba(245, 158, 11, 0.05);
+                border: 1px solid rgba(245, 158, 11, 0.2);
+            }
+            .action-btn-unlock:hover { 
+                background-color: rgba(245, 158, 11, 0.15); 
+                box-shadow: 0 0 12px rgba(245, 158, 11, 0.4); 
+                transform: scale(1.05);
+            }
+
+            .action-btn-upgrade { 
+                color: #c084fc; 
+                background-color: rgba(147, 51, 234, 0.05);
+                border: 1px solid rgba(147, 51, 234, 0.2);
+            }
+            .action-btn-upgrade:hover { 
+                background-color: rgba(147, 51, 234, 0.15); 
+                box-shadow: 0 0 12px rgba(147, 51, 234, 0.4); 
+                transform: scale(1.05);
+            }
+
+            .tag-green { @apply inline-block px-2.5 py-1 text-xs font-semibold rounded-full bg-green-500/20 text-green-300; }
+            .tag-type { @apply inline-block px-3 py-1 text-xs font-bold rounded-md border; }
+            .type-tag-mock { background-color: #9333ea20; color: #e9d5ff; border-color: #9333ea80; }
+            .type-tag-sectional { background-color: #0d948820; color: #99f6e4; border-color: #0d948880; }
+            .type-tag-addon { background-color: #6b728020; color: #d1d5db; border-color: #6b728080; }
+            .type-tag-10min { background-color: #e11d4820; color: #fda4af; border-color: #e11d4880; }
+            .type-tag-rdfc { background-color: #db277720; color: #fbcfe8; border-color: #db277780; }
+            
+        `}</style>
              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6">
                  <h2 className="text-2xl sm:text-3xl font-bold text-white mb-2 sm:mb-0">User Dashboard</h2>
                  {renderUserStatus()}
             </div>
 
             <div className="hidden md:block">
-                <div className="mb-8 p-1.5 bg-gray-800 rounded-lg flex flex-wrap sm:space-x-2">
+                <div className="mb-4 p-1.5 bg-gray-800 rounded-lg flex flex-wrap sm:space-x-2">
                     <TabButton value="dashboard" label="Dashboard" icon={FaTachometerAlt} />
                     <TabButton value="performance" label="Performance" icon={FaChartLine} />
-                    {rdfcTests.length > 0 && <TabButton value="rdfc" label="RDFC" icon={FaBookOpen} />}
-                    {tenMinTests.length > 0 && <TabButton value="10min" label="10 Min RC" icon={FaBolt} />}
-                    {otherAddOnTests.length > 0 && <TabButton value="addons" label="Add-Ons" icon={FaVial} />}
-                    {sectionalTests.length > 0 && <TabButton value="sectionals" label="Sectionals" icon={FaVial} />}
-                    {mockTests.length > 0 && <TabButton value="mocks" label="Mocks" icon={FaVial} />}
+                    {visibleTabs.map(tab => (
+                        <TabButton key={tab.id} value={tab.name} label={tab.name} icon={iconMap[tab.name] || FaVial} />
+                    ))}
                     {userStatus?.isSubscribed && !userStatus.hasSubmittedFeedback && <TabButton value="feedback" label="Feedback" icon={FaCommentDots} />}
                     <TabButton value="support" label="Support" icon={FaHeadset} />
                 </div>
+
+                {hasSubTabs && (
+                    <div className="mb-8 p-1.5 bg-gray-800/50 rounded-lg flex flex-wrap items-center space-x-2">
+                        {currentActiveTabData.subTabs.map(subTab => {
+                             const subTests = testsByTab[activeTab]?.subTabs[subTab.name]?.tests || [];
+                             if (subTests.length === 0) return null;
+                             return (
+                                <button key={subTab.name} onClick={() => setActiveSubTab(subTab.name)} className={`px-3 py-1 text-sm font-semibold rounded-md transition-colors ${activeSubTab === subTab.name ? 'bg-white/10 text-white' : 'text-gray-400 hover:bg-white/5'}`}>
+                                    {subTab.name}
+                                </button>
+                            );
+                        })}
+                    </div>
+                )}
+
                 <div className="mt-4">
                     {activeTab === 'dashboard' && (
                          <div className="space-y-12">
@@ -933,38 +1126,58 @@ const UserDashboard = ({ navigate }) => {
                         </div>
                     )}
                     {activeTab === 'performance' && <PerformanceContent />}
-                    {activeTab === 'rdfc' && <TestSection title="RDFC Articles & Tests" tests={rdfcTests} limit={10} contentType="rdfc" viewAllParams={{ title: 'All RDFC Articles & Tests', contentType: 'rdfc' }} navigate={navigate} renderDesktopRow={renderRDFCDesktopRow}/>}
-                    {activeTab === '10min' && <TestSection title="10 Min RC Tests" tests={tenMinTests} limit={10} contentType="10min" viewAllParams={{ title: 'All 10 Min RC Tests', contentType: '10min' }} navigate={navigate} renderDesktopRow={renderAddOnTestRow} />}
-                    {activeTab === 'addons' && <TestSection title="Add-On Tests" tests={otherAddOnTests} limit={10} contentType="test" viewAllParams={{ title: 'All Add-On Tests', contentType: 'test' }} navigate={navigate} renderDesktopRow={renderAddOnTestRow} />}
-                    {activeTab === 'sectionals' && (
-                        <div>
-                             <div className="flex justify-end mb-4"><button onClick={() => navigate('schedule')} className="flex items-center space-x-2 bg-green-600 hover:bg-green-700 text-white font-semibold px-4 py-2 rounded-lg transition-colors"><FaCalendarAlt /><span>View Schedule</span></button></div>
-                            <TestSection title="Sectional Tests" tests={sectionalTests} limit={10} contentType="sectional" viewAllParams={{ title: 'All Sectional Tests', contentType: 'sectional' }} navigate={navigate} renderDesktopRow={renderAddOnTestRow} />
-                        </div>
-                    )}
-                    {activeTab === 'mocks' && (
-                        <div>
-                             <div className="flex justify-end mb-4"><button onClick={() => navigate('schedule')} className="flex items-center space-x-2 bg-green-600 hover:bg-green-700 text-white font-semibold px-4 py-2 rounded-lg transition-colors"><FaCalendarAlt /><span>View Schedule</span></button></div>
-                            <TestSection title="Mock Tests" tests={mockTests} limit={10} contentType="mock" viewAllParams={{ title: 'All Mock Tests', contentType: 'mock' }} navigate={navigate} renderDesktopRow={renderAddOnTestRow} />
-                        </div>
-                    )}
+                    
+                    {visibleTabs.map(tab => {
+                        if (activeTab !== tab.name) return null;
+                        const testsForTab = testsByTab[tab.name];
+                        let testsToShow = [];
+
+                        if(!activeSubTab){
+                            const subTabTests = Object.values(testsForTab.subTabs).flatMap(s => s.tests);
+                            testsToShow = [...testsForTab.tests, ...subTabTests];
+                        } else {
+                            testsToShow = testsForTab.subTabs[activeSubTab]?.tests || [];
+                        }
+
+                        return (
+                            <div key={tab.id}>
+                                <TestSection 
+                                    tab={{name: hasSubTabs && activeSubTab ? `${tab.name} / ${activeSubTab}` : tab.name }}
+                                    tests={testsToShow}
+                                    limit={10}
+                                    navigate={navigate}
+                                />
+                            </div>
+                        )
+                    })}
+
                     {activeTab === 'support' && ( <div className="bg-gray-800 rounded-lg p-8 text-center"><h2 className="text-2xl font-bold text-white mb-4">Support Center</h2><p className="text-gray-400 mb-6">Have questions or need assistance? We're here to help!</p><button onClick={() => navigate('support')} className="bg-blue-600 text-white px-6 py-2 rounded-md font-semibold hover:bg-blue-700 shadow-lg transition-all">Go to Support Page</button></div> )}
                     {activeTab === 'feedback' && ( <div className="pt-8 mb-12">{showFeedbackThanks ? (<div className="bg-gray-800 border-l-4 border-green-500 text-white p-6 rounded-lg shadow-lg my-8 text-center"><h3 className="text-xl font-bold">Thank You!</h3><p className="text-gray-300 mt-2">Your feedback is valuable to us and helps improve the platform for everyone.</p></div>) : (<FeedbackForm userStatus={userStatus} onSuccessfulSubmit={handleFeedbackSuccess} />)}</div> )}
                 </div>
             </div>
 
-            {/* --- MOBILE UI: ACCORDION (Enhanced with new Performance Content) --- */}
+            {/* --- MOBILE UI: ACCORDION --- */}
             <div className="md:hidden space-y-2">
                 <div className="mb-8 grid grid-cols-1 gap-4">
                     <ExamCountdownWidget title="CAT 2025" targetDate="2025-11-29T23:59:59" />
                     <VocabCardWidget />
                 </div>
                 <AccordionSection title="Performance" icon={FaChartLine} sectionKey="performance"><PerformanceContent /></AccordionSection>
-                {rdfcTests.length > 0 && ( <AccordionSection title="RDFC Articles & Tests" icon={FaBookOpen} sectionKey="rdfc">{rdfcTests.slice(0, 10).map(test => <MobileRDFCListItem key={test.id} test={test} />)}{(rdfcTests.length > 10) && <button onClick={() => navigate('allTests', { tests: rdfcTests.map(t => ({...t, article: linkedArticles[t.id]})), title: 'All RDFC', contentType: 'rdfc' })} className="text-blue-400 font-semibold text-sm mt-2 w-full text-center">View All {rdfcTests.length} RDFC Tests...</button>}</AccordionSection> )}
-                {tenMinTests.length > 0 && ( <AccordionSection title="10 Min RC Tests" icon={FaBolt} sectionKey="10min">{tenMinTests.slice(0, 10).map(test => <MobileTestListItem key={test.id} test={test} />)}{(tenMinTests.length > 10) && <button onClick={() => navigate('allTests', { tests: tenMinTests, title: 'All 10 Min Tests', contentType: '10min' })} className="text-blue-400 font-semibold text-sm mt-2 w-full text-center">View All {tenMinTests.length} Tests...</button>}</AccordionSection> )}
-                {otherAddOnTests.length > 0 && ( <AccordionSection title="Add-On Tests" icon={FaVial} sectionKey="addon">{otherAddOnTests.slice(0, 10).map(test => <MobileTestListItem key={test.id} test={test} />)}{(otherAddOnTests.length > 10) && <button onClick={() => navigate('allTests', { tests: otherAddOnTests, title: 'All Add-On Tests', contentType: 'test' })} className="text-blue-400 font-semibold text-sm mt-2 w-full text-center">View All {otherAddOnTests.length} Add-Ons...</button>}</AccordionSection> )}
-                {sectionalTests.length > 0 && ( <AccordionSection title="Sectional Tests" icon={FaVial} sectionKey="sectional">{sectionalTests.slice(0, 10).map(test => <MobileTestListItem key={test.id} test={test} />)}{(sectionalTests.length > 10) && <button onClick={() => navigate('allTests', { tests: sectionalTests, title: 'All Sectional Tests', contentType: 'sectional' })} className="text-blue-400 font-semibold text-sm mt-2 w-full text-center">View All {sectionalTests.length} Sectionals...</button>}</AccordionSection> )}
-                {mockTests.length > 0 && ( <AccordionSection title="Mock Tests" icon={FaVial} sectionKey="mock">{mockTests.slice(0, 10).map(test => <MobileTestListItem key={test.id} test={test} />)}{(mockTests.length > 10) && <button onClick={() => navigate('allTests', { tests: mockTests, title: 'All Mock Tests', contentType: 'mock' })} className="text-blue-400 font-semibold text-sm mt-2 w-full text-center">View All {mockTests.length} Mocks...</button>}</AccordionSection> )}
+                {visibleTabs.map(tab => {
+                    const testsForTab = testsByTab[tab.name];
+                    const allTestsInTab = [...testsForTab.tests, ...(tab.subTabs ? Object.values(testsForTab.subTabs).flatMap(s => s.tests) : [])];
+
+                    return (
+                        <AccordionSection key={tab.id} title={tab.name} icon={iconMap[tab.name] || FaVial} sectionKey={tab.id}>
+                            {allTestsInTab.slice(0, 10).map(test => <MobileTestListItem key={test.id} test={test} tabName={tab.name} /> )}
+                            {allTestsInTab.length > 10 && (
+                                <button onClick={() => navigate('allTests', { tests: allTestsInTab.map(t => ({...t, material: linkedMaterials[t.id]})), title: `All ${tab.name}`, contentType: tab.name.toUpperCase().includes('RDFC') ? 'rdfc' : 'addon' })} className="text-blue-400 font-semibold text-sm mt-2 w-full text-center">
+                                    View All {allTestsInTab.length} Items...
+                                </button>
+                            )}
+                        </AccordionSection>
+                    )
+                })}
                 {userStatus?.isSubscribed && !userStatus.hasSubmittedFeedback && ( <AccordionSection title="Feedback" icon={FaCommentDots} sectionKey="feedback">{showFeedbackThanks ? <p className="text-green-400 text-center">Thank you for your feedback!</p> : <FeedbackForm userStatus={userStatus} onSuccessfulSubmit={handleFeedbackSuccess} />}</AccordionSection> )}
                 <AccordionSection title="Support" icon={FaHeadset} sectionKey="support"><p className="text-gray-400 text-center mb-4">Need help? Visit our support center.</p><button onClick={() => navigate('support')} className="w-full bg-blue-600 text-white px-4 py-2 rounded-md font-semibold hover:bg-blue-700">Go to Support</button></AccordionSection>
             </div>

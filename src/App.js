@@ -24,7 +24,9 @@ import AdminVocabManager from './pages/AdminVocabManager';
 import SupportPage from './pages/SupportPage';
 import AdminSupportManager from './pages/AdminSupportManager';
 import StreaksPage from './pages/StreaksPage';
-import SchedulePage from './pages/SchedulePage'; // Import the new page
+import SchedulePage from './pages/SchedulePage';
+import AdminTabManager from './pages/AdminTabManager';
+import UpgradePage from './pages/UpgradePage'; // <-- Import the new page
 
 const MainRouter = () => {
     const { user, userData, loading } = useAuth();
@@ -58,6 +60,7 @@ const MainRouter = () => {
         // Admin routes
         switch (currentPage) {
             case 'home': pageComponent = <AdminDashboard navigate={navigate} />; break;
+            case 'manageTabs': pageComponent = <AdminTabManager navigate={navigate} />; break;
             case 'manageTests': pageComponent = <AdminTestManager navigate={navigate} />; break;
             case 'createTest': pageComponent = <CreateTestPage navigate={navigate} {...pageData} />; break;
             case 'userManagement': pageComponent = <AdminUserManagement navigate={navigate} />; break;
@@ -79,8 +82,9 @@ const MainRouter = () => {
         // User routes
         switch (currentPage) {
             case 'home': pageComponent = <UserDashboard navigate={navigate} />; break;
+            case 'upgrade': pageComponent = <UpgradePage navigate={navigate} />; break; // <-- Add the new route here
             case 'streaks': pageComponent = <StreaksPage navigate={navigate} />; break;
-            case 'schedule': pageComponent = <SchedulePage navigate={navigate} />; break; // Add this route
+            case 'schedule': pageComponent = <SchedulePage navigate={navigate} />; break;
             case 'test': pageComponent = <TestInterfacePage navigate={navigate} {...pageData} />; break;
             case 'results': 
                 pageComponent = <ResultAnalysis navigate={navigate} {...pageData} />; 

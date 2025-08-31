@@ -1,5 +1,5 @@
 import React from 'react';
-import { FaTicketAlt, FaUsers, FaListAlt, FaChartLine, FaTags, FaStar, FaSpellCheck } from 'react-icons/fa'; // Import more icons for visual appeal
+import { FaTicketAlt, FaUsers, FaListAlt, FaChartLine, FaTags, FaStar, FaSpellCheck, FaSitemap } from 'react-icons/fa'; // Import more icons for visual appeal
 
 const AdminDashboard = ({ navigate }) => {
     
@@ -27,6 +27,12 @@ const AdminDashboard = ({ navigate }) => {
             {/* Adjusted font size for mobile */}
             <h1 className="text-2xl md:text-3xl font-bold text-white">Admin Dashboard</h1>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <DashboardCard 
+                    onClick={() => navigate('manageTabs')} 
+                    title="Tab Manager"
+                    description="Manage test categories, tabs, and user dashboard structure."
+                    icon={<FaSitemap className="text-gray-500 text-3xl"/>}
+                />
                 <DashboardCard 
                     onClick={() => navigate('manageTests')} 
                     title="Test Manager"

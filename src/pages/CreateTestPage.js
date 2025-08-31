@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { addDoc, updateDoc, doc, serverTimestamp, collection } from 'firebase/firestore';
+import { addDoc, updateDoc, doc, serverTimestamp, collection, getDocs, query, orderBy } from 'firebase/firestore';
 import { db, SECTIONS } from '../firebase/config';
 import { Switch } from '@headlessui/react';
 import { TrashIcon, EyeIcon, EyeSlashIcon, PencilSquareIcon, DocumentTextIcon, ListBulletIcon, ArrowUpOnSquareIcon, ArrowDownOnSquareIcon } from '@heroicons/react/24/outline';
-import Papa from 'papaparse'; // Import Papaparse
+import Papa from 'papaparse';
 
 // --- Reusable Form Input Components (Unchanged) ---
 const FormInput = ({ label, type = 'text', value, onChange, required = false, placeholder = '' }) => (
@@ -99,7 +99,8 @@ const CreateTestPage = ({ navigate, testToEdit }) => {
 
     const [title, setTitle] = useState('');
     const [description, setDescription] = useState('');
-    const [type, setType] = useState('TEST');
+    const [testCategory, setTestCategory] = useState('');
+    const [managedTabs, setManagedTabs] = useState([]);
     const [isFree, setIsFree] = useState(false);
     const [sections, setSections] = useState([{ name: SECTIONS[0], duration: 40, questions: [BLANK_QUESTION] }]);
     const [loading, setLoading] = useState(false);
@@ -108,226 +109,190 @@ const CreateTestPage = ({ navigate, testToEdit }) => {
     const [showPassage, setShowPassage] = useState(true);
     const [mobileView, setMobileView] = useState('question');
 
-    // --- UPDATED: CSV Parsing using Papaparse with Delimiter Detection ---
-    // --- UPDATED: CSV Parsing with Independent Passage Logic ---
+    useEffect(() => {
+        const fetchTabs = async () => {
+            try {
+                const q = query(collection(db, 'tabManager'), orderBy('order'));
+                const tabsSnapshot = await getDocs(q);
+                const tabsData = tabsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                setManagedTabs(tabsData);
+                
+                if (!testToEdit && tabsData.length > 0) {
+                    const firstTab = tabsData[0];
+                    const defaultCategory = (firstTab.subTabs && firstTab.subTabs.length > 0)
+                        ? `${firstTab.name}/${firstTab.subTabs[0].name}`
+                        : firstTab.name;
+                    setTestCategory(defaultCategory);
+                }
+            } catch (error) {
+                console.error("Error fetching tabs: ", error);
+                alert("Could not load test categories. Please check Firestore rules and connectivity.");
+            }
+        };
+        fetchTabs();
+    }, [testToEdit]);
+    
     const handleCsvUpload = (event) => {
         const file = event.target.files[0];
         if (!file) return;
 
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            const text = e.target.result;
-            if (!text) {
-                alert("File is empty or could not be read.");
-                return;
-            }
-
-            const firstLine = text.slice(0, text.indexOf('\n'));
-            const delimiter = firstLine.includes(';') ? ';' : ',';
-
-            Papa.parse(text, {
-                delimiter: delimiter,
-                header: true,
-                skipEmptyLines: true,
-                complete: (results) => {
-                    try {
-                        if (results.errors.length > 0) {
-                            console.error("CSV Parsing Errors:", results.errors);
-                            alert("Errors found in CSV file. Please check the console for details.");
-                            return;
-                        }
-
-                        const dataRows = results.data;
-                        if (dataRows.length === 0) {
-                            alert('CSV file is empty or missing data rows.');
-                            return;
-                        }
-                        
-                        const newSectionsMap = new Map();
-                        let currentSectionDetails = { name: '', duration: 40 };
-                        
-                        const firstRow = dataRows[0];
-                        setTitle(firstRow.testTitle || `Imported Test ${new Date().toLocaleDateString()}`);
-                        setDescription(firstRow.testDescription || '');
-                        setType(firstRow.testType?.toUpperCase() || 'TEST');
-
-                        dataRows.forEach((questionData, index) => {
-                            if (questionData.sectionName) currentSectionDetails.name = questionData.sectionName;
-                            if (questionData.sectionDuration) currentSectionDetails.duration = parseInt(questionData.sectionDuration, 10) || 40;
-
-                            const { questionText, questionType, correctAnswer, solutionText } = questionData;
-
-                            if (!currentSectionDetails.name || !questionText || !questionType || !correctAnswer || !solutionText) {
-                                console.warn(`Skipping row #${index + 2} due to missing essential data.`);
-                                return;
-                            }
-
-                            if (!newSectionsMap.has(currentSectionDetails.name)) {
-                                newSectionsMap.set(currentSectionDetails.name, {
-                                    name: currentSectionDetails.name,
-                                    duration: currentSectionDetails.duration,
-                                    questions: []
-                                });
-                            }
-                            
-                            const newQuestion = { ...BLANK_QUESTION };
-                            
-                            // --- LOGIC CHANGE ---
-                            // Directly assign passage from the current row. No more carry-over.
-                            newQuestion.passage = questionData.passageText ? questionData.passageText.replace(/\\n/g, '\n') : '';
-                            newQuestion.passageImageUrls = questionData.passageImageUrls ? questionData.passageImageUrls.split(';').map(url => url.trim()) : [];
-
-                            newQuestion.questionText = questionText.replace(/\\n/g, '\n');
-                            newQuestion.questionImageUrls = questionData.questionImageUrls ? questionData.questionImageUrls.split(';').map(url => url.trim()) : [];
-                            newQuestion.type = questionType.toUpperCase() === 'TITA' ? 'TITA' : 'MCQ';
-                            newQuestion.solution = solutionText.replace(/\\n/g, '\n');
-                            newQuestion.solutionImageUrls = questionData.solutionImageUrls ? questionData.solutionImageUrls.split(';').map(url => url.trim()) : [];
-
-                            if (newQuestion.type === 'MCQ') {
-                                newQuestion.options = [questionData.option1, questionData.option2, questionData.option3, questionData.option4];
-                                const correctOptionIndex = parseInt(correctAnswer, 10) - 1;
-                                if (isNaN(correctOptionIndex) || correctOptionIndex < 0 || correctOptionIndex > 3) {
-                                     console.warn(`Skipping MCQ in row #${index + 2} due to invalid correctAnswer '${correctAnswer}'. It must be a number from 1 to 4.`);
-                                     return;
-                                }
-                                newQuestion.correctOption = correctOptionIndex;
-                            } else { 
-                                if (!/^\d+$/.test(correctAnswer)) {
-                                    console.warn(`Skipping TITA in row #${index + 2} due to non-numerical correctAnswer '${correctAnswer}'. TITA answers must be numbers (e.g., 1, 2, 3124).`);
-                                    return;
-                                }
-                                newQuestion.correctOption = correctAnswer;
-                                newQuestion.options = ['', '', '', ''];
-                            }
-                            
-                            newSectionsMap.get(currentSectionDetails.name).questions.push(newQuestion);
-                        });
-
-                        const finalSections = Array.from(newSectionsMap.values());
-                        if (finalSections.length > 0 && finalSections.some(s => s.questions.length > 0)) {
-                            setSections(finalSections);
-                            setActiveQuestion({ sec: 0, q: 0 });
-                            alert(`Test successfully imported with ${finalSections.length} section(s)! Please review and click 'Save Test'.`);
-                        } else {
-                            alert('Import failed. No valid questions could be parsed. Please check the CSV format.');
-                        }
-
-                    } catch(error) {
-                        console.error("Error processing CSV data:", error);
-                        alert('A critical error occurred. Please check the console and ensure the file format is correct.');
+        Papa.parse(file, {
+            header: true,
+            skipEmptyLines: true,
+            complete: (results) => {
+                try {
+                    const { data, errors } = results;
+                    if (errors.length > 0) {
+                        console.error("CSV Parsing Errors:", errors);
+                        alert(`Errors found in CSV file on rows: ${errors.map(e => e.row).join(', ')}. Check console for details.`);
+                        return;
                     }
-                },
-                error: (error) => {
-                    console.error("Papaparse error:", error);
-                    alert(`CSV parsing failed: ${error.message}`);
+                    if (data.length === 0) return alert('CSV file is empty or missing data rows.');
+                    
+                    const firstRow = data[0];
+                    setTitle(firstRow.testTitle || `Imported Test ${new Date().toLocaleDateString()}`);
+                    setDescription(firstRow.testDescription || '');
+                    
+                    if (firstRow.mainType) {
+                        const category = firstRow.subType ? `${firstRow.mainType}/${firstRow.subType}` : firstRow.mainType;
+                        setTestCategory(category);
+                    }
+
+                    const newSectionsMap = new Map();
+                    let currentPassage = { text: '', imageUrls: [] };
+                    
+                    data.forEach((row, index) => {
+                        const sectionName = row.sectionName || (newSectionsMap.size > 0 ? Array.from(newSectionsMap.keys()).pop() : 'VARC');
+                        const sectionDuration = parseInt(row.sectionDuration, 10) || 40;
+
+                        if (!newSectionsMap.has(sectionName)) {
+                            newSectionsMap.set(sectionName, { name: sectionName, duration: sectionDuration, questions: [] });
+                        }
+                        
+                        // If the row defines a new passage, update the current passage context
+                        if (row.passageText && row.passageText.trim() !== '') {
+                            currentPassage.text = row.passageText.replace(/\\n/g, '\n');
+                            currentPassage.imageUrls = row.passageImageUrls ? row.passageImageUrls.split(';').map(url => url.trim()).filter(Boolean) : [];
+                        }
+
+                        if (!row.questionText || !row.questionType || !row.correctAnswer || !row.solutionText) {
+                            console.warn(`Skipping row #${index + 2} due to missing essential data (questionText, type, answer, or solution).`);
+                            return;
+                        }
+
+                        const newQuestion = { ...BLANK_QUESTION };
+                        newQuestion.passage = currentPassage.text;
+                        newQuestion.passageImageUrls = currentPassage.imageUrls;
+                        newQuestion.questionText = row.questionText.replace(/\\n/g, '\n');
+                        newQuestion.questionImageUrls = row.questionImageUrls ? row.questionImageUrls.split(';').map(url => url.trim()).filter(Boolean) : [];
+                        newQuestion.type = row.questionType.toUpperCase() === 'TITA' ? 'TITA' : 'MCQ';
+                        newQuestion.solution = row.solutionText.replace(/\\n/g, '\n');
+                        newQuestion.solutionImageUrls = row.solutionImageUrls ? row.solutionImageUrls.split(';').map(url => url.trim()).filter(Boolean) : [];
+                        
+                        if (newQuestion.type === 'MCQ') {
+                            newQuestion.options = [row.option1 || '', row.option2 || '', row.option3 || '', row.option4 || ''];
+                            const correctOptionIndex = parseInt(row.correctAnswer, 10) - 1;
+                            if (isNaN(correctOptionIndex) || correctOptionIndex < 0 || correctOptionIndex > 3) {
+                                 console.warn(`Skipping MCQ in row #${index + 2}: Invalid correctAnswer '${row.correctAnswer}'. Must be 1, 2, 3, or 4.`);
+                                 return;
+                            }
+                            newQuestion.correctOption = correctOptionIndex;
+                        } else { 
+                            newQuestion.correctOption = row.correctAnswer;
+                            newQuestion.options = ['', '', '', ''];
+                        }
+                        
+                        newSectionsMap.get(sectionName).questions.push(newQuestion);
+                    });
+
+                    const finalSections = Array.from(newSectionsMap.values());
+                    if (finalSections.length > 0 && finalSections.some(s => s.questions.length > 0)) {
+                        setSections(finalSections);
+                        setActiveQuestion({ sec: 0, q: 0 });
+                        alert(`Test successfully imported with ${finalSections.length} section(s)! Please review and click 'Save Test'.`);
+                    } else {
+                        alert('Import failed. No valid questions could be parsed from the CSV.');
+                    }
+                } catch(error) {
+                    console.error("Error processing CSV data:", error);
+                    alert('A critical error occurred during import. Please check the console.');
                 }
-            });
-        };
-        reader.readAsText(file);
+            }
+        });
         event.target.value = null;
     };
     
     const downloadCsvTemplate = () => {
-        const header = "testTitle,testDescription,testType,sectionName,sectionDuration,passageText,passageImageUrls,questionText,questionImageUrls,questionType,option1,option2,option3,option4,correctAnswer,solutionText,solutionImageUrls\n";
-        const exampleRow = "\"Sample CAT Mock\",\"A full-length mock test based on the latest CAT pattern.\",MOCK,VARC,40,\"The passage text, which can include commas, goes here. Use \\n for new lines.\",\"https://url.com/img1.png;https://url.com/img2.png\",\"What is the main idea of the passage?\",,MCQ,\"Option A\",\"Option B\",\"Option C\",\"Option D\",1,\"The main idea is X because...\",\"https://url.com/solution.png\"\n";
+        const header = "testTitle,testDescription,mainType,subType,sectionName,sectionDuration,passageText,passageImageUrls,questionText,questionImageUrls,questionType,option1,option2,option3,option4,correctAnswer,solutionText,solutionImageUrls\n";
+        const exampleRow = "\"Sample Mock\",\"Full-length test.\",\"Mocks\",\"Mock 1\",\"VARC\",40,\"Passage...\",\"\",\"Question...\",\"\",MCQ,\"A\",\"B\",\"C\",\"D\",1,\"Solution...\",\"\"\n";
         const blob = new Blob([header + exampleRow], { type: 'text/csv;charset=utf-8;' });
         const link = document.createElement("a");
-        if (link.download !== undefined) {
-            const url = URL.createObjectURL(blob);
-            link.setAttribute("href", url);
-            link.setAttribute("download", "test_template.csv");
-            link.style.visibility = 'hidden';
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-        }
+        link.href = URL.createObjectURL(blob);
+        link.download = "test_template_new.csv";
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
     };
 
     const handleDownloadCsv = () => {
         if (!testToEdit) return;
-
-        const csvDataRows = [];
-        sections.forEach(section => {
-            section.questions.forEach(q => {
-                const row = {
-                    testTitle: title,
-                    testDescription: description,
-                    testType: type,
-                    sectionName: section.name,
-                    sectionDuration: section.duration,
-                    passageText: q.passage ? q.passage.replace(/\n/g, '\\n') : '',
-                    passageImageUrls: (q.passageImageUrls || []).join(';'),
-                    questionText: q.questionText ? q.questionText.replace(/\n/g, '\\n') : '',
-                    questionImageUrls: (q.questionImageUrls || []).join(';'),
-                    questionType: q.type,
-                    option1: q.type === 'MCQ' ? (q.options[0] || '') : '',
-                    option2: q.type === 'MCQ' ? (q.options[1] || '') : '',
-                    option3: q.type === 'MCQ' ? (q.options[2] || '') : '',
-                    option4: q.type === 'MCQ' ? (q.options[3] || '') : '',
-                    correctAnswer: q.type === 'MCQ' ? (q.correctOption !== '' ? parseInt(q.correctOption, 10) + 1 : '') : q.correctOption,
-                    solutionText: q.solution ? q.solution.replace(/\n/g, '\\n') : '',
-                    solutionImageUrls: (q.solutionImageUrls || []).join(';')
-                };
-                csvDataRows.push(row);
-            });
-        });
-
-        if (csvDataRows.length === 0) {
-            alert("This test has no questions to export.");
-            return;
-        }
-
-        const csv = Papa.unparse(csvDataRows, { header: true });
+        const [mainType, subType] = testCategory.split('/');
+        const csvDataRows = sections.flatMap(section => 
+            section.questions.map(q => ({
+                testTitle: title, description, mainType, subType: subType || '',
+                sectionName: section.name, sectionDuration: section.duration,
+                passageText: q.passage ? q.passage.replace(/\n/g, '\\n') : '',
+                passageImageUrls: (q.passageImageUrls || []).join(';'),
+                questionText: q.questionText ? q.questionText.replace(/\n/g, '\\n') : '',
+                questionImageUrls: (q.questionImageUrls || []).join(';'),
+                questionType: q.type,
+                option1: q.options[0] || '', option2: q.options[1] || '',
+                option3: q.options[2] || '', option4: q.options[3] || '',
+                correctAnswer: q.type === 'MCQ' ? (q.correctOption !== '' ? parseInt(q.correctOption, 10) + 1 : '') : q.correctOption,
+                solutionText: q.solution ? q.solution.replace(/\n/g, '\\n') : '',
+                solutionImageUrls: (q.solutionImageUrls || []).join(';')
+            }))
+        );
+        if (csvDataRows.length === 0) return alert("This test has no questions to export.");
+        
+        const csv = Papa.unparse(csvDataRows);
         const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
         const link = document.createElement("a");
-        if (link.download !== undefined) {
-            const url = URL.createObjectURL(blob);
-            const fileName = `${title.replace(/[^a-z0-9]/gi, '_').toLowerCase() || 'test_export'}.csv`;
-            link.setAttribute("href", url);
-            link.setAttribute("download", fileName);
-            link.style.visibility = 'hidden';
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-        }
+        link.href = URL.createObjectURL(blob);
+        link.download = `${title.replace(/[^a-z0-9]/gi, '_').toLowerCase() || 'test'}.csv`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
     };
-
 
     useEffect(() => {
         if (testToEdit) {
             setTitle(testToEdit.title);
             setDescription(testToEdit.description);
-            setType(testToEdit.type);
+            let category = '';
+            if (testToEdit.mainType) {
+                category = testToEdit.subType ? `${testToEdit.mainType}/${testToEdit.subType}` : testToEdit.mainType;
+            } else { // Backward compatibility for old tests
+                const oldType = testToEdit.type?.toUpperCase();
+                const foundTab = managedTabs.find(tab => tab.name.toUpperCase().includes(oldType));
+                category = foundTab ? foundTab.name : '';
+            }
+            setTestCategory(category);
             setIsFree(testToEdit.isFree || false);
-            const sanitizedSections = testToEdit.sections.map(s => ({
-                ...s,
-                questions: s.questions.map(q => {
-                    const newQ = { ...BLANK_QUESTION, ...q, correctOption: q.correctOption ?? '' };
-                    newQ.passageImageUrls = Array.isArray(q.passageImageUrls) ? q.passageImageUrls : (q.passageImageUrl ? [q.passageImageUrl] : []);
-                    delete newQ.passageImageUrl;
-                    newQ.questionImageUrls = Array.isArray(q.questionImageUrls) ? q.questionImageUrls : (q.questionImageUrl ? [q.questionImageUrl] : []);
-                    delete newQ.questionImageUrl;
-                    newQ.solutionImageUrls = Array.isArray(q.solutionImageUrls) ? q.solutionImageUrls : (q.solutionImageUrl ? [q.solutionImageUrl] : []);
-                    delete newQ.solutionImageUrl;
-                    return newQ;
-                })
-            }));
+            const sanitizedSections = testToEdit.sections.map(s => ({ ...s, questions: s.questions.map(q => ({ ...BLANK_QUESTION, ...q })) }));
             setSections(sanitizedSections);
         }
-    }, [testToEdit]);
+    }, [testToEdit, managedTabs]);
 
     useEffect(() => {
         const currentSectionName = sections[activeQuestion.sec]?.name;
         setShowPassage(currentSectionName !== 'QA');
     }, [sections, activeQuestion]);
 
+
     const handleSectionChange = (secIndex, field, value) => {
         const newSections = [...sections];
-        if (field === 'duration') {
-            newSections[secIndex][field] = parseInt(value, 10) || 0;
-        } else {
-            newSections[secIndex][field] = value;
-        }
+        newSections[secIndex][field] = field === 'duration' ? parseInt(value, 10) || 0 : value;
         setSections(newSections);
     };
 
@@ -335,14 +300,7 @@ const CreateTestPage = ({ navigate, testToEdit }) => {
         const newSections = [...sections];
         const question = newSections[secIndex].questions[qIndex];
         question[field] = value;
-        if (field === 'type') {
-            if (value === 'TITA') {
-                question.options = ['', '', '', ''];
-                question.correctOption = '';
-            } else {
-                question.correctOption = '';
-            }
-        }
+        if (field === 'type') question.correctOption = '';
         setSections(newSections);
     };
     
@@ -360,7 +318,7 @@ const CreateTestPage = ({ navigate, testToEdit }) => {
     };
 
     const removeQuestion = (secIndex, qIndex) => {
-        if (!window.confirm('Are you sure you want to delete this question? This cannot be undone.')) return;
+        if (!window.confirm('Delete this question?')) return;
         const newSections = [...sections];
         newSections[secIndex].questions.splice(qIndex, 1);
         setSections(newSections);
@@ -372,54 +330,24 @@ const CreateTestPage = ({ navigate, testToEdit }) => {
     };
     
     const removeSection = (secIndex) => {
-        if (!window.confirm('Are you sure you want to delete this entire section? This cannot be undone.')) return;
-        const newSections = sections.filter((_, i) => i !== secIndex);
-        setSections(newSections);
+        if (!window.confirm('Delete this entire section?')) return;
+        setSections(sections.filter((_, i) => i !== secIndex));
         setActiveQuestion({ sec: 0, q: 0 });
     };
 
     const validateTest = () => {
-        if (!title.trim()) {
-            alert('Test Title is required.');
+        if (!title.trim() || !testCategory) {
+            alert('Test Title and Type are required.');
             return false;
         }
         for (let i = 0; i < sections.length; i++) {
-            const section = sections[i];
-            if (section.duration <= 0) {
-                alert(`Duration for Section ${i + 1} (${section.name}) must be a positive number.`);
-                return false;
-            }
-            for (let j = 0; j < section.questions.length; j++) {
-                const q = section.questions[j];
-                const qNum = `Section ${i + 1}, Question ${j + 1}`;
-                if (!q.questionText.trim()) {
-                    alert(`${qNum}: Question Text is required.`);
-                    setActiveQuestion({ sec: i, q: j });
-                    return false;
-                }
-                if (q.type === 'MCQ') {
-                    if (q.options.some(opt => !opt.trim())) {
-                        alert(`${qNum}: All four options are required for an MCQ.`);
-                        setActiveQuestion({ sec: i, q: j });
-                        return false;
-                    }
-                    if (q.correctOption === '' || q.correctOption < 0 || q.correctOption > 3) {
-                        alert(`${qNum}: You must select a Correct Option for an MCQ.`);
-                        setActiveQuestion({ sec: i, q: j });
-                        return false;
-                    }
-                } else {
-                     if (`${q.correctOption}`.trim() === '') {
-                        alert(`${qNum}: The Correct Answer is required for a TITA question.`);
-                        setActiveQuestion({ sec: i, q: j });
-                        return false;
-                    }
-                }
-                if (!q.solution.trim()) {
-                    alert(`${qNum}: A Detailed Solution is required.`);
-                    setActiveQuestion({ sec: i, q: j });
-                    return false;
-                }
+            for (let j = 0; j < sections[i].questions.length; j++) {
+                const q = sections[i].questions[j];
+                const qNum = `S${i + 1}, Q${j + 1}`;
+                if (!q.questionText.trim()) { alert(`${qNum}: Question Text required.`); return false; }
+                if (q.type === 'MCQ' && (q.options.some(opt => !opt.trim()) || q.correctOption === '')) { alert(`${qNum}: All options and correct answer required for MCQ.`); return false; }
+                if (q.type === 'TITA' && `${q.correctOption}`.trim() === '') { alert(`${qNum}: Correct answer required for TITA.`); return false; }
+                if (!q.solution.trim()) { alert(`${qNum}: Solution required.`); return false; }
             }
         }
         return true;
@@ -429,15 +357,20 @@ const CreateTestPage = ({ navigate, testToEdit }) => {
         e.preventDefault();
         if (!validateTest()) return;
         setLoading(true);
+
+        const [mainType, subType] = testCategory.split('/');
         const testData = { 
-            title, description, type, isFree, 
-            isPublished: testToEdit ? testToEdit.isPublished : false,
-            sections, 
-            lastUpdated: serverTimestamp() 
+            title, description, mainType, subType: subType || null,
+            isFree, isPublished: testToEdit?.isPublished || false,
+            sections, lastUpdated: serverTimestamp() 
         };
+
         try {
             if (testToEdit) {
-                await updateDoc(doc(db, 'tests', testToEdit.id), testData);
+                const testRef = doc(db, 'tests', testToEdit.id);
+                const updateData = { ...testData };
+                delete updateData.type; // Remove old field
+                await updateDoc(testRef, updateData);
                 alert('Test updated successfully! ✅');
             } else {
                 await addDoc(collection(db, 'tests'), { ...testData, createdAt: serverTimestamp() });
@@ -446,7 +379,7 @@ const CreateTestPage = ({ navigate, testToEdit }) => {
             navigate('manageTests');
         } catch (error) {
             console.error("Error saving test:", error);
-            alert('Failed to save test. Check the console for more details.');
+            alert('Failed to save test. Check console.');
         } finally {
             setLoading(false);
         }
@@ -460,8 +393,7 @@ const CreateTestPage = ({ navigate, testToEdit }) => {
             <div className="flex justify-between items-center mb-4">
                 <button onClick={() => navigate('manageTests')} className="text-sm text-gray-400 hover:text-white">&larr; Back to Test Manager</button>
                 <button onClick={() => setShowNavigator(!showNavigator)} className="text-sm text-gray-400 hover:text-white hidden sm:flex items-center">
-                    {showNavigator ? 'Hide Navigator' : 'Show Navigator'} 
-                    {showNavigator ? <EyeSlashIcon className="h-5 w-5 ml-1"/> : <EyeIcon className="h-5 w-5 ml-1" />}
+                    {showNavigator ? 'Hide' : 'Show'} Navigator <EyeIcon className="h-5 w-5 ml-1" />
                 </button>
             </div>
             
@@ -471,60 +403,45 @@ const CreateTestPage = ({ navigate, testToEdit }) => {
                         <h1 className="text-2xl font-bold text-white">{testToEdit ? 'Edit Test' : 'Create New Test'}</h1>
                         <div className="flex items-center gap-4">
                             <label htmlFor="csv-upload" className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-md font-semibold text-sm cursor-pointer flex items-center space-x-2">
-                               <ArrowUpOnSquareIcon className="h-5 w-5"/><span>Import Test from CSV</span>
+                               <ArrowUpOnSquareIcon className="h-5 w-5"/><span>Import from CSV</span>
                             </label>
                             <input id="csv-upload" type="file" accept=".csv" className="hidden" onChange={handleCsvUpload} />
                             <div className="flex flex-col items-start">
-                                <button type="button" onClick={downloadCsvTemplate} className="text-sm text-gray-400 hover:text-white underline">
-                                    Download Template
-                                </button>
-                                {testToEdit && (
-                                    <button type="button" onClick={handleDownloadCsv} className="text-sm text-gray-400 hover:text-white underline mt-1">
-                                        Download this test as CSV
-                                    </button>
-                                )}
+                                <button type="button" onClick={downloadCsvTemplate} className="text-sm text-gray-400 hover:text-white underline">Download Template</button>
+                                {testToEdit && (<button type="button" onClick={handleDownloadCsv} className="text-sm text-gray-400 hover:text-white underline mt-1">Download this test as CSV</button>)}
                             </div>
                         </div>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                         <FormInput label="Test Title" value={title} onChange={e => setTitle(e.target.value)} required />
                         <FormTextarea label="Description" value={description} onChange={e => setDescription(e.target.value)} rows={1} />
+                        
                         <div>
                             <label className="block text-sm font-medium text-gray-300">Test Type</label>
-                            <select value={type} onChange={e => setType(e.target.value)} className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-white focus:ring focus:ring-gray-500 focus:ring-opacity-50">
-                                <option value="TEST">Test</option>
-                                <option value="10MIN">10 Min Test</option>
-                                <option value="SECTIONAL">Sectional</option>
-                                <option value="MOCK">Full Mock</option>
+                            <select value={testCategory} onChange={e => setTestCategory(e.target.value)} className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white" required>
+                                <option value="" disabled>-- Select a Category --</option>
+                                {managedTabs.map(tab => !tab.subTabs || tab.subTabs.length === 0 
+                                    ? <option key={tab.id} value={tab.name}>{tab.name}</option> 
+                                    : <optgroup key={tab.id} label={tab.name}>
+                                        {tab.subTabs.map(subTab => <option key={`${tab.id}-${subTab.name}`} value={`${tab.name}/${subTab.name}`}>{subTab.name}</option>)}
+                                      </optgroup>
+                                )}
                             </select>
                         </div>
-                        <div className="flex items-end pb-1 space-x-8">
-                            <div className="flex items-center"><Switch checked={isFree} onChange={setIsFree} className={`${isFree ? 'bg-green-500' : 'bg-gray-600'} relative inline-flex items-center h-6 rounded-full w-11 transition-colors`}><span className={`${isFree ? 'translate-x-6' : 'translate-x-1'} inline-block w-4 h-4 transform bg-white rounded-full transition-transform`}/></Switch><label className="ml-2 text-sm font-medium text-gray-300">Free Test</label></div>
-                        </div>
+
+                        <div className="flex items-end pb-1"><div className="flex items-center"><Switch checked={isFree} onChange={setIsFree} className={`${isFree ? 'bg-green-500' : 'bg-gray-600'} relative inline-flex items-center h-6 rounded-full w-11`}><span className={`${isFree ? 'translate-x-6' : 'translate-x-1'} inline-block w-4 h-4 transform bg-white rounded-full`}/></Switch><label className="ml-2 text-sm font-medium text-gray-300">Free Test</label></div></div>
                     </div>
                  </div>
 
                 <div className="sm:hidden mt-6 border-b border-gray-700 mb-4">
                     <div className="flex items-stretch -mb-px">
-                        <button type="button" onClick={() => setMobileView('question')} className={`flex-1 p-3 text-sm font-medium border-b-2 ${mobileView === 'question' ? 'border-white text-white' : 'border-transparent text-gray-400'}`}>
-                            <PencilSquareIcon className="h-5 w-5 mx-auto mb-1" />
-                            Question
-                        </button>
-                        {showPassage && (
-                             <button type="button" onClick={() => setMobileView('passage')} className={`flex-1 p-3 text-sm font-medium border-b-2 ${mobileView === 'passage' ? 'border-white text-white' : 'border-transparent text-gray-400'}`}>
-                                <DocumentTextIcon className="h-5 w-5 mx-auto mb-1" />
-                                Passage
-                            </button>
-                        )}
-                        <button type="button" onClick={() => setMobileView('navigator')} className={`flex-1 p-3 text-sm font-medium border-b-2 ${mobileView === 'navigator' ? 'border-white text-white' : 'border-transparent text-gray-400'}`}>
-                           <ListBulletIcon className="h-5 w-5 mx-auto mb-1" />
-                            Navigator
-                        </button>
+                        <button type="button" onClick={() => setMobileView('question')} className={`flex-1 p-3 text-sm font-medium border-b-2 ${mobileView === 'question' ? 'border-white text-white' : 'border-transparent text-gray-400'}`}><PencilSquareIcon className="h-5 w-5 mx-auto mb-1" /> Question</button>
+                        {showPassage && (<button type="button" onClick={() => setMobileView('passage')} className={`flex-1 p-3 text-sm font-medium border-b-2 ${mobileView === 'passage' ? 'border-white text-white' : 'border-transparent text-gray-400'}`}><DocumentTextIcon className="h-5 w-5 mx-auto mb-1" /> Passage</button>)}
+                        <button type="button" onClick={() => setMobileView('navigator')} className={`flex-1 p-3 text-sm font-medium border-b-2 ${mobileView === 'navigator' ? 'border-white text-white' : 'border-transparent text-gray-400'}`}><ListBulletIcon className="h-5 w-5 mx-auto mb-1" /> Navigator</button>
                     </div>
                 </div>
 
                 <div className="mt-6 border-t border-gray-700 pt-6 flex flex-col sm:flex-row gap-4">
-                    
                     {showPassage && (
                         <div className={`${mobileView === 'passage' ? 'block' : 'hidden'} sm:block sm:w-1/3 w-full`}>
                             <h3 className="text-lg font-semibold text-white mb-2">Passage / Set Info</h3>
@@ -548,40 +465,27 @@ const CreateTestPage = ({ navigate, testToEdit }) => {
                                                 <option value="TITA">TITA</option>
                                             </select>
                                         </label>
-                                        <button type="button" onClick={() => removeQuestion(activeQuestion.sec, activeQuestion.q)} disabled={activeSec.questions.length <= 1} className="p-1.5 text-red-400 hover:text-red-300 disabled:text-gray-500 disabled:cursor-not-allowed">
-                                            <TrashIcon className="h-5 w-5" />
-                                        </button>
+                                        <button type="button" onClick={() => removeQuestion(activeQuestion.sec, activeQuestion.q)} disabled={activeSec.questions.length <= 1} className="p-1.5 text-red-400 hover:text-red-300 disabled:text-gray-500 disabled:cursor-not-allowed"><TrashIcon className="h-5 w-5" /></button>
                                     </div>
                                 </div>
                                 <FormTextarea label="Question Text" value={activeQ.questionText} onChange={e => handleQuestionChange(activeQuestion.sec, activeQuestion.q, 'questionText', e.target.value)} required rows={4} />
                                 <MultiImageUrlManager label="Question Images (Optional)" urls={activeQ?.questionImageUrls || []} onChange={urls => handleQuestionChange(activeQuestion.sec, activeQuestion.q, 'questionImageUrls', urls)} />
-                                
-                                {activeQ.type === 'TITA' ? (
-                                    <FormInput label="Correct Answer (TITA)" value={activeQ.correctOption || ''} onChange={e => handleQuestionChange(activeQuestion.sec, activeQuestion.q, 'correctOption', e.target.value)} required />
-                                ) : (
-                                    <>
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                {activeQ.type === 'TITA' ? <FormInput label="Correct Answer (TITA)" value={activeQ.correctOption || ''} onChange={e => handleQuestionChange(activeQuestion.sec, activeQuestion.q, 'correctOption', e.target.value)} required />
+                                 : <> <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                             {activeQ.options.map((opt, optIndex) => <FormInput key={optIndex} label={`Option ${optIndex + 1}`} value={opt} onChange={e => handleOptionChange(activeQuestion.sec, activeQuestion.q, optIndex, e.target.value)} required />)}
                                         </div>
                                         <div>
                                             <label className="block text-sm font-medium text-gray-300">Correct Option</label>
                                             <select value={activeQ.correctOption} onChange={e => handleQuestionChange(activeQuestion.sec, activeQuestion.q, 'correctOption', parseInt(e.target.value, 10))} className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white">
-                                                <option value="" disabled>-- Select Correct Option --</option>
+                                                <option value="" disabled>-- Select --</option>
                                                 {[...Array(4)].map((_, i) => <option key={i} value={i}>Option {i + 1}</option>)}
                                             </select>
                                         </div>
-                                    </>
-                                )}
-
+                                    </>}
                                 <FormTextarea label="Detailed Solution" value={activeQ.solution} onChange={e => handleQuestionChange(activeQuestion.sec, activeQuestion.q, 'solution', e.target.value)} required rows={4} />
                                 <MultiImageUrlManager label="Solution Images (Optional)" urls={activeQ?.solutionImageUrls || []} onChange={urls => handleQuestionChange(activeQuestion.sec, activeQuestion.q, 'solutionImageUrls', urls)} />
                             </div>
-                        ) : (
-                            <div className="text-center py-10 border border-dashed border-gray-600 rounded-lg text-gray-400">
-                                <p>No question selected or this section is empty.</p>
-                                <p>Add a question from the navigator to begin.</p>
-                            </div>
-                        )}
+                        ) : <div className="text-center py-10 border border-dashed border-gray-600 rounded-lg text-gray-400"><p>No question selected.</p></div>}
                     </div>
 
                     {showNavigator && (
@@ -593,9 +497,7 @@ const CreateTestPage = ({ navigate, testToEdit }) => {
                                         <div className="space-y-2">
                                             <div className="flex justify-between items-center">
                                                 <label className="text-sm font-medium text-gray-300">Section {secIndex + 1}</label>
-                                                <button type="button" onClick={() => removeSection(secIndex)} disabled={sections.length <= 1} className="p-1 text-red-500 hover:text-red-400 disabled:text-gray-600 disabled:cursor-not-allowed">
-                                                    <TrashIcon className="h-4 w-4" />
-                                                </button>
+                                                <button type="button" onClick={() => removeSection(secIndex)} disabled={sections.length <= 1} className="p-1 text-red-500 hover:text-red-400 disabled:text-gray-600"><TrashIcon className="h-4 w-4" /></button>
                                             </div>
                                              <select value={section.name} onChange={e => handleSectionChange(secIndex, 'name', e.target.value)} className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white text-sm">
                                                     {SECTIONS.map(s => <option key={s} value={s}>{s}</option>)}
@@ -604,7 +506,7 @@ const CreateTestPage = ({ navigate, testToEdit }) => {
                                         </div>
                                         <div className="grid grid-cols-5 gap-1.5 mt-2">
                                             {section.questions.map((_, qIndex) => (
-                                                <button type="button" key={qIndex} onClick={() => setActiveQuestion({ sec: secIndex, q: qIndex })} className={`h-8 w-8 flex items-center justify-center rounded text-xs font-semibold transition-all ${activeQuestion.sec === secIndex && activeQuestion.q === qIndex ? 'bg-white text-gray-900 ring-2 ring-offset-2 ring-offset-gray-800 ring-white' : 'bg-gray-700 text-white hover:bg-gray-600'}`}>
+                                                <button type="button" key={qIndex} onClick={() => setActiveQuestion({ sec: secIndex, q: qIndex })} className={`h-8 w-8 flex items-center justify-center rounded text-xs font-semibold ${activeQuestion.sec === secIndex && activeQuestion.q === qIndex ? 'bg-white text-gray-900 ring-2 ring-white' : 'bg-gray-700 text-white hover:bg-gray-600'}`}>
                                                     {qIndex + 1}
                                                 </button>
                                             ))}
@@ -612,7 +514,7 @@ const CreateTestPage = ({ navigate, testToEdit }) => {
                                          <button type="button" onClick={() => addQuestion(secIndex)} className="w-full mt-2 bg-gray-700 text-white px-2 py-1 text-xs rounded-md hover:bg-gray-600">+ Add Question</button>
                                     </div>
                                 ))}
-                                {type === 'MOCK' && <button type="button" onClick={addSection} className="w-full mt-4 bg-gray-700 text-white px-2 py-1 text-sm rounded-md hover:bg-gray-600">+ Add Section</button>}
+                                <button type="button" onClick={addSection} className="w-full mt-4 bg-gray-700 text-white px-2 py-1 text-sm rounded-md hover:bg-gray-600">+ Add Section</button>
                              </div>
                         </div>
                     )}
@@ -627,3 +529,4 @@ const CreateTestPage = ({ navigate, testToEdit }) => {
 };
 
 export default CreateTestPage;
+
