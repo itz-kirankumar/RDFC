@@ -132,93 +132,129 @@ const CreateTestPage = ({ navigate, testToEdit }) => {
         fetchTabs();
     }, [testToEdit]);
     
+    // --- UPDATED: CSV Parsing with Independent Passage Logic ---
     const handleCsvUpload = (event) => {
         const file = event.target.files[0];
         if (!file) return;
 
-        Papa.parse(file, {
-            header: true,
-            skipEmptyLines: true,
-            complete: (results) => {
-                try {
-                    const { data, errors } = results;
-                    if (errors.length > 0) {
-                        console.error("CSV Parsing Errors:", errors);
-                        alert(`Errors found in CSV file on rows: ${errors.map(e => e.row).join(', ')}. Check console for details.`);
-                        return;
-                    }
-                    if (data.length === 0) return alert('CSV file is empty or missing data rows.');
-                    
-                    const firstRow = data[0];
-                    setTitle(firstRow.testTitle || `Imported Test ${new Date().toLocaleDateString()}`);
-                    setDescription(firstRow.testDescription || '');
-                    
-                    if (firstRow.mainType) {
-                        const category = firstRow.subType ? `${firstRow.mainType}/${firstRow.subType}` : firstRow.mainType;
-                        setTestCategory(category);
-                    }
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const text = e.target.result;
+            if (!text) {
+                alert("File is empty or could not be read.");
+                return;
+            }
 
-                    const newSectionsMap = new Map();
-                    let currentPassage = { text: '', imageUrls: [] };
-                    
-                    data.forEach((row, index) => {
-                        const sectionName = row.sectionName || (newSectionsMap.size > 0 ? Array.from(newSectionsMap.keys()).pop() : 'VARC');
-                        const sectionDuration = parseInt(row.sectionDuration, 10) || 40;
+            const firstLine = text.slice(0, text.indexOf('\n'));
+            const delimiter = firstLine.includes(';') ? ';' : ',';
 
-                        if (!newSectionsMap.has(sectionName)) {
-                            newSectionsMap.set(sectionName, { name: sectionName, duration: sectionDuration, questions: [] });
-                        }
-                        
-                        // If the row defines a new passage, update the current passage context
-                        if (row.passageText && row.passageText.trim() !== '') {
-                            currentPassage.text = row.passageText.replace(/\\n/g, '\n');
-                            currentPassage.imageUrls = row.passageImageUrls ? row.passageImageUrls.split(';').map(url => url.trim()).filter(Boolean) : [];
-                        }
-
-                        if (!row.questionText || !row.questionType || !row.correctAnswer || !row.solutionText) {
-                            console.warn(`Skipping row #${index + 2} due to missing essential data (questionText, type, answer, or solution).`);
+            Papa.parse(text, {
+                delimiter: delimiter,
+                header: true,
+                skipEmptyLines: true,
+                complete: (results) => {
+                    try {
+                        if (results.errors.length > 0) {
+                            console.error("CSV Parsing Errors:", results.errors);
+                            alert("Errors found in CSV file. Please check the console for details.");
                             return;
                         }
 
-                        const newQuestion = { ...BLANK_QUESTION };
-                        newQuestion.passage = currentPassage.text;
-                        newQuestion.passageImageUrls = currentPassage.imageUrls;
-                        newQuestion.questionText = row.questionText.replace(/\\n/g, '\n');
-                        newQuestion.questionImageUrls = row.questionImageUrls ? row.questionImageUrls.split(';').map(url => url.trim()).filter(Boolean) : [];
-                        newQuestion.type = row.questionType.toUpperCase() === 'TITA' ? 'TITA' : 'MCQ';
-                        newQuestion.solution = row.solutionText.replace(/\\n/g, '\n');
-                        newQuestion.solutionImageUrls = row.solutionImageUrls ? row.solutionImageUrls.split(';').map(url => url.trim()).filter(Boolean) : [];
-                        
-                        if (newQuestion.type === 'MCQ') {
-                            newQuestion.options = [row.option1 || '', row.option2 || '', row.option3 || '', row.option4 || ''];
-                            const correctOptionIndex = parseInt(row.correctAnswer, 10) - 1;
-                            if (isNaN(correctOptionIndex) || correctOptionIndex < 0 || correctOptionIndex > 3) {
-                                 console.warn(`Skipping MCQ in row #${index + 2}: Invalid correctAnswer '${row.correctAnswer}'. Must be 1, 2, 3, or 4.`);
-                                 return;
-                            }
-                            newQuestion.correctOption = correctOptionIndex;
-                        } else { 
-                            newQuestion.correctOption = row.correctAnswer;
-                            newQuestion.options = ['', '', '', ''];
+                        const dataRows = results.data;
+                        if (dataRows.length === 0) {
+                            alert('CSV file is empty or missing data rows.');
+                            return;
                         }
                         
-                        newSectionsMap.get(sectionName).questions.push(newQuestion);
-                    });
+                        const newSectionsMap = new Map();
+                        let currentSectionDetails = { name: '', duration: 40 };
+                        
+                        const firstRow = dataRows[0];
+                        setTitle(firstRow.testTitle || `Imported Test ${new Date().toLocaleDateString()}`);
+                        setDescription(firstRow.testDescription || '');
+                        
+                        // --- FIX STARTS HERE ---
+                        const mainType = firstRow.mainType;
+                        const subType = firstRow.subType;
+                        if (mainType) {
+                            const category = subType ? `${mainType}/${subType}` : mainType;
+                            setTestCategory(category);
+                        }
+                        // --- FIX ENDS HERE ---
 
-                    const finalSections = Array.from(newSectionsMap.values());
-                    if (finalSections.length > 0 && finalSections.some(s => s.questions.length > 0)) {
-                        setSections(finalSections);
-                        setActiveQuestion({ sec: 0, q: 0 });
-                        alert(`Test successfully imported with ${finalSections.length} section(s)! Please review and click 'Save Test'.`);
-                    } else {
-                        alert('Import failed. No valid questions could be parsed from the CSV.');
+                        dataRows.forEach((questionData, index) => {
+                            if (questionData.sectionName) currentSectionDetails.name = questionData.sectionName;
+                            if (questionData.sectionDuration) currentSectionDetails.duration = parseInt(questionData.sectionDuration, 10) || 40;
+
+                            const { questionText, questionType, correctAnswer, solutionText } = questionData;
+
+                            if (!currentSectionDetails.name || !questionText || !questionType || !correctAnswer || !solutionText) {
+                                console.warn(`Skipping row #${index + 2} due to missing essential data.`);
+                                return;
+                            }
+
+                            if (!newSectionsMap.has(currentSectionDetails.name)) {
+                                newSectionsMap.set(currentSectionDetails.name, {
+                                    name: currentSectionDetails.name,
+                                    duration: currentSectionDetails.duration,
+                                    questions: []
+                                });
+                            }
+                            
+                            const newQuestion = { ...BLANK_QUESTION };
+                            
+                            // --- LOGIC CHANGE ---
+                            // Directly assign passage from the current row. No more carry-over.
+                            newQuestion.passage = questionData.passageText ? questionData.passageText.replace(/\\n/g, '\n') : '';
+                            newQuestion.passageImageUrls = questionData.passageImageUrls ? questionData.passageImageUrls.split(';').map(url => url.trim()) : [];
+
+                            newQuestion.questionText = questionText.replace(/\\n/g, '\n');
+                            newQuestion.questionImageUrls = questionData.questionImageUrls ? questionData.questionImageUrls.split(';').map(url => url.trim()) : [];
+                            newQuestion.type = questionType.toUpperCase() === 'TITA' ? 'TITA' : 'MCQ';
+                            newQuestion.solution = solutionText.replace(/\\n/g, '\n');
+                            newQuestion.solutionImageUrls = questionData.solutionImageUrls ? questionData.solutionImageUrls.split(';').map(url => url.trim()) : [];
+
+                            if (newQuestion.type === 'MCQ') {
+                                newQuestion.options = [questionData.option1, questionData.option2, questionData.option3, questionData.option4];
+                                const correctOptionIndex = parseInt(correctAnswer, 10) - 1;
+                                if (isNaN(correctOptionIndex) || correctOptionIndex < 0 || correctOptionIndex > 3) {
+                                     console.warn(`Skipping MCQ in row #${index + 2} due to invalid correctAnswer '${correctAnswer}'. It must be a number from 1 to 4.`);
+                                     return;
+                                }
+                                newQuestion.correctOption = correctOptionIndex;
+                            } else { 
+                                if (!/^\d+$/.test(correctAnswer)) {
+                                    console.warn(`Skipping TITA in row #${index + 2} due to non-numerical correctAnswer '${correctAnswer}'. TITA answers must be numbers (e.g., 1, 2, 3124).`);
+                                    return;
+                                }
+                                newQuestion.correctOption = correctAnswer;
+                                newQuestion.options = ['', '', '', ''];
+                            }
+                            
+                            newSectionsMap.get(currentSectionDetails.name).questions.push(newQuestion);
+                        });
+
+                        const finalSections = Array.from(newSectionsMap.values());
+                        if (finalSections.length > 0 && finalSections.some(s => s.questions.length > 0)) {
+                            setSections(finalSections);
+                            setActiveQuestion({ sec: 0, q: 0 });
+                            alert(`Test successfully imported with ${finalSections.length} section(s)! Please review and click 'Save Test'.`);
+                        } else {
+                            alert('Import failed. No valid questions could be parsed. Please check the CSV format.');
+                        }
+
+                    } catch(error) {
+                        console.error("Error processing CSV data:", error);
+                        alert('A critical error occurred. Please check the console and ensure the file format is correct.');
                     }
-                } catch(error) {
-                    console.error("Error processing CSV data:", error);
-                    alert('A critical error occurred during import. Please check the console.');
+                },
+                error: (error) => {
+                    console.error("Papaparse error:", error);
+                    alert(`CSV parsing failed: ${error.message}`);
                 }
-            }
-        });
+            });
+        };
+        reader.readAsText(file);
         event.target.value = null;
     };
     
@@ -529,4 +565,3 @@ const CreateTestPage = ({ navigate, testToEdit }) => {
 };
 
 export default CreateTestPage;
-
