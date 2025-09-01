@@ -41,7 +41,7 @@ const AdminDashboard = ({ navigate }) => {
                 />
                  <DashboardCard 
                     onClick={() => navigate('manageRDFCArticles')} 
-                    title="RDFC Articles"
+                    title="Material Manager"
                     description="Link Google Drive articles to specific tests."
                     icon={<FaSpellCheck className="text-gray-500 text-3xl"/>}
                 />
