@@ -57,6 +57,10 @@ const AllTestsPage = ({ navigate, tests: initialTests = [], title, contentType }
     const [liveTests, setLiveTests] = useState({});
     const [visibleCount, setVisibleCount] = useState(10);
 
+    const hasMaterials = useMemo(() => 
+        initialTests.some(test => test.material || test.isMaterialOnly), 
+    [initialTests]);
+
     useEffect(() => {
         if (!userData?.uid) return;
         const unsub = onSnapshot(doc(db, 'users', userData.uid), (docSnap) => {
@@ -249,13 +253,12 @@ const AllTestsPage = ({ navigate, tests: initialTests = [], title, contentType }
     
     const isPaidContentPresent = initialTests.some(test => !test.isFree);
     const showUnlockBanner = !userStatus.isSubscribed && isPaidContentPresent;
-
-    const isRdfcPage = contentType === 'rdfc';
     
-    const desktopHeaders = ['Title', 'Type', 'Description', 'Actions'];
-    if (isRdfcPage) {
-        desktopHeaders.splice(1, 0, 'Article Name'); 
+    const desktopHeaders = ['Title'];
+    if (hasMaterials) {
+        desktopHeaders.push('Article Name');
     }
+    desktopHeaders.push('Type', 'Description', 'Actions');
 
     const mobileHeaders = ['Details', 'Actions'];
     
@@ -273,8 +276,8 @@ const AllTestsPage = ({ navigate, tests: initialTests = [], title, contentType }
                          {test.isFree && <span className="tag-green">Free</span>}
                     </div>
                  </td>
-                 {isRdfcPage && (
-                    <td className="px-6 py-4 text-sm text-gray-300">{material?.name || '-'}</td>
+                 {hasMaterials && (
+                    <td className="px-6 py-4 text-sm text-gray-300">{material?.name || (test.isMaterialOnly ? test.title : '-')}</td>
                  )}
                  <td className="px-6 py-4 text-sm text-gray-400">
                     <span className={`tag-type ${typeColors[displayType.toUpperCase()] || 'type-tag-addon'}`}>{displayType}</span>
