@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { collection, query, where, onSnapshot, doc, updateDoc } from 'firebase/firestore';
 import { db } from '../firebase/config';
-import { FaEye, FaLock, FaPlay, FaCheckCircle, FaBookOpen, FaArrowLeft, FaArrowUp } from 'react-icons/fa';
+import { FaEye, FaLock, FaPlay, FaCheckCircle, FaBookOpen, FaArrowLeft, FaArrowUp, FaHourglassHalf } from 'react-icons/fa';
 
 // --- HELPER COMPONENTS ---
 
@@ -106,6 +106,7 @@ const AllTestsPage = ({ navigate, tests: initialTests = [], title, contentType }
         if (test.mainType) {
             return { main: test.mainType, sub: test.subType || null };
         }
+        // The `material` property is passed from the dashboard navigate function
         if (test.material) return { main: 'RDFC', sub: null };
         const oldType = test.type?.toUpperCase();
         if (oldType === 'MOCK') return { main: 'Mocks', sub: null };
@@ -143,7 +144,7 @@ const AllTestsPage = ({ navigate, tests: initialTests = [], title, contentType }
         };
         if (oldKeyMap[requiredPermissionKey]) return false;
 
-        return true;
+        return false; // CORRECTED: Defaults to unlocked for subscribed users
     };
 
     const handleViewArticle = async (articleUrl, testId) => {
@@ -185,13 +186,15 @@ const AllTestsPage = ({ navigate, tests: initialTests = [], title, contentType }
                 }
             }
     
-            const attempt = userAttempts[test.id];
-            if (attempt?.status === 'completed') {
-                buttons.push({ key: 'test', text: "View Analysis", action: () => navigate('results', { attemptId: attempt.id }), className: "action-btn-analysis", icon: <FaEye /> });
-            } else if (attempt?.status === 'in-progress') {
-                buttons.push({ key: 'test', text: "Continue Test", action: () => navigate('test', { testId: test.id }), className: "action-btn-continue", icon: <FaPlay /> });
-            } else {
-                buttons.push({ key: 'test', text: "Start Test", action: () => navigate('test', { testId: test.id }), className: "action-btn-start", icon: <FaPlay /> });
+            if (!test.isMaterialOnly) {
+                const attempt = userAttempts[test.id];
+                if (attempt?.status === 'completed') {
+                    buttons.push({ key: 'test', text: "View Analysis", action: () => navigate('results', { attemptId: attempt.id }), className: "action-btn-analysis", icon: <FaEye /> });
+                } else if (attempt?.status === 'in-progress') {
+                    buttons.push({ key: 'test', text: "Continue Test", action: () => navigate('test', { testId: test.id }), className: "action-btn-continue", icon: <FaPlay /> });
+                } else {
+                    buttons.push({ key: 'test', text: "Start Test", action: () => navigate('test', { testId: test.id }), className: "action-btn-start", icon: <FaPlay /> });
+                }
             }
         }
     
@@ -228,10 +231,12 @@ const AllTestsPage = ({ navigate, tests: initialTests = [], title, contentType }
             else { buttons.push({key: 'mat', text: viewText, action: () => handleViewArticle(test.material.url, test.id), className: "action-btn-view"}); }
         }
         
-        const attempt = userAttempts[test.id];
-        if (attempt?.status === 'completed') { buttons.push({ key: 'test', text: "Analysis", action: () => navigate('results', { attemptId: attempt.id }), className: "action-btn-analysis" }); }
-        else if (attempt?.status === 'in-progress') { buttons.push({ key: 'test', text: "Continue", action: () => navigate('test', { testId: test.id }), className: "action-btn-continue" }); }
-        else { buttons.push({ key: 'test', text: "Start", action: () => navigate('test', { testId: test.id }), className: "action-btn-start" }); }
+        if (!test.isMaterialOnly) {
+            const attempt = userAttempts[test.id];
+            if (attempt?.status === 'completed') { buttons.push({ key: 'test', text: "Analysis", action: () => navigate('results', { attemptId: attempt.id }), className: "action-btn-analysis" }); }
+            else if (attempt?.status === 'in-progress') { buttons.push({ key: 'test', text: "Continue", action: () => navigate('test', { testId: test.id }), className: "action-btn-continue" }); }
+            else { buttons.push({ key: 'test', text: "Start", action: () => navigate('test', { testId: test.id }), className: "action-btn-start" }); }
+        }
         
         return (
             <div className="flex flex-col items-end space-y-2">
@@ -247,7 +252,7 @@ const AllTestsPage = ({ navigate, tests: initialTests = [], title, contentType }
 
     const isRdfcPage = contentType === 'rdfc';
     
-    const desktopHeaders = ['Test Title', 'Type', 'Description', 'Actions'];
+    const desktopHeaders = ['Title', 'Type', 'Description', 'Actions'];
     if (isRdfcPage) {
         desktopHeaders.splice(1, 0, 'Article Name'); 
     }
@@ -448,11 +453,11 @@ const AllTestsPage = ({ navigate, tests: initialTests = [], title, contentType }
             )}
 
             <div className="hidden md:block">
-                {sortedTests.length > 0 ? renderDesktopTable() : ( <div className="text-center text-gray-500 p-12 bg-gray-800 rounded-lg"><p>No tests available in this category yet.</p></div> )}
+                {sortedTests.length > 0 ? renderDesktopTable() : ( <div className="text-center text-gray-500 p-12 bg-gray-800 rounded-lg"><p>No content available in this category yet.</p></div> )}
             </div>
 
             <div className="md:hidden">
-                {sortedTests.length > 0 ? renderMobileTable() : ( <div className="text-center text-gray-500 p-12 bg-gray-800 rounded-lg"><p>No tests available in this category yet.</p></div> )}
+                {sortedTests.length > 0 ? renderMobileTable() : ( <div className="text-center text-gray-500 p-12 bg-gray-800 rounded-lg"><p>No content available in this category yet.</p></div> )}
             </div>
         </div>
     );

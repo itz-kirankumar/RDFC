@@ -4,7 +4,6 @@ import { db } from '../firebase/config';
 import { Switch, Dialog, Transition } from '@headlessui/react';
 import { FaPlus, FaFilter } from 'react-icons/fa';
 
-// --- Helper Components (Unchanged) ---
 const formatTimestamp = (timestamp) => {
     if (!timestamp) return <span className="text-gray-500">Immediately</span>;
     const date = timestamp.toDate();
@@ -65,7 +64,6 @@ const ScheduleModal = ({ isOpen, setIsOpen, test, onSave }) => {
 const AdminTestManager = ({ navigate }) => {
     const [tests, setTests] = useState([]);
     const [managedTabs, setManagedTabs] = useState([]);
-    const [linkedArticles, setLinkedArticles] = useState({}); // NEW: State for linked articles
     const [loading, setLoading] = useState(true);
     const [filter, setFilter] = useState('All');
     const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
@@ -80,16 +78,8 @@ const AdminTestManager = ({ navigate }) => {
             setTests(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
             setLoading(false);
         });
-        
-        // NEW: Listener for RDFC articles to enable smarter filtering
-        const articlesQuery = collection(db, 'rdfcArticles');
-        const unsubscribeArticles = onSnapshot(articlesQuery, (snapshot) => {
-            const articlesMap = {};
-            snapshot.forEach(doc => { articlesMap[doc.id] = doc.data(); });
-            setLinkedArticles(articlesMap);
-        });
 
-        return () => { unsubscribeTabs(); unsubscribeTests(); unsubscribeArticles(); };
+        return () => { unsubscribeTabs(); unsubscribeTests(); };
     }, []);
 
     const handleDelete = async (id) => {
@@ -111,34 +101,27 @@ const AdminTestManager = ({ navigate }) => {
         await updateDoc(doc(db, 'tests', testId), { liveAt });
     };
 
+    // REFACTORED: Simplified to rely only on mainType and subType
     const getTestCategory = (test) => {
-        if (test.mainType) return `${test.mainType}${test.subType ? ` / ${test.subType}` : ''}`;
-        // --- TRANSITION LOGIC ---
-        if (test.type === 'TEST') return linkedArticles[test.id] ? 'RDFC (Legacy)' : 'Add-Ons (Legacy)';
-        if (test.type === '10MIN') return '10 Min RC (Legacy)';
-        if (test.type === 'SECTIONAL') return 'Sectionals (Legacy)';
-        if (test.type === 'MOCK') return 'Mocks (Legacy)';
-        return test.type; // Fallback for any other legacy types
+        if (test.mainType) {
+            return `${test.mainType}${test.subType ? ` / ${test.subType}` : ''}`;
+        }
+        return 'Uncategorized';
     };
 
+    // REFACTORED: Simplified filtering to remove legacy logic
     const filteredTests = useMemo(() => {
         if (filter === 'All') return tests;
         
         const [mainFilter, subFilter] = filter.split('/');
 
         return tests.filter(test => {
-            // New format filtering
-            if (test.mainType) {
-                return subFilter ? test.mainType === mainFilter && test.subType === subFilter : test.mainType === mainFilter;
-            }
-            
-            // --- TRANSITION LOGIC FILTERING ---
-            // This logic maps the filter name to the old test structure
-            const legacyCategory = getTestCategory(test).replace(' (Legacy)', '');
-            if (subFilter) return false; // Legacy tests don't have sub-tabs
-            return legacyCategory === mainFilter;
+            if (!test.mainType) return false; // Ignore tests without a mainType
+            return subFilter 
+                ? test.mainType === mainFilter && test.subType === subFilter 
+                : test.mainType === mainFilter;
         });
-    }, [filter, tests, linkedArticles]);
+    }, [filter, tests]);
 
     return (
         <div className="max-w-7xl mx-auto p-4 md:p-0">
@@ -201,4 +184,3 @@ const AdminTestManager = ({ navigate }) => {
 };
 
 export default AdminTestManager;
-

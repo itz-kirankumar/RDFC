@@ -1,8 +1,8 @@
 import React, { useState, useEffect, Fragment } from 'react';
-import { collection, onSnapshot, doc, writeBatch, query, orderBy, getDocs, serverTimestamp } from 'firebase/firestore';
+import { collection, onSnapshot, doc, writeBatch, query, orderBy, getDocs } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { Dialog, Switch, Transition } from '@headlessui/react';
-import { PlusIcon, TrashIcon, Bars3Icon, LockClosedIcon, LockOpenIcon, InformationCircleIcon } from '@heroicons/react/24/outline';
+import { PlusIcon, TrashIcon, Bars3Icon, LockClosedIcon, LockOpenIcon } from '@heroicons/react/24/outline';
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
@@ -50,31 +50,23 @@ const AdminTabManager = ({ navigate }) => {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [newTabName, setNewTabName] = useState('');
     const [saving, setSaving] = useState(false);
-    const [showMigrationInfo, setShowMigrationInfo] = useState(false);
 
     const sensors = useSensors(useSensor(PointerSensor), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }));
 
     useEffect(() => {
         const q = query(collection(db, 'tabManager'), orderBy('order'));
-        const unsubscribe = onSnapshot(q, async (snapshot) => {
+        const unsubscribe = onSnapshot(q, (snapshot) => {
             setLoading(true);
             const tabsData = snapshot.docs.map(doc => {
                 const data = doc.data();
+                // Ensure subTabs have a unique ID for drag-n-drop libraries
                 const subTabs = (data.subTabs || []).map(subTab =>
                     ({ ...subTab, id: subTab.id || `${doc.id}-${subTab.name.replace(/\s+/g, '-')}` })
                 );
                 return { id: doc.id, ...data, subTabs };
             });
-            
-            const didMigrate = await syncAndRepairHardcodedTabs(tabsData);
-            if(didMigrate) {
-                setShowMigrationInfo(true);
-                // If migration happened, the listener will be triggered again with the new data,
-                // so we don't need to set state here to avoid a flicker.
-            } else {
-                setTabs(tabsData);
-                setLoading(false);
-            }
+            setTabs(tabsData);
+            setLoading(false);
         }, (error) => {
             console.error("Error fetching tabs:", error);
             alert("Failed to fetch tab data. Check console and Firestore rules.");
@@ -82,51 +74,6 @@ const AdminTabManager = ({ navigate }) => {
         });
         return () => unsubscribe();
     }, []);
-
-    const syncAndRepairHardcodedTabs = async (existingTabs) => {
-        const hardcodedTabs = [
-            { name: 'RDFC', requiresAccess: true },
-            { name: '10 Min RC', requiresAccess: true },
-            { name: 'Add-Ons', requiresAccess: false },
-            { name: 'Sectionals', requiresAccess: true },
-            { name: 'Mocks', requiresAccess: true }
-        ];
-
-        const existingTabNames = new Set(existingTabs.map(tab => tab.name));
-        const missingTabs = hardcodedTabs.filter(ht => !existingTabNames.has(ht.name));
-        
-        if (missingTabs.length === 0) {
-            return false; // No migration needed
-        }
-
-        console.log(`Missing ${missingTabs.length} essential tabs. Syncing...`);
-
-        try {
-            const batch = writeBatch(db);
-            const collectionRef = collection(db, 'tabManager');
-            let currentOrder = existingTabs.length;
-
-            missingTabs.forEach((tab) => {
-                const docRef = doc(collectionRef);
-                batch.set(docRef, {
-                    name: tab.name,
-                    requiresAccess: tab.requiresAccess,
-                    subTabs: [],
-                    order: currentOrder++,
-                    migratedAt: serverTimestamp()
-                });
-            });
-
-            await batch.commit();
-            console.log("Successfully synced missing hardcoded tabs.");
-            return true;
-        } catch (error) {
-            console.error("Sync and repair failed:", error);
-            alert("Automatic sync of essential tabs failed. Please create them manually if missing.");
-            setLoading(false);
-            return false;
-        }
-    };
 
     const handleAddTab = () => {
         if (!newTabName.trim()) return;
@@ -214,7 +161,7 @@ const AdminTabManager = ({ navigate }) => {
         }
     };
 
-    if (loading) return <div className="text-center p-8 text-white">Loading & Syncing Tabs...</div>;
+    if (loading) return <div className="text-center p-8 text-white">Loading Tabs...</div>;
 
     return (
         <div className="max-w-4xl mx-auto p-4">
@@ -225,13 +172,6 @@ const AdminTabManager = ({ navigate }) => {
                     <button onClick={handleSave} disabled={saving} className="bg-white text-gray-900 px-6 py-2 rounded-md font-semibold hover:bg-gray-200 shadow disabled:bg-gray-400">{saving ? 'Saving...' : 'Save Changes'}</button>
                 </div>
             </div>
-
-            {showMigrationInfo && (
-                <div className="bg-blue-900/50 border border-blue-700 text-blue-200 px-4 py-3 rounded-lg relative mb-6" role="alert">
-                    <strong className="font-bold flex items-center"><InformationCircleIcon className="h-5 w-5 mr-2"/>System Synced!</strong>
-                    <span className="block sm:inline ml-7">We've automatically added essential tabs to ensure compatibility. You can manage them below.</span>
-                </div>
-            )}
 
             <p className="text-gray-400 mb-6 text-sm">Drag and drop the main tabs to reorder them. Changes are saved only when you click "Save Changes".</p>
             
@@ -272,4 +212,3 @@ const AdminTabManager = ({ navigate }) => {
 };
 
 export default AdminTabManager;
-

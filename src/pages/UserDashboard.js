@@ -32,10 +32,12 @@ const CountdownTimer = ({ targetDate, onComplete }) => {
         const timer = setTimeout(() => {
             const newTimeLeft = calculateTimeLeft();
             setTimeLeft(newTimeLeft);
-            if (!Object.keys(newTimeLeft).length && onComplete) { onComplete(); }
+            if (Object.keys(newTimeLeft).length === 0 && onComplete) {
+                onComplete();
+            }
         }, 1000);
         return () => clearTimeout(timer);
-    });
+    }, [timeLeft, onComplete, targetDate]);
 
     if (!Object.keys(timeLeft).length) {
         return <div className="text-center font-semibold text-green-400">Live Now</div>;
@@ -191,24 +193,52 @@ const useManagedTabs = () => {
 
 
 const useMasterData = () => {
-    const [masterData, setMasterData] = useState({ allTests: [], linkedMaterials: {}, loading: true });
+    const [masterData, setMasterData] = useState({ allContent: [], linkedMaterials: {}, loading: true });
 
     useEffect(() => {
         const fetchData = async () => {
             try {
+                // Fetch all published tests and materials
                 const testsQuery = query(collection(db, 'tests'), where("isPublished", "==", true));
-                const articlesQuery = collection(db, 'rdfcArticles');
+                const materialsQuery = query(collection(db, 'materials'));
 
-                const [testsSnapshot, articlesSnapshot] = await Promise.all([
+                const [testsSnapshot, materialsSnapshot] = await Promise.all([
                     getDocs(testsQuery),
-                    getDocs(articlesQuery)
+                    getDocs(materialsQuery)
                 ]);
 
-                const fetchedTests = testsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                const fetchedMaterials = {};
-                articlesSnapshot.forEach(doc => { fetchedMaterials[doc.id] = doc.data(); });
+                const fetchedTests = testsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), contentType: 'test' }));
+                const fetchedMaterials = materialsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), contentType: 'material' }));
                 
-                setMasterData({ allTests: fetchedTests, linkedMaterials: fetchedMaterials, loading: false });
+                // Create "pseudo-tests" for standalone materials so they can be displayed in lists
+                const standaloneMaterials = fetchedMaterials.filter(mat => !mat.linkedTestId);
+                const pseudoTestsForMaterials = standaloneMaterials.map(mat => ({
+                    id: mat.id,
+                    title: mat.name,
+                    description: mat.description,
+                    mainType: mat.mainType,
+                    subType: mat.subType,
+                    createdAt: mat.createdAt,
+                    isFree: mat.isFree || false,
+                    isMaterialOnly: true, // Flag to indicate this is just a material
+                    contentType: 'material',
+                }));
+
+                const allContent = [...fetchedTests, ...pseudoTestsForMaterials];
+
+                // Create a map of all materials, keyed by the ID they are associated with
+                const materialsMap = fetchedMaterials.reduce((acc, mat) => {
+                    if (mat.linkedTestId) {
+                        // If linked to a test, use the test ID as the key
+                        acc[mat.linkedTestId] = mat;
+                    } else {
+                        // If standalone, use its own ID as the key
+                        acc[mat.id] = mat;
+                    }
+                    return acc;
+                }, {});
+                
+                setMasterData({ allContent, linkedMaterials: materialsMap, loading: false });
             } catch (error) {
                 console.error("Error fetching master data:", error);
                 setMasterData(prev => ({ ...prev, loading: false }));
@@ -257,11 +287,11 @@ const useUserAttempts = (uid) => {
     return userAttempts;
 };
 
-const usePerformanceData = (uid, allTests, linkedMaterials, managedTabs) => {
+const usePerformanceData = (uid, allContent) => {
     const [data, setData] = useState({ loading: true, overall: null, byType: {} });
 
     useEffect(() => {
-        if (!uid || !allTests || allTests.length === 0 || !linkedMaterials || !managedTabs || managedTabs.length === 0) {
+        if (!uid || !allContent || allContent.length === 0) {
             setData({ loading: false, overall: null, byType: {} });
             return;
         }
@@ -273,8 +303,10 @@ const usePerformanceData = (uid, allTests, linkedMaterials, managedTabs) => {
                 const userAttemptsSnap = await getDocs(userAttemptsQuery);
                 const userAttemptsData = userAttemptsSnap.docs.map(doc => doc.data());
 
-                const testInfoMap = allTests.reduce((acc, test) => {
-                    acc[test.id] = test;
+                const testInfoMap = allContent.reduce((acc, test) => {
+                    if (test.contentType !== 'material') {
+                        acc[test.id] = test;
+                    }
                     return acc;
                 }, {});
 
@@ -283,24 +315,9 @@ const usePerformanceData = (uid, allTests, linkedMaterials, managedTabs) => {
 
                 userAttemptsData.forEach(attempt => {
                     const test = testInfoMap[attempt.testId];
-                    if (!test) return;
+                    if (!test || !test.mainType) return;
 
-                    let category = test.mainType;
-                    if (!category) {
-                         const oldType = test.type?.toUpperCase();
-                         if (linkedMaterials[test.id]) {
-                             category = 'RDFC';
-                         } else if (oldType === 'MOCK') {
-                             category = 'Mocks';
-                         } else if (oldType === 'SECTIONAL') {
-                             category = 'Sectionals';
-                         } else if (oldType === '10MIN') {
-                             category = '10 Min RC';
-                         } else {
-                             const foundTab = managedTabs.find(t => t.name.toUpperCase().includes(oldType || ''))
-                             category = foundTab ? foundTab.name : 'Add-Ons';
-                         }
-                    }
+                    const category = test.mainType;
 
                     if (!byType[category]) {
                         byType[category] = { scores: [], totalScore: 0, count: 0, scoreHistory: [] };
@@ -311,8 +328,8 @@ const usePerformanceData = (uid, allTests, linkedMaterials, managedTabs) => {
                     byType[category].count += 1;
 
                     const scoreEntry = {
-                        name: test.title, 
-                        score, 
+                        name: test.title,
+                        score,
                         date: attempt.completedAt?.toDate().toLocaleDateString()
                     };
                     byType[category].scoreHistory.push(scoreEntry);
@@ -365,7 +382,6 @@ const usePerformanceData = (uid, allTests, linkedMaterials, managedTabs) => {
                         scoreHistory: overallScoreHistory
                     }
                 });
-
             } catch (error) {
                 console.error("Error fetching performance data:", error);
                 setData({ loading: false, overall: null, byType: {} });
@@ -373,10 +389,12 @@ const usePerformanceData = (uid, allTests, linkedMaterials, managedTabs) => {
         };
 
         fetchData();
-    }, [uid, allTests, linkedMaterials, managedTabs]);
+    }, [uid, allContent]);
 
     return data;
 }
+
+// --- MAIN DASHBOARD COMPONENT ---
 
 // --- MAIN DASHBOARD COMPONENT ---
 
@@ -389,42 +407,34 @@ const UserDashboard = ({ navigate }) => {
     const [openAccordion, setOpenAccordion] = useState(null);
 
     const managedTabs = useManagedTabs();
-    const { allTests, linkedMaterials, loading: masterDataLoading } = useMasterData();
+    const { allContent, linkedMaterials, loading: masterDataLoading } = useMasterData();
     const userStatus = useUserStatus(userData?.uid);
     const userAttempts = useUserAttempts(userData?.uid);
-    const performanceData = usePerformanceData(userData?.uid, allTests, linkedMaterials, managedTabs);
+    const performanceData = usePerformanceData(userData?.uid, allContent);
 
-    const getTestCategory = (test) => {
-        if (test.mainType) {
-            return { main: test.mainType, sub: test.subType || null };
-        }
-        if (linkedMaterials[test.id]) return { main: 'RDFC', sub: null };
-        const oldType = test.type?.toUpperCase();
-        if (oldType === 'MOCK') return { main: 'Mocks', sub: null };
-        if (oldType === 'SECTIONAL') return { main: 'Sectionals', sub: null };
-        if (oldType === '10MIN') return { main: '10 Min RC', sub: null };
-        const foundTab = managedTabs.find(t => t.name.toUpperCase().includes(oldType || ''));
-        return { main: foundTab ? foundTab.name : 'Add-Ons', sub: null };
+    // REFACTORED: Simplified to only use mainType and subType
+    const getTestCategory = (content) => {
+        return { main: content.mainType || 'Uncategorized', sub: content.subType || null };
     };
 
-    const testsByTab = useMemo(() => {
-        if (!allTests || !managedTabs?.length) return {};
+    const contentByTab = useMemo(() => {
+        if (!allContent || !managedTabs?.length) return {};
         
         const grouped = managedTabs.reduce((acc, tab) => {
-            acc[tab.name] = { id: tab.id, tests: [], subTabs: {} };
+            acc[tab.name] = { id: tab.id, content: [], subTabs: {} };
             if (tab.subTabs) {
-                tab.subTabs.forEach(sub => acc[tab.name].subTabs[sub.name] = { tests: [] });
+                tab.subTabs.forEach(sub => acc[tab.name].subTabs[sub.name] = { content: [] });
             }
             return acc;
         }, {});
 
-        allTests.forEach(test => {
-            const { main, sub } = getTestCategory(test);
+        allContent.forEach(contentItem => {
+            const { main, sub } = getTestCategory(contentItem);
             if (grouped[main]) {
                 if (sub && grouped[main].subTabs[sub]) {
-                    grouped[main].subTabs[sub].tests.push(test);
+                    grouped[main].subTabs[sub].content.push(contentItem);
                 } else {
-                    grouped[main].tests.push(test);
+                    grouped[main].content.push(contentItem);
                 }
             }
         });
@@ -435,20 +445,20 @@ const UserDashboard = ({ navigate }) => {
         };
         
         Object.values(grouped).forEach(tabData => {
-            tabData.tests.sort(sortFn);
-            Object.values(tabData.subTabs).forEach(subTabData => subTabData.tests.sort(sortFn));
+            tabData.content.sort(sortFn);
+            Object.values(tabData.subTabs).forEach(subTabData => subTabData.content.sort(sortFn));
         });
 
         return grouped;
-    }, [allTests, managedTabs, linkedMaterials]);
+    }, [allContent, managedTabs]);
 
     const visibleTabs = useMemo(() => managedTabs.filter(tab => {
-        const tabData = testsByTab[tab.name];
+        const tabData = contentByTab[tab.name];
         if (!tabData) return false;
-        const hasMainTests = tabData.tests.length > 0;
-        const hasSubTabTests = Object.values(tabData.subTabs).some(sub => sub.tests.length > 0);
-        return hasMainTests || hasSubTabTests;
-    }), [managedTabs, testsByTab]);
+        const hasMainContent = tabData.content.length > 0;
+        const hasSubTabContent = Object.values(tabData.subTabs).some(sub => sub.content.length > 0);
+        return hasMainContent || hasSubTabContent;
+    }), [managedTabs, contentByTab]);
     
     useEffect(() => {
       setActiveSubTab(null);
@@ -462,9 +472,9 @@ const UserDashboard = ({ navigate }) => {
         const checkLiveStatus = () => {
             const now = new Date().getTime();
             const newLiveTests = {};
-            allTests.forEach(test => {
-                if (test.liveAt?.toDate().getTime() <= now) {
-                    newLiveTests[test.id] = true;
+            allContent.forEach(item => {
+                if (item.liveAt?.toDate().getTime() <= now) {
+                    newLiveTests[item.id] = true;
                 }
             });
             setLiveTests(newLiveTests);
@@ -472,52 +482,64 @@ const UserDashboard = ({ navigate }) => {
         const interval = setInterval(checkLiveStatus, 1000 * 60);
         checkLiveStatus();
         return () => clearInterval(interval);
-    }, [allTests]);
+    }, [allContent]);
 
     const loading = masterDataLoading || !userStatus || managedTabs.length === 0;
 
-    const handleViewMaterial = async (materialUrl, testId) => {
-        if (!userData?.uid) return;
+    const handleViewMaterial = async (material, contentId) => {
+        if (!userData?.uid || !material) return;
         try {
             const userRef = doc(db, 'users', userData.uid);
-            await updateDoc(userRef, { [`readArticles.${testId}`]: true });
-            navigate('rdfcArticleViewer', { articleUrl: materialUrl, testId: testId });
+            await updateDoc(userRef, { [`readArticles.${contentId}`]: true });
+            navigate('rdfcArticleViewer', { articleUrl: material.url, testId: contentId });
         } catch (error) {
             console.error("Error marking material as read:", error);
         }
     };
 
-    const getIsLocked = (test) => {
-        if (test.isFree) return false;
+    // REFACTORED: Simplified access logic, removed all legacy checks
+    const getIsLocked = (content) => {
+        // Rule 1: Free content is never locked for anyone.
+        if (content.isFree) return false;
+    
+        // For non-free content, the user must be a premium subscriber.
         if (!userStatus?.isSubscribed) return true;
         
+        const { main, sub } = getTestCategory(content);
+        const tabInfo = managedTabs.find(t => t.name === main);
+        const subTabInfo = tabInfo?.subTabs?.find(s => s.name === sub);
+        const requiredPermissionKey = sub ? `${main}/${sub}` : main;
         const access = userStatus.accessControl;
-        if (!access) return true;
-        
-        const { main, sub } = getTestCategory(test);
-        let requiredPermissionKey = sub ? `${main}/${sub}` : main;
 
-        if (access.validityMap && access.validityMap[requiredPermissionKey]) {
-            const expiry = access.validityMap[requiredPermissionKey];
-            if (expiry && expiry.toDate() > new Date()) return false;
+        // Check for a specific, valid access date first. This overrides everything.
+        if (access?.validityMap?.[requiredPermissionKey] && access.validityMap[requiredPermissionKey].toDate() > new Date()) {
+            return false;
         }
 
-        const hasOverallAccess = userStatus.expiryDate ? userStatus.expiryDate.toDate() > new Date() : true;
-        if (!hasOverallAccess) return true;
+        // Check for an overall subscription expiry date. If it's expired and no valid granular access was found, lock the content.
+        const overallExpiry = userStatus.expiryDate?.toDate();
+        if (overallExpiry && overallExpiry < new Date()) {
+            return true;
+        }
 
+        // Rule 3: Determine if the content's category requires special access.
+        const requiresSpecialAccess = subTabInfo ? subTabInfo.requiresAccess : (tabInfo ? tabInfo.requiresAccess : true);
+
+        // If it does NOT require special access, and the user is a subscriber whose plan hasn't expired, they have access.
+        if (!requiresSpecialAccess) {
+            return false;
+        }
+
+        // Rule 2: If it DOES require special access, check the user's permissions.
+        if (!access) return true; // No access object means no special permissions.
+
+        // Check new boolean-based access (for plans without granular dates).
         if (access[requiredPermissionKey] === true) return false;
 
-        const oldKeyMap = {
-            'RDFC': userStatus.rdfc_articles || userStatus.rdfc_tests,
-            'Mocks': userStatus.mock,
-            'Sectionals': userStatus.sectional,
-            'Add-Ons': userStatus.test,
-            '10 Min RC': userStatus.ten_min_tests
-        };
-        if (oldKeyMap[requiredPermissionKey]) return false;
-
+        // If no specific permission is found for a category that requires it, it's locked.
         return true;
     };
+    
     
     const needsUpgrade = useMemo(() => {
         if (!userStatus?.isSubscribed || !managedTabs?.length) {
@@ -533,18 +555,9 @@ const UserDashboard = ({ navigate }) => {
         if (requiredAccessTabs.length === 0) return false;
 
         const access = userStatus.accessControl || {};
-        const oldKeyMap = {
-            'RDFC': userStatus.rdfc_articles || userStatus.rdfc_tests,
-            'Mocks': userStatus.mock,
-            'Sectionals': userStatus.sectional,
-            'Add-Ons': userStatus.test,
-            '10 Min RC': userStatus.ten_min_tests
-        };
 
         for (const key of requiredAccessTabs) {
-            const hasAccess = (access.validityMap && access.validityMap[key] && access.validityMap[key].toDate() > new Date()) ||
-                              (access[key] === true) ||
-                              (oldKeyMap[key] === true);
+            const hasAccess = (access.validityMap && access.validityMap[key] && access.validityMap[key].toDate() > new Date()) || (access[key] === true);
             
             if (!hasAccess) {
                 return true;
@@ -554,14 +567,14 @@ const UserDashboard = ({ navigate }) => {
         return false;
     }, [userStatus, managedTabs]);
     
-    const renderTestRow = (test, tabName) => {
-        const material = linkedMaterials[test.id];
-        const isScheduled = test.liveAt && test.liveAt.toDate() > new Date() && !liveTests[test.id];
-        const isLocked = getIsLocked(test);
-        const { main, sub } = getTestCategory(test);
+    const renderContentRow = (content, hasMaterials) => {
+        const material = linkedMaterials[content.id];
+        const isScheduled = content.liveAt && content.liveAt.toDate() > new Date() && !liveTests[content.id];
+        const isLocked = getIsLocked(content);
+        const { main, sub } = getTestCategory(content);
         
         const renderActionButtons = () => {
-            if (isScheduled) return <div className="flex items-center justify-center h-full"><CountdownTimer targetDate={test.liveAt.toDate()} onComplete={() => updateLiveTests(test.id)} /></div>;
+            if (isScheduled) return <div className="flex items-center justify-center h-full"><CountdownTimer targetDate={content.liveAt.toDate()} onComplete={() => updateLiveTests(content.id)} /></div>;
             
             let buttons = [];
             
@@ -572,19 +585,24 @@ const UserDashboard = ({ navigate }) => {
                     buttons.push({ key: 'unlock', text: "Unlock", action: () => navigate('subscription'), className: "action-btn-unlock", icon: <FaLock /> });
                 }
             } else {
-                if (material) {
-                    const isMaterialRead = userStatus?.readArticles?.[test.id];
-                    const viewText = tabName === 'RDFC' ? 'View RDFC' : 'View Material';
-                    const readText = tabName === 'RDFC' ? 'RDFC Read' : 'Material Viewed';
+                // Button for viewing material (if it exists)
+                if (material || content.isMaterialOnly) {
+                    const materialToShow = material || content;
+                    const isMaterialRead = userStatus?.readArticles?.[content.id];
+                    const viewText = main === 'RDFC' ? 'View RDFC' : 'View Material';
+                    const readText = main === 'RDFC' ? 'RDFC Read' : 'Material Viewed';
 
-                    if(isMaterialRead){ buttons.push({ key: 'material', text: readText, action: () => navigate('rdfcArticleViewer', { articleUrl: material.url, testId: test.id }), className: "action-btn-viewed", icon: <FaCheckCircle /> }); }
-                    else { buttons.push({ key: 'material', text: viewText, action: () => handleViewMaterial(material.url, test.id), className: "action-btn-view", icon: <FaBookOpen /> }); }
+                    if(isMaterialRead){ buttons.push({ key: 'material', text: readText, action: () => handleViewMaterial(materialToShow, content.id), className: "action-btn-viewed", icon: <FaCheckCircle /> }); }
+                    else { buttons.push({ key: 'material', text: viewText, action: () => handleViewMaterial(materialToShow, content.id), className: "action-btn-view", icon: <FaBookOpen /> }); }
                 }
-
-                const attempt = userAttempts[test.id];
-                if (attempt?.status === 'completed') { buttons.push({ key: 'test', text: "View Analysis", action: () => navigate('results', { attemptId: attempt.id }), className: "action-btn-analysis", icon: <FaEye /> }); }
-                else if (attempt?.status === 'in-progress') { buttons.push({ key: 'test', text: "Continue Test", action: () => navigate('test', { testId: test.id }), className: "action-btn-continue", icon: <FaPlay /> }); }
-                else { buttons.push({ key: 'test', text: "Start Test", action: () => navigate('test', { testId: test.id }), className: "action-btn-start", icon: <FaPlay /> }); }
+                
+                // Button for the test (if it's not a material-only item)
+                if (!content.isMaterialOnly) {
+                    const attempt = userAttempts[content.id];
+                    if (attempt?.status === 'completed') { buttons.push({ key: 'test', text: "View Analysis", action: () => navigate('results', { attemptId: attempt.id }), className: "action-btn-analysis", icon: <FaEye /> }); }
+                    else if (attempt?.status === 'in-progress') { buttons.push({ key: 'test', text: "Continue Test", action: () => navigate('test', { testId: content.id }), className: "action-btn-continue", icon: <FaPlay /> }); }
+                    else { buttons.push({ key: 'test', text: "Start Test", action: () => navigate('test', { testId: content.id }), className: "action-btn-start", icon: <FaPlay /> }); }
+                }
             }
             
             return (
@@ -598,24 +616,24 @@ const UserDashboard = ({ navigate }) => {
             );
         };
     
-        const typeColors = { MOCKS: 'type-tag-mock', SECTIONALS: 'type-tag-sectional', 'ADD-ONS': 'type-tag-addon', '10 MIN RC': 'type-tag-10min', RDFC: 'type-tag-rdfc' };
+        const typeColors = { MOCKS: 'type-tag-mock', SECTIONALS: 'type-tag-sectional', 'ADD-ONS': 'type-tag-addon', '10 MIN RC': 'type-tag-10min', RDFC: 'type-tag-rdfc', CHALLENGE: 'type-tag-challenge' };
         const displayType = sub ? sub : main;
     
         return (
-            <tr key={test.id} className="hover:bg-gray-700/50 transition-colors">
+            <tr key={content.id} className="hover:bg-gray-700/50 transition-colors">
                  <td className="px-6 py-4 text-sm font-medium text-white">
                     <div className="flex items-center space-x-2">
-                        <span className="font-semibold text-gray-100">{test.title}</span>
-                         {test.isFree && <span className="tag-green">Free</span>}
+                        <span className="font-semibold text-gray-100">{content.title}</span>
+                         {content.isFree && <span className="tag-green">Free</span>}
                     </div>
                  </td>
-                 {tabName === 'RDFC' && (
-                    <td className="px-6 py-4 text-sm text-gray-300">{material?.name || '-'}</td>
+                 {hasMaterials && (
+                    <td className="px-6 py-4 text-sm text-gray-300">{material?.name || (content.isMaterialOnly ? content.title : '-')}</td>
                  )}
                  <td className="px-6 py-4 text-sm text-gray-400">
                       <span className={`tag-type ${typeColors[displayType.toUpperCase()] || 'type-tag-addon'}`}>{displayType}</span>
                  </td>
-                 <td className="px-6 py-4 text-sm text-gray-400 max-w-xs truncate">{test.description || (material ? material.description : '')}</td>
+                 <td className="px-6 py-4 text-sm text-gray-400 max-w-xs truncate">{content.description || (material ? material.description : '')}</td>
                  <td className="px-6 py-4 text-sm text-center">{renderActionButtons()}</td>
             </tr>
         );
@@ -676,7 +694,8 @@ const UserDashboard = ({ navigate }) => {
         'RDFC': FaBookOpen,
         '10 Min RC': FaBolt,
         'Mocks': FaTrophy,
-        'Sectionals': FaChartPie
+        'Sectionals': FaChartPie,
+        'Challenge': FaBullseye
     };
     
     const TabButton = ({ value, label, icon: Icon }) => {
@@ -688,29 +707,30 @@ const UserDashboard = ({ navigate }) => {
                     isActive ? 'bg-white/10 text-white' : 'text-gray-400 hover:bg-white/5 hover:text-white'
                 }`}
             >
-                <Icon className="mb-1 sm:mb-0" />
+                {Icon && <Icon className="mb-1 sm:mb-0" />}
                 <span>{label}</span>
             </button>
         );
     };
 
-    const TestSection = ({ tab, tests, limit, navigate }) => {
-        if (!tests || tests.length === 0) return null;
-        const isRdfc = tab.name.includes('RDFC');
-        const headers = ['Test Title'];
-        if(isRdfc) headers.push('Article Name');
+    const ContentSection = ({ tab, content, limit, navigate }) => {
+        if (!content || content.length === 0) return null;
+        
+        const hasMaterials = content.some(item => item.isMaterialOnly || linkedMaterials[item.id]);
+        const headers = ['Title'];
+        if(hasMaterials) headers.push('Article Name');
         headers.push('Type', 'Description', 'Actions');
     
         return (
              <div className="mb-12">
                 <div className="flex items-center justify-between mb-4">
                     <h3 className="text-xl md:text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-500">{tab.name}</h3>
-                     {tests.length > limit && (
+                     {content.length > limit && (
                         <button 
-                            onClick={() => navigate('allTests', { tests: tests.map(t => ({...t, material: linkedMaterials[t.id]})), title: `All ${tab.name}`, contentType: tab.name.toUpperCase().includes('RDFC') ? 'rdfc' : 'addon' })} 
+                            onClick={() => navigate('allTests', { tests: content.map(t => ({...t, material: linkedMaterials[t.id]})), title: `All ${tab.name}` })} 
                             className="text-sm font-semibold text-blue-400 hover:text-blue-300 flex items-center space-x-1"
                         >
-                            <span>View All ({tests.length})</span> <FaArrowRight />
+                            <span>View All ({content.length})</span> <FaArrowRight />
                         </button>
                      )}
                 </div>
@@ -722,7 +742,7 @@ const UserDashboard = ({ navigate }) => {
                            </tr>
                        </thead>
                         <tbody className="bg-gray-800 divide-y divide-gray-700">
-                           {tests.slice(0, limit).map(test => renderTestRow(test, tab.name))}
+                           {content.slice(0, limit).map(item => renderContentRow(item, hasMaterials))}
                         </tbody>
                     </table>
                 </div>
@@ -853,36 +873,68 @@ const UserDashboard = ({ navigate }) => {
         );
     };
 
-    const TestCard = ({ test }) => {
-        const isScheduled = test.liveAt && test.liveAt.toDate() > new Date() && !liveTests[test.id];
-        const isLocked = getIsLocked(test);
-        const { main } = getTestCategory(test);
-        const typeColors = { MOCKS: 'border-purple-500', SECTIONALS: 'border-teal-500', 'ADD-ONS': 'border-gray-500', '10 MIN RC': 'border-rose-500', RDFC: 'border-pink-500' };
+    const ContentCard = ({ content }) => {
+        const material = linkedMaterials[content.id];
+        const isScheduled = content.liveAt && content.liveAt.toDate() > new Date() && !liveTests[content.id];
+        const isLocked = getIsLocked(content);
+        const { main } = getTestCategory(content);
+        const typeColors = { MOCKS: 'border-purple-500', SECTIONALS: 'border-teal-500', 'ADD-ONS': 'border-gray-500', '10 MIN RC': 'border-rose-500', RDFC: 'border-pink-500', CHALLENGE: 'border-yellow-500' };
         
-        let text, action, className, icon, iconClass;
-        const attempt = userAttempts[test.id];
+        const renderActionButtons = () => {
+            if (isScheduled) {
+                return <button disabled className="w-full mt-2 text-sm px-3 py-2 rounded-md flex items-center justify-center space-x-2 font-semibold text-gray-400 bg-gray-700/50"><FaHourglassHalf /><span>Coming Soon</span></button>;
+            }
+            if (isLocked) {
+                const { text, action, className, icon } = userStatus?.isSubscribed
+                    ? { text: "Upgrade", action: () => navigate('upgrade'), className: "text-purple-400", icon: <FaArrowUp /> }
+                    : { text: "Unlock", action: () => navigate('subscription'), className: "text-amber-400", icon: <FaLock /> };
+                return <button onClick={action} className={`w-full mt-2 text-sm px-3 py-2 rounded-md flex items-center justify-center space-x-2 font-semibold ${className} bg-gray-700/50 hover:bg-gray-700`}>{icon}<span>{text}</span></button>;
+            }
 
-        if (isScheduled) { text = "Coming Soon"; className = "text-gray-400"; icon = <FaHourglassHalf/>; action = () => {}; iconClass="text-gray-400";
-        } else if (isLocked) { 
-             if (userStatus?.isSubscribed) { text = "Upgrade"; action = () => navigate('upgrade'); className = "text-purple-400"; icon = <FaArrowUp />; iconClass="text-purple-400"; } 
-             else { text = "Unlock"; action = () => navigate('subscription'); className = "text-amber-400"; icon = <FaLock />; iconClass="text-amber-400"; }
-        } else if (attempt?.status === 'completed') { text = "Analysis"; action = () => navigate('results', { attemptId: attempt.id }); className = "text-green-400"; icon = <FaEye />; iconClass="text-green-400";
-        } else if (attempt?.status === 'in-progress') { text = "Continue"; action = () => navigate('test', { testId: test.id }); className = "text-orange-400"; icon = <FaPlay />; iconClass="text-orange-400";
-        } else { text = "Start"; action = () => navigate('test', { testId: test.id }); className = "text-blue-400"; icon = <FaPlay />; iconClass="text-blue-400"; }
+            let buttons = [];
+            if (material || content.isMaterialOnly) {
+                const materialToShow = material || content;
+                const isMaterialRead = userStatus?.readArticles?.[content.id];
+                const viewText = main === 'RDFC' ? 'View RDFC' : 'View Material';
+                const readText = main === 'RDFC' ? 'RDFC Read' : 'Material Viewed';
 
+                if (isMaterialRead) {
+                    buttons.push({ key: 'mat', text: readText, action: () => handleViewMaterial(materialToShow, content.id), className: "text-gray-400", icon: <FaCheckCircle /> });
+                } else {
+                    buttons.push({ key: 'mat', text: viewText, action: () => handleViewMaterial(materialToShow, content.id), className: "text-blue-400", icon: <FaBookOpen /> });
+                }
+            }
+
+            if (!content.isMaterialOnly) {
+                const attempt = userAttempts[content.id];
+                if (attempt?.status === 'completed') { buttons.push({ key: 'test', text: "Analysis", action: () => navigate('results', { attemptId: attempt.id }), className: "text-green-400", icon: <FaEye /> }); }
+                else if (attempt?.status === 'in-progress') { buttons.push({ key: 'test', text: "Continue", action: () => navigate('test', { testId: content.id }), className: "text-orange-400", icon: <FaPlay /> }); }
+                else { buttons.push({ key: 'test', text: "Start", action: () => navigate('test', { testId: content.id }), className: "text-blue-400", icon: <FaPlay /> }); }
+            }
+
+            return (
+                <div className="w-full mt-2 flex items-center space-x-2">
+                    {buttons.map(btn => (
+                        <button key={btn.key} onClick={btn.action} className={`flex-1 text-xs px-2 py-2 rounded-md flex items-center justify-center space-x-1.5 font-semibold ${btn.className} bg-gray-700/50 hover:bg-gray-700`}>
+                            {btn.icon}<span>{btn.text}</span>
+                        </button>
+                    ))}
+                </div>
+            );
+        };
+        
         return (
             <div className={`bg-gray-800 rounded-lg p-4 flex flex-col justify-between shadow-lg border-l-4 transition-all hover:shadow-2xl hover:border-gray-400 ${typeColors[main.toUpperCase()] || 'border-gray-600'}`}>
                 <div>
                     <div className="flex items-center justify-between mb-2">
                          <span className={`tag-type ${typeColors[main.toUpperCase()]?.replace('border', 'bg')}/20 ${typeColors[main.toUpperCase()]?.replace('border', 'text')}`}>{main}</span>
-                         {test.isFree && <span className="tag-green">Free</span>}
+                         {content.isFree && <span className="tag-green">Free</span>}
                     </div>
-                    <h4 className="font-bold text-white mb-1 truncate">{test.title}</h4>
-                    <p className="text-sm text-gray-400 mb-4 h-10 overflow-hidden text-ellipsis">{test.description}</p>
+                    <h4 className="font-bold text-white mb-1 truncate">{content.title}</h4>
+                    {(material || content.isMaterialOnly) && <p className="text-xs text-cyan-400 truncate mb-1">{material?.name || content.title}</p>}
+                    <p className="text-sm text-gray-400 mb-4 h-10 overflow-hidden text-ellipsis">{content.description}</p>
                 </div>
-                <button onClick={action} className={`w-full mt-2 text-sm px-3 py-2 rounded-md flex items-center justify-center space-x-2 font-semibold ${className} bg-gray-700/50 hover:bg-gray-700`}>
-                    <span className={iconClass}>{icon}</span> <span>{text}</span>
-                </button>
+                {renderActionButtons()}
             </div>
         );
     };
@@ -896,7 +948,7 @@ const UserDashboard = ({ navigate }) => {
                     className="w-full flex items-center justify-between p-4 bg-gray-800 rounded-lg text-left text-white font-semibold"
                 >
                     <div className="flex items-center space-x-3">
-                        <Icon />
+                        {Icon && <Icon />}
                         <span>{title}</span>
                     </div>
                     <FaChevronDown className={`transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`} />
@@ -919,59 +971,76 @@ const UserDashboard = ({ navigate }) => {
             </div>
         )
     };
-
-    const MobileTestListItem = ({ test, tabName }) => {
-        const material = linkedMaterials[test.id];
-        const isScheduled = test.liveAt && test.liveAt.toDate() > new Date();
-        const isLocked = getIsLocked(test);
+    
+    const MobileContentListItem = ({ content, tabName }) => {
+        const material = linkedMaterials[content.id];
+        const isScheduled = content.liveAt && content.liveAt.toDate() > new Date();
+        const isLocked = getIsLocked(content);
 
         const renderActionButtons = () => {
+            if (isScheduled) {
+                return <div className="tag-green">Coming Soon</div>;
+            }
             if (isLocked) {
                 let text, action, className, icon;
-                 if (userStatus?.isSubscribed) { text = "Upgrade"; action = () => navigate('upgrade'); className = "action-btn-upgrade"; icon = <FaArrowUp />; } 
-                 else { text = "Unlock"; action = () => navigate('subscription'); className = "action-btn-unlock"; icon = <FaLock />; }
+                 if (userStatus?.isSubscribed) { 
+                     text = "Upgrade"; 
+                     action = () => navigate('upgrade'); 
+                     className = "action-btn-upgrade"; 
+                     icon = <FaArrowUp />; 
+                 } else { 
+                     text = "Unlock"; 
+                     action = () => navigate('subscription'); 
+                     className = "action-btn-unlock"; 
+                     icon = <FaLock />; 
+                 }
                  return <button onClick={action} className={`action-btn-mobile ${className}`}>{icon}<span>{text}</span></button>;
             }
 
-            const isRdfc = tabName === 'RDFC';
             let buttons = [];
-            if(material){
-                const isMaterialRead = userStatus?.readArticles?.[test.id];
-                const viewText = isRdfc ? 'View RDFC' : 'Material';
-                const readText = isRdfc ? 'RDFC Read' : 'Viewed';
-                if(isMaterialRead){ buttons.push({key: 'mat', text: readText, action: () => navigate('rdfcArticleViewer', { articleUrl: material.url, testId: test.id }), className: "action-btn-viewed"}); }
-                else { buttons.push({key: 'mat', text: viewText, action: () => handleViewMaterial(material.url, test.id), className: "action-btn-view"}); }
+            const { main } = getTestCategory(content);
+
+            if(material || content.isMaterialOnly){
+                const materialToShow = material || content;
+                const isMaterialRead = userStatus?.readArticles?.[content.id];
+                const viewText = main === 'RDFC' ? 'View RDFC' : 'Material';
+                const readText = main === 'RDFC' ? 'RDFC Read' : 'Viewed';
+
+                if(isMaterialRead){ buttons.push({key: 'mat', text: readText, action: () => handleViewMaterial(materialToShow, content.id), className: "action-btn-viewed"}); }
+                else { buttons.push({key: 'mat', text: viewText, action: () => handleViewMaterial(materialToShow, content.id), className: "action-btn-view"}); }
             }
             
-            const attempt = userAttempts[test.id];
-            if (attempt?.status === 'completed') { buttons.push({ key: 'test', text: "Analysis", action: () => navigate('results', { attemptId: attempt.id }), className: "action-btn-analysis" }); }
-            else if (attempt?.status === 'in-progress') { buttons.push({ key: 'test', text: "Continue", action: () => navigate('test', { testId: test.id }), className: "action-btn-continue" }); }
-            else { buttons.push({ key: 'test', text: "Start", action: () => navigate('test', { testId: test.id }), className: "action-btn-start" }); }
+            if (!content.isMaterialOnly) {
+                const attempt = userAttempts[content.id];
+                if (attempt?.status === 'completed') { buttons.push({ key: 'test', text: "Analysis", action: () => navigate('results', { attemptId: attempt.id }), className: "action-btn-analysis" }); }
+                else if (attempt?.status === 'in-progress') { buttons.push({ key: 'test', text: "Continue", action: () => navigate('test', { testId: content.id }), className: "action-btn-continue" }); }
+                else { buttons.push({ key: 'test', text: "Start", action: () => navigate('test', { testId: content.id }), className: "action-btn-start" }); }
+            }
             
             return (
-                <div className="flex items-center space-x-2">
+                <div className="flex flex-col items-end space-y-2">
                     {buttons.map(btn => <button key={btn.key} onClick={btn.action} className={`action-btn-mobile ${btn.className}`}>{btn.text}</button>)}
                 </div>
-            )
+            );
         };
 
-        const { main } = getTestCategory(test);
+        const { main } = getTestCategory(content);
         const typeColors = { MOCKS: 'type-tag-mock', SECTIONALS: 'type-tag-sectional', 'ADD-ONS': 'type-tag-addon', '10 MIN RC': 'type-tag-10min', RDFC: 'type-tag-rdfc' };
 
         return (
-            <div className="flex items-center justify-between py-3 border-b border-gray-700 last:border-0">
+            <div className="flex items-start justify-between py-3 border-b border-gray-700 last:border-0">
                 <div className="flex-1 min-w-0 pr-2">
-                    <p className="text-white font-semibold truncate flex items-center space-x-2">
-                        <span>{test.title}</span>
-                        {test.isFree && <span className="tag-green">Free</span>}
+                    <p className="text-white font-semibold flex items-center space-x-2">
+                        <span>{content.title}</span>
+                        {content.isFree && <span className="tag-green">Free</span>}
                     </p>
-                    {tabName === 'RDFC' ? 
-                        <p className="text-gray-400 text-sm">{material?.name || ''}</p> 
+                    {material || content.isMaterialOnly ? 
+                        <p className="text-gray-400 text-sm">{material?.name || content.title}</p> 
                         : <p className={`tag-type mt-1 ${typeColors[main.toUpperCase()] || 'type-tag-addon'}`}>{main}</p>
                     }
                 </div>
-                <div className="flex-shrink-0 flex items-center space-x-2">
-                    {isScheduled ? (<div className="tag-green">Coming Soon</div>) : renderActionButtons() }
+                <div className="flex-shrink-0">
+                    {renderActionButtons()}
                 </div>
             </div>
         );
@@ -984,12 +1053,12 @@ const UserDashboard = ({ navigate }) => {
     const currentActiveTabData = managedTabs.find(t => t.name === activeTab);
     const hasSubTabs = currentActiveTabData && currentActiveTabData.subTabs && currentActiveTabData.subTabs.length > 0;
 
-    const allCategorizedTests = Object.values(testsByTab).flatMap(tab => {
-        const mainTests = tab.tests;
-        const subTabTests = tab.subTabs ? Object.values(tab.subTabs).flatMap(sub => sub.tests) : [];
-        return [...mainTests, ...subTabTests];
+    const allCategorizedContent = Object.values(contentByTab).flatMap(tab => {
+        const mainContent = tab.content;
+        const subTabContent = tab.subTabs ? Object.values(tab.subTabs).flatMap(sub => sub.content) : [];
+        return [...mainContent, ...subTabContent];
     });
-    const recentTests = [...allCategorizedTests].sort((a,b) => (b.createdAt?.toDate() || 0) - (a.createdAt?.toDate() || 0)).slice(0,3);
+    const recentContent = [...allCategorizedContent].sort((a,b) => (b.createdAt?.toDate() || 0) - (a.createdAt?.toDate() || 0)).slice(0,3);
 
     return (
         <div className="max-w-7xl mx-auto px-4">
@@ -1003,7 +1072,7 @@ const UserDashboard = ({ navigate }) => {
                 min-width: 120px;
             }
             .action-btn .btn-text { @apply font-semibold; }
-            .action-btn-mobile { @apply text-xs px-3 py-1.5 rounded-md font-semibold transition-all duration-300 flex items-center justify-center space-x-1; }
+            .action-btn-mobile { @apply text-xs px-3 py-1.5 rounded-md font-semibold transition-all duration-300 flex items-center justify-center space-x-1 w-full; }
             
             .action-btn-start, .action-btn-view { 
                 color: #60a5fa; 
@@ -1077,6 +1146,7 @@ const UserDashboard = ({ navigate }) => {
             .type-tag-addon { background-color: #6b728020; color: #d1d5db; border-color: #6b728080; }
             .type-tag-10min { background-color: #e11d4820; color: #fda4af; border-color: #e11d4880; }
             .type-tag-rdfc { background-color: #db277720; color: #fbcfe8; border-color: #db277780; }
+            .type-tag-challenge { background-color: #f59e0b20; color: #fcd34d; border-color: #f59e0b80; }
             
         `}</style>
              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6">
@@ -1098,8 +1168,8 @@ const UserDashboard = ({ navigate }) => {
                 {hasSubTabs && (
                     <div className="mb-8 p-1.5 bg-gray-800/50 rounded-lg flex flex-wrap items-center space-x-2">
                         {currentActiveTabData.subTabs.map(subTab => {
-                             const subTests = testsByTab[activeTab]?.subTabs[subTab.name]?.tests || [];
-                             if (subTests.length === 0) return null;
+                             const subContent = contentByTab[activeTab]?.subTabs[subTab.name]?.content || [];
+                             if (subContent.length === 0) return null;
                              return (
                                 <button key={subTab.name} onClick={() => setActiveSubTab(subTab.name)} className={`px-3 py-1 text-sm font-semibold rounded-md transition-colors ${activeSubTab === subTab.name ? 'bg-white/10 text-white' : 'text-gray-400 hover:bg-white/5'}`}>
                                     {subTab.name}
@@ -1120,7 +1190,7 @@ const UserDashboard = ({ navigate }) => {
                             <div>
                                 <h3 className="text-xl md:text-2xl font-bold text-white mb-4">Quick Access</h3>
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                    {recentTests.map(test => <TestCard key={test.id} test={test} />)}
+                                    {recentContent.map(item => <ContentCard key={item.id} content={item} />)}
                                 </div>
                             </div>
                         </div>
@@ -1129,21 +1199,21 @@ const UserDashboard = ({ navigate }) => {
                     
                     {visibleTabs.map(tab => {
                         if (activeTab !== tab.name) return null;
-                        const testsForTab = testsByTab[tab.name];
-                        let testsToShow = [];
+                        const contentForTab = contentByTab[tab.name];
+                        let contentToShow = [];
 
                         if(!activeSubTab){
-                            const subTabTests = Object.values(testsForTab.subTabs).flatMap(s => s.tests);
-                            testsToShow = [...testsForTab.tests, ...subTabTests];
+                            const subTabContent = Object.values(contentForTab.subTabs).flatMap(s => s.content);
+                            contentToShow = [...contentForTab.content, ...subTabContent];
                         } else {
-                            testsToShow = testsForTab.subTabs[activeSubTab]?.tests || [];
+                            contentToShow = contentForTab.subTabs[activeSubTab]?.content || [];
                         }
 
                         return (
                             <div key={tab.id}>
-                                <TestSection 
+                                <ContentSection 
                                     tab={{name: hasSubTabs && activeSubTab ? `${tab.name} / ${activeSubTab}` : tab.name }}
-                                    tests={testsToShow}
+                                    content={contentToShow}
                                     limit={10}
                                     navigate={navigate}
                                 />
@@ -1164,15 +1234,15 @@ const UserDashboard = ({ navigate }) => {
                 </div>
                 <AccordionSection title="Performance" icon={FaChartLine} sectionKey="performance"><PerformanceContent /></AccordionSection>
                 {visibleTabs.map(tab => {
-                    const testsForTab = testsByTab[tab.name];
-                    const allTestsInTab = [...testsForTab.tests, ...(tab.subTabs ? Object.values(testsForTab.subTabs).flatMap(s => s.tests) : [])];
+                    const contentForTab = contentByTab[tab.name];
+                    const allContentInTab = [...contentForTab.content, ...(tab.subTabs ? Object.values(contentForTab.subTabs).flatMap(s => s.content) : [])];
 
                     return (
                         <AccordionSection key={tab.id} title={tab.name} icon={iconMap[tab.name] || FaVial} sectionKey={tab.id}>
-                            {allTestsInTab.slice(0, 10).map(test => <MobileTestListItem key={test.id} test={test} tabName={tab.name} /> )}
-                            {allTestsInTab.length > 10 && (
-                                <button onClick={() => navigate('allTests', { tests: allTestsInTab.map(t => ({...t, material: linkedMaterials[t.id]})), title: `All ${tab.name}`, contentType: tab.name.toUpperCase().includes('RDFC') ? 'rdfc' : 'addon' })} className="text-blue-400 font-semibold text-sm mt-2 w-full text-center">
-                                    View All {allTestsInTab.length} Items...
+                            {allContentInTab.slice(0, 10).map(item => <MobileContentListItem key={item.id} content={item} tabName={tab.name} /> )}
+                            {allContentInTab.length > 10 && (
+                                <button onClick={() => navigate('allTests', { tests: allContentInTab.map(t => ({...t, material: linkedMaterials[t.id]})), title: `All ${tab.name}` })} className="text-blue-400 font-semibold text-sm mt-2 w-full text-center">
+                                    View All {allContentInTab.length} Items...
                                 </button>
                             )}
                         </AccordionSection>
