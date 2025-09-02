@@ -15,7 +15,6 @@ const safeToDate = (timestamp) => {
     return null;
 };
 
-
 // --- Reusable Input for Settings Modal ---
 const FormInput = ({ label, type = 'number', value, onChange, placeholder = '' }) => (
     <div>
@@ -97,12 +96,17 @@ export default function Earnings() {
         }
 
         const listeners = [];
+        
+        // Use a single variable to store both auto and manual items before setting state
+        let currentUnsettled = [];
+        let currentSettled = [];
 
-        // --- Listeners for AUTOMATED system (transactions collection) ---
+        // --- Listener for AUTOMATED system (transactions collection) ---
         const unsettledTxQuery = query(collection(db, "transactions"), where("status", "==", "unsettled"), orderBy("createdAt", "desc"));
         const unsubUnsettledTx = onSnapshot(unsettledTxQuery, (snapshot) => {
             const autoTransactions = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), type: 'transaction' }));
-            setUnsettledItems(prev => [...autoTransactions, ...prev.filter(item => item.type !== 'transaction')]);
+            currentUnsettled = [...autoTransactions, ...currentUnsettled.filter(item => item.type !== 'transaction')];
+            setUnsettledItems(currentUnsettled);
             setLoading(false);
         }, (err) => console.error("Error fetching unsettled transactions:", err));
         listeners.push(unsubUnsettledTx);
@@ -110,24 +114,34 @@ export default function Earnings() {
         const settledTxQuery = query(collection(db, "transactions"), where("status", "==", "settled"), orderBy("settledAt", "desc"));
         const unsubSettledTx = onSnapshot(settledTxQuery, (snapshot) => {
             const autoSettled = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), type: 'transaction' }));
-            setSettledItems(prev => [...autoSettled, ...prev.filter(item => item.type !== 'transaction')]);
+            currentSettled = [...autoSettled, ...currentSettled.filter(item => item.type !== 'transaction')];
+            setSettledItems(currentSettled);
         }, (err) => console.error("Error fetching settled transactions:", err));
         listeners.push(unsubSettledTx);
 
-        // --- Listeners for MANUAL system (users & adminSettings) ---
-        const subscribedUsersQuery = query(collection(db, 'users'), where('isSubscribed', '==', true));
-        const unsubManualUsers = onSnapshot(subscribedUsersQuery, async () => {
+        // --- Listener for MANUAL system (users & adminSettings) ---
+        // FIX: The core logic change is here. We get the latest auto transactions first to cross-reference
+        const unsubManualUsers = onSnapshot(collection(db, 'users'), async () => {
              try {
-                const usersSnapshot = await getDocs(subscribedUsersQuery);
+                const usersSnapshot = await getDocs(query(collection(db, 'users'), where('isSubscribed', '==', true)));
                 const settledUsersRef = collection(db, 'adminSettings', userData.uid, 'settledUsers');
                 const settledDocs = await getDocs(settledUsersRef);
                 const settledMap = new Map(settledDocs.docs.map(doc => [doc.id, doc.data()]));
+                
+                // Get all automated transactions to filter out duplicate manual entries
+                const allAutoTransactions = await getDocs(collection(db, 'transactions'));
+                const autoTransactionUserIds = new Set(allAutoTransactions.docs.map(doc => doc.data().userId));
 
                 const manualUnsettled = [];
                 const manualSettled = [];
 
                 usersSnapshot.docs.forEach(doc => {
                     const user = { id: doc.id, ...doc.data() };
+                    // FIX: Skip user if they have a purchase and an automated transaction exists for them
+                    // This is the key change to prevent manual duplicates for auto payments.
+                    if (user.purchaseDate && autoTransactionUserIds.has(user.id)) {
+                        return;
+                    }
                     if (!user.planPrice && !user.pricePaid) return; // Skip users without a price
 
                     const commonData = {
@@ -138,7 +152,6 @@ export default function Earnings() {
                     if (settledMap.has(user.id)) {
                         manualSettled.push({ ...commonData, settledAt: settledMap.get(user.id).settledAt });
                     } else {
-                        // FIX: Use user.purchaseDate which is expected to be a Timestamp.
                         manualUnsettled.push({ ...commonData, createdAt: user.purchaseDate || null });
                     }
                 });
