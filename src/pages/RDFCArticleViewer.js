@@ -1,16 +1,26 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../firebase/config';
-import { useAuth } from '../contexts/AuthContext';
-import { FaArrowLeft, FaExpand } from 'react-icons/fa';
+import { FaArrowLeft, FaExpand, FaDownload } from 'react-icons/fa';
 
 const RDFCArticleViewer = ({ navigate, articleUrl, testId }) => {
-    const { user } = useAuth();
-    const [test, setTest] = useState(null);
-    const [article, setArticle] = useState(null);
     const [loading, setLoading] = useState(true);
     const [isFullScreen, setIsFullScreen] = useState(false);
     const viewerRef = useRef(null);
+
+    // --- NEW: Function to convert a Google Drive preview link to a direct download link ---
+    const getDirectDownloadLink = (url) => {
+        if (!url || typeof url !== 'string') return null;
+        // This regex finds the file ID in various Google Drive URL formats
+        const match = url.match(/drive\.google\.com\/(?:file\/d\/|open\?id=)([a-zA-Z0-9_-]+)/);
+        if (match && match[1]) {
+            const fileId = match[1];
+            return `https://drive.google.com/uc?export=download&id=${fileId}`;
+        }
+        return null; // Return null if it's not a recognizable Google Drive link
+    };
+
+    const downloadLink = getDirectDownloadLink(articleUrl);
 
     // Detect full-screen changes
     useEffect(() => {
@@ -26,42 +36,17 @@ const RDFCArticleViewer = ({ navigate, articleUrl, testId }) => {
         document.addEventListener('webkitfullscreenchange', handleFullScreenChange);
         document.addEventListener('msfullscreenchange', handleFullScreenChange);
 
+        // Simulate loading completion
+        const timer = setTimeout(() => setLoading(false), 500);
+
         return () => {
+            clearTimeout(timer);
             document.removeEventListener('fullscreenchange', handleFullScreenChange);
             document.removeEventListener('webkitfullscreenchange', handleFullScreenChange);
             document.removeEventListener('msfullscreenchange', handleFullScreenChange);
         };
     }, []);
 
-    // Fetch test and article data
-    useEffect(() => {
-        if (!testId) {
-            console.error("RDFCArticleViewer: testId prop is missing.");
-            setLoading(false);
-            return;
-        }
-
-        const fetchData = async () => {
-            setLoading(true);
-            try {
-                const testRef = doc(db, 'tests', testId);
-                const testSnap = await getDoc(testRef);
-                if (testSnap.exists()) {
-                    setTest({ id: testSnap.id, ...testSnap.data() });
-                }
-                const articleRef = doc(db, 'rdfcArticles', testId);
-                const articleSnap = await getDoc(articleRef);
-                if (articleSnap.exists()) {
-                    setArticle(articleSnap.data());
-                }
-            } catch (error) {
-                console.error("Error fetching component data:", error);
-            } finally {
-                setLoading(false);
-            }
-        };
-        fetchData();
-    }, [testId]);
 
     const handleFullScreenToggle = () => {
         const elem = viewerRef.current;
@@ -152,7 +137,7 @@ const RDFCArticleViewer = ({ navigate, articleUrl, testId }) => {
                 </div>
             ) : (
                 <>
-                    <div className="absolute top-3 left-3 z-10">
+                    <div className="absolute top-3 left-3 z-10 flex items-center space-x-2">
                         <button
                             onClick={handleBack}
                             className="flex items-center space-x-2 text-sm font-semibold text-gray-300 hover:text-white bg-gray-800 hover:bg-gray-700 px-3 py-1.5 rounded-lg shadow-md"
@@ -160,11 +145,25 @@ const RDFCArticleViewer = ({ navigate, articleUrl, testId }) => {
                             <FaArrowLeft />
                             <span>Dashboard</span>
                         </button>
+                        {/* --- NEW: Download button --- */}
+                        {downloadLink && (
+                             <a
+                                href={downloadLink}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                download
+                                className="flex items-center space-x-2 text-sm font-semibold text-gray-300 hover:text-white bg-gray-800 hover:bg-gray-700 px-3 py-1.5 rounded-lg shadow-md"
+                            >
+                                <FaDownload />
+                                <span>Download PDF</span>
+                            </a>
+                        )}
                     </div>
                     <div className="flex-1 w-full h-full flex items-center justify-center overflow-hidden">
                         <iframe
                             src={articleUrl}
                             className="w-full h-full border-0"
+                            title="RDFC Article"
                             style={{ backgroundColor: 'white', display: 'block' }}
                         ></iframe>
                     </div>
