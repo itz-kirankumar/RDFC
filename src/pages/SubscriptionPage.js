@@ -195,7 +195,7 @@ const SubscriptionPage = ({ navigate, embedded = false, onGuestSubscribe, pendin
             currency: "INR",
             name: `${plan.name} - ${selectedTier.durationText}`,
             description: `Subscription for ${plan.name}`,
-            image: "https://rdfctest.site/logo.png",
+            image: "https://i.postimg.cc/fy6n7jd3/RDFC.jpg",
             handler: function (response) {
                 // --- FIX: Immediately store the tier ID in session storage on success ---
                 sessionStorage.setItem('lastPurchasedTierId', selectedTier.id);

@@ -145,7 +145,7 @@ const UpgradePage = ({ navigate }) => {
 
         const options = {
             key: razorpayKeyId, amount: currentPrice * 100, currency: "INR", name: `${plan.name} - ${selectedTier.durationText}`,
-            description: `Upgrade to ${plan.name}`, image: "https://rdfctest.site/logo.png",
+            description: `Upgrade to ${plan.name}`, image: "https://i.postimg.cc/fy6n7jd3/RDFC.jpg",
             handler: function (response) {
                 sessionStorage.setItem('lastPurchasedTierId', selectedTier.id);
                 setPaymentState({ status: 'processing', message: 'Verifying payment...' });
