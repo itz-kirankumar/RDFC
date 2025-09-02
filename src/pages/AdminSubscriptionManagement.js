@@ -26,6 +26,7 @@ const PlanManagementModal = ({ isOpen, setIsOpen, planToEdit, handleSavePlan }) 
     const [editMode, setEditMode] = useState(false);
     const [currentPlanId, setCurrentPlanId] = useState(null);
     const [planName, setPlanName] = useState('');
+    const [planType, setPlanType] = useState('Primary'); // <-- NEW STATE
     const [isRecommended, setIsRecommended] = useState(false);
     const [order, setOrder] = useState('');
     const [features, setFeatures] = useState([{ id: nanoid(), title: '' }]);
@@ -49,6 +50,7 @@ const PlanManagementModal = ({ isOpen, setIsOpen, planToEdit, handleSavePlan }) 
             setEditMode(true);
             setCurrentPlanId(planToEdit.id);
             setPlanName(planToEdit.name || '');
+            setPlanType(planToEdit.type || 'Primary'); // <-- SET PLAN TYPE
             setIsRecommended(planToEdit.isRecommended || false);
             setOrder(planToEdit.order || '');
             setFeatures(planToEdit.features?.map(f => ({ id: f.id || nanoid(), title: f.title })) || [{ id: nanoid(), title: '' }]);
@@ -68,6 +70,7 @@ const PlanManagementModal = ({ isOpen, setIsOpen, planToEdit, handleSavePlan }) 
 
     const resetForm = () => {
         setPlanName('');
+        setPlanType('Primary'); // <-- RESET PLAN TYPE
         setIsRecommended(false);
         setOrder('');
         setFeatures([{ id: nanoid(), title: '' }]);
@@ -108,6 +111,7 @@ const PlanManagementModal = ({ isOpen, setIsOpen, planToEdit, handleSavePlan }) 
 
         const planData = {
             name: planName,
+            type: planType, // <-- SAVE PLAN TYPE
             isRecommended: isRecommended,
             order: parseInt(order),
             features: features.filter(f => f.title.trim() !== ''),
@@ -141,8 +145,16 @@ const PlanManagementModal = ({ isOpen, setIsOpen, planToEdit, handleSavePlan }) 
                             <div className="p-4 border border-gray-700 rounded-lg space-y-4">
                                 <h4 className="text-white font-semibold">Main Plan Details</h4>
                                 <FormInput label="Plan Name" value={planName} onChange={e => setPlanName(e.target.value)} placeholder="e.g., RDFC Articles Access" />
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                                     <FormInput label="Display Order" type="number" value={order} onChange={e => setOrder(e.target.value)} placeholder="e.g., 1" />
+                                    {/* --- NEW: PLAN TYPE SELECTOR --- */}
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-300 mb-1">Plan Type</label>
+                                        <select value={planType} onChange={e => setPlanType(e.target.value)} className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-blue-500 focus:ring focus:ring-blue-500 focus:ring-opacity-50 transition">
+                                            <option value="Primary">Primary Subscription</option>
+                                            <option value="Upgrade">Upgrade</option>
+                                        </select>
+                                    </div>
                                     <div className="flex items-end pb-2">
                                         <input type="checkbox" checked={isRecommended} onChange={e => setIsRecommended(e.target.checked)} className="rounded h-5 w-5 text-amber-500 focus:ring-amber-500" />
                                         <label className="ml-2 text-gray-300 text-sm">Mark as Recommended</label>
@@ -348,7 +360,7 @@ export default function AdminSubscriptionManagement() {
                         <div className="flex justify-between items-start">
                             <div>
                                 <p className="text-lg font-bold text-white">{plan.name}</p>
-                                <p className="text-sm text-gray-400">Order: {plan.order}</p>
+                                <p className="text-sm text-gray-400">Order: {plan.order} | Type: {plan.type || 'Primary'}</p>
                             </div>
                             {plan.isRecommended && <span className="px-2 py-1 text-xs font-semibold rounded-full bg-green-800 text-green-100">Recommended</span>}
                         </div>
@@ -379,7 +391,7 @@ export default function AdminSubscriptionManagement() {
                     <table className="min-w-full divide-y divide-gray-700">
                         <thead className="bg-gray-700/50">
                             <tr>
-                                {['Order', 'Plan Name', 'Tiers', 'Recommended', 'Active', 'Actions'].map(h => 
+                                {['Order', 'Plan Name', 'Type', 'Tiers', 'Recommended', 'Active', 'Actions'].map(h => 
                                     <th key={h} className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">{h}</th>
                                 )}
                             </tr>
@@ -389,6 +401,7 @@ export default function AdminSubscriptionManagement() {
                                 <tr key={plan.id}>
                                     <td className="px-6 py-4 text-sm text-white">{plan.order}</td>
                                     <td className="px-6 py-4 text-sm font-medium text-white">{plan.name}</td>
+                                    <td className="px-6 py-4 text-sm text-gray-400">{plan.type || 'Primary'}</td>
                                     <td className="px-6 py-4 text-sm text-gray-400">{plan.tiers?.length || 0}</td>
                                     <td className="px-6 py-4 text-sm">
                                         <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${plan.isRecommended ? 'bg-green-800 text-green-100' : 'bg-gray-700 text-gray-300'}`}>{plan.isRecommended ? 'Yes' : 'No'}</span>

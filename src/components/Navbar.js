@@ -169,10 +169,13 @@ const Navbar = ({ navigate, bannerHeight = 0 }) => {
     // Trigger confetti on achievement level-up
     useEffect(() => {
         const checkAchievements = async () => {
-            if (!userData?.achievements) return;
+            // FIX: Ensure user and achievements exist before proceeding.
+            // This prevents a crash on logout when the 'user' object becomes null.
+            if (!user || !userData?.achievements) return;
+
             const userRef = doc(db, 'users', user.uid);
             const userSnap = await getDoc(userRef);
-            if (!userSnap.exists) return;
+            if (!userSnap.exists()) return; // Also corrected .exists to .exists()
 
             const previousAchievements = userSnap.data().achievements || {};
 
@@ -186,7 +189,7 @@ const Navbar = ({ navigate, bannerHeight = 0 }) => {
             }
         };
         checkAchievements();
-    }, [userData]);
+    }, [user, userData]); // FIX: Added 'user' to the dependency array
 
     // Show discovery tooltip for new users
     useEffect(() => {

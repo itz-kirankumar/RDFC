@@ -1,5 +1,5 @@
 import React from 'react';
-import { FaTicketAlt, FaUsers, FaListAlt, FaChartLine, FaTags, FaStar, FaSpellCheck, FaSitemap } from 'react-icons/fa'; // Import more icons for visual appeal
+import { FaTicketAlt, FaUsers, FaListAlt, FaChartLine, FaTags, FaStar, FaSpellCheck, FaSitemap, FaLink } from 'react-icons/fa'; // Added FaLink
 
 const AdminDashboard = ({ navigate }) => {
     
@@ -63,6 +63,13 @@ const AdminDashboard = ({ navigate }) => {
                     description="Manage subscription plans, pricing, and features."
                     icon={<FaTags className="text-gray-500 text-3xl"/>}
                 />
+                 <DashboardCard 
+                    onClick={() => navigate('planMapper')} 
+                    title="Plan Access Mapper"
+                    description="Link plans to specific tabs to automate user access."
+                    icon={<FaLink className="text-blue-400 text-3xl"/>}
+                    special
+                />
                 <DashboardCard 
                     onClick={() => navigate('manageReviews')} 
                     title="Manage Reviews"
@@ -73,15 +80,12 @@ const AdminDashboard = ({ navigate }) => {
                     onClick={() => navigate('manageVocab')} 
                     title="Vocab Manager"
                     description="Create and manage daily vocabulary wordlists for users."
-                    special // This prop applies the special styling
                 />
                 <DashboardCard 
                     onClick={() => navigate('manageSupport')} 
                     title="Support Center"
                     description="View and respond to user support tickets."
                     icon={<FaTicketAlt className="text-cyan-400 text-3xl"/>}
-                    // Using a different base style for this special card
-                    className="bg-cyan-800 ring-2 ring-cyan-500"
                 />
             </div>
         </div>

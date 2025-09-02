@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { db } from '../firebase/config';
-import { collection, query, where, orderBy, onSnapshot, limit, getCountFromServer } from 'firebase/firestore';
+import { collection, query, where, orderBy, onSnapshot, limit } from 'firebase/firestore';
 import { FaFire, FaCheckCircle, FaRegCircle, FaSnowflake, FaArrowLeft, FaGift, FaTrophy, FaShieldAlt, FaStar } from 'react-icons/fa';
 import { motion } from 'framer-motion';
 
@@ -61,7 +61,7 @@ const WeeklyProgress = ({ completedDays, frozenDay }) => {
     );
 };
 
-const StreakFreezeCard = ({ freezes, lastFreezeUsed, currentStreak }) => {
+const StreakFreezeCard = ({ freezes, lastFreezeUsed }) => {
     const today = new Date(); today.setHours(0, 0, 0, 0);
     const yesterday = new Date(); yesterday.setDate(today.getDate() - 1); yesterday.setHours(0, 0, 0, 0);
     const isFreezeActive = lastFreezeUsed && lastFreezeUsed.toDate().setHours(0, 0, 0, 0) === yesterday.getTime();
@@ -165,7 +165,10 @@ const StreaksPage = ({ navigate }) => {
 
     useEffect(() => {
         if (!user?.uid) return;
+        
+        // This query fetches the user's completed tests to display checkmarks for the current week.
         const q = query(collection(db, 'attempts'), where('userId', '==', user.uid), where('status', '==', 'completed'), orderBy('completedAt', 'desc'));
+        
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const today = new Date();
             const startOfWeek = new Date(today);
@@ -189,17 +192,16 @@ const StreaksPage = ({ navigate }) => {
         return <div className="text-center p-10">Loading...</div>;
     }
     
-    // FIX: Determine which day a streak freeze was used, ONLY if it was this week.
+    // Determine which day a streak freeze was used, if it was used this week.
     let lastFreezeUsedDayThisWeek = null;
     if (userData.lastFreezeUsed) {
         const lastFreezeDate = userData.lastFreezeUsed.toDate();
-        
         const today = new Date();
         const startOfWeek = new Date(today);
         startOfWeek.setDate(today.getDate() - today.getDay());
         startOfWeek.setHours(0, 0, 0, 0);
 
-        // Check if the freeze was used on or after the start of this week
+        // Check if the freeze was used on or after the start of this week to display it correctly.
         if (lastFreezeDate >= startOfWeek) {
             lastFreezeUsedDayThisWeek = lastFreezeDate.getDay();
         }
@@ -222,7 +224,7 @@ const StreaksPage = ({ navigate }) => {
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
                     <WeeklyProgress completedDays={completedDays} frozenDay={lastFreezeUsedDayThisWeek} />
-                    <StreakFreezeCard freezes={userData.streakFreezes || 0} lastFreezeUsed={userData.lastFreezeUsed} currentStreak={userData.currentStreak || 0} />
+                    <StreakFreezeCard freezes={userData.streakFreezes || 0} lastFreezeUsed={userData.lastFreezeUsed} />
                 </div>
                 
                 <div className="mb-6">

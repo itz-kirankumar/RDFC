@@ -1,10 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Fragment } from 'react';
 import { collection, onSnapshot, query, orderBy, where } from 'firebase/firestore';
 import { db } from '../firebase/config';
-import { nanoid } from 'nanoid';
+import { useAuth } from '../contexts/AuthContext';
+import { Dialog, Transition } from '@headlessui/react';
+import { ShieldExclamationIcon, CheckCircleIcon } from '@heroicons/react/24/outline';
+import { FaCheckCircle } from 'react-icons/fa';
 
-// --- Reusable Components ---
 
+// --- (No changes to these reusable components) ---
 const CountdownTimer = ({ targetDate, offerName }) => {
     const calculateTimeLeft = () => {
         const difference = +new Date(targetDate) - +new Date();
@@ -19,212 +22,305 @@ const CountdownTimer = ({ targetDate, offerName }) => {
         }
         return timeLeft;
     };
-
     const [timeLeft, setTimeLeft] = useState(calculateTimeLeft());
-
     useEffect(() => {
         if (!targetDate) return;
-        const timer = setInterval(() => {
-            setTimeLeft(calculateTimeLeft());
-        }, 1000);
+        const timer = setInterval(() => setTimeLeft(calculateTimeLeft()), 1000);
         return () => clearInterval(timer);
     }, [targetDate]);
-
     const formatTime = (time) => String(time || 0).padStart(2, '0');
-
     if (Object.keys(timeLeft).length === 0) return null;
-
     return (
-        <div className="my-3 text-center">
-             <p className="text-xs font-bold text-amber-400 animate-pulse">{offerName || 'Offer Ends In'}</p>
-             <p className="font-mono text-base text-amber-400">
+        <div className="my-3 text-center animate-pulse">
+            <p className="text-xs font-bold text-amber-400">{offerName || 'Offer Ends In'}</p>
+            <p className="font-mono text-base text-amber-400">
                 {timeLeft.days ? `${timeLeft.days}d ` : ''}
                 {formatTime(timeLeft.hours)}h : {formatTime(timeLeft.minutes)}m : {formatTime(timeLeft.seconds)}s
             </p>
         </div>
     );
 };
-
 const calculateDiscountPercentage = (originalPrice, newPrice) => {
     if (!originalPrice || !newPrice || originalPrice <= newPrice) return 0;
     return Math.round(((originalPrice - newPrice) / originalPrice) * 100);
 };
-
-const handleSubscribeClick = (checkoutLink) => {
-    if (checkoutLink) {
-        window.open(checkoutLink, '_blank');
-    } else {
-        const defaultMessage = "Hi, I'm interested in a subscription plan.";
-        const whatsappLink = `https://wa.me/919092112941?text=${encodeURIComponent(defaultMessage)}`;
-        window.open(whatsappLink, '_blank');
-    }
-};
-
-// --- Card Component ---
-
-const PlanCard = ({ plan }) => {
-    const [selectedTierId, setSelectedTierId] = useState(plan.tiers?.[0]?.id || null);
-    
-    const selectedTier = plan.tiers.find(t => t.id === selectedTierId) || plan.tiers[0];
-    const isOfferActiveForSelected = selectedTier.hasOffer && selectedTier.offerEndTime && new Date(selectedTier.offerEndTime.toDate()) > new Date();
-    const finalCheckoutLink = isOfferActiveForSelected && selectedTier.offerCheckoutLink ? selectedTier.offerCheckoutLink : selectedTier.checkoutLink;
-    
+const PlanCard = ({ plan, userData, navigate, onGuestSubscribe, initiatePaymentForLoggedInUser }) => {
+    const [selectedTier, setSelectedTier] = useState(plan.tiers && plan.tiers.length > 0 ? plan.tiers[0] : null);
     const firstActiveOfferTier = plan.tiers.find(tier => 
         tier.hasOffer && tier.offerEndTime && new Date(tier.offerEndTime.toDate()) > new Date()
     );
-
+    const handleSubscribeClick = () => {
+        if (userData) {
+            initiatePaymentForLoggedInUser(plan, selectedTier, userData);
+        } else if (onGuestSubscribe) {
+            onGuestSubscribe({ plan, selectedTier });
+        }
+    };
+    if (!plan.tiers || plan.tiers.length === 0) return null;
     return (
-        <div className={`relative bg-gray-900/70 backdrop-blur-sm rounded-2xl p-5 flex flex-col w-full md:w-[360px] transition-all duration-300 ease-in-out transform hover:scale-[1.03] ${plan.isRecommended ? 'border-2 border-amber-400 shadow-[0_0_20px_rgba(252,211,77,0.4)]' : 'border border-gray-700'}`}>
+        <div className={`relative bg-gray-900/70 backdrop-blur-sm rounded-2xl p-5 flex flex-col w-full max-w-sm transition-all duration-300 ease-in-out transform hover:scale-[1.03] ${plan.isRecommended ? 'border-2 border-amber-400 shadow-[0_0_20px_rgba(252,211,77,0.4)]' : 'border border-gray-700'}`}>
             {plan.isRecommended && <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-amber-400 text-gray-900 font-bold px-3 py-1 text-xs rounded-full shadow-md z-10">Recommended</div>}
-            
             <div className="flex-grow">
-                <div className="text-center mt-2">
-                    <h2 className="text-xl font-bold text-white">{plan.name}</h2>
-                    {firstActiveOfferTier?.offerName && <p className="text-amber-400 mt-1 text-sm font-semibold">{firstActiveOfferTier.offerName}</p>}
-                </div>
-                
-                {firstActiveOfferTier && (
-                     <CountdownTimer 
-                        targetDate={firstActiveOfferTier.offerEndTime.toDate()} 
-                    />
-                )}
-                
+                <div className="text-center mt-2"><h2 className="text-xl font-bold text-white">{plan.name}</h2>{firstActiveOfferTier?.offerName && <p className="text-amber-400 mt-1 text-sm font-semibold">{firstActiveOfferTier.offerName}</p>}</div>
+                {firstActiveOfferTier && (<CountdownTimer targetDate={firstActiveOfferTier.offerEndTime.toDate()} />)}
                 <div className="my-4 space-y-2">
                     {plan.tiers.map(tier => {
                         const isOfferActive = tier.hasOffer && tier.offerEndTime && new Date(tier.offerEndTime.toDate()) > new Date();
-                        const currentPrice = isOfferActive && tier.offerPrice ? tier.offerPrice : tier.price;
-                        const tierDiscount = calculateDiscountPercentage(tier.originalPrice, currentPrice);
-                        const isSelected = tier.id === selectedTierId;
-
+                        const currentPrice = isOfferActive ? tier.offerPrice : tier.price;
+                        const originalPrice = tier.originalPrice || (isOfferActive ? tier.price : null);
+                        const tierDiscount = calculateDiscountPercentage(originalPrice, currentPrice);
+                        const isSelected = tier.id === selectedTier?.id;
                         return (
-                            <button 
-                                key={tier.id} 
-                                onClick={() => setSelectedTierId(tier.id)} 
-                                className={`w-full p-2.5 rounded-lg text-left flex justify-between items-center transition-all duration-300 ease-in-out
-                                    ${isSelected ? 'bg-amber-500 text-gray-900 scale-105 shadow-lg' : 'bg-gray-700/80 hover:bg-gray-600/70 text-white'}`}
-                            >
-                                <div className="flex items-center space-x-2">
-                                    <span className="font-semibold text-sm">{tier.durationText}</span>
-                                    {tierDiscount > 0 && <span className="bg-red-600 text-white text-xs font-bold px-2 py-0.5 rounded-full">{tierDiscount}% OFF</span>}
-                                </div>
-                                <div className="flex items-baseline space-x-1.5">
-                                    {tierDiscount > 0 && <span className={`text-xs ${isSelected ? 'text-gray-800' : 'text-gray-500'} line-through`}>₹{tier.originalPrice}</span>}
-                                    <span className={`font-bold text-base ${isSelected ? 'text-gray-900' : 'text-amber-400'}`}>₹{currentPrice}</span>
-                                </div>
-                            </button>
+                            <button key={tier.id} onClick={() => setSelectedTier(tier)} className={`w-full p-2.5 rounded-lg text-left flex justify-between items-center transition-all duration-300 ease-in-out ${isSelected ? 'bg-amber-500 text-gray-900 scale-105 shadow-lg' : 'bg-gray-700/80 hover:bg-gray-600/70 text-white'}`}><div className="flex items-center space-x-2"><span className="font-semibold text-sm">{tier.durationText}</span>{tierDiscount > 0 && <span className="bg-red-600 text-white text-xs font-bold px-2 py-0.5 rounded-full">{tierDiscount}% OFF</span>}</div><div className="flex items-baseline space-x-1.5">{tierDiscount > 0 && originalPrice && <span className={`text-xs ${isSelected ? 'text-gray-800' : 'text-gray-500'} line-through`}>₹{originalPrice}</span>}<span className={`font-bold text-base ${isSelected ? 'text-gray-900' : 'text-amber-400'}`}>₹{currentPrice}</span></div></button>
                         );
                     })}
                 </div>
-
                 <div className="border-t border-gray-700 my-3"></div>
+                <div><h3 className="font-semibold text-white text-left mb-2 text-sm">What's Included:</h3><ul className="space-y-1.5 text-gray-300">{(plan.features || []).map((feature, index) => (<li key={index} className="flex items-start"><svg className="w-4 h-4 text-green-400 mr-2 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path></svg><span className="text-xs">{typeof feature === 'object' ? feature.title : feature}</span></li>))}</ul></div>
+            </div>
+            <div className="mt-5 flex-shrink-0"><button onClick={handleSubscribeClick} className="w-full py-2.5 rounded-lg font-semibold text-sm transition-all duration-300 bg-amber-500 text-gray-900 hover:bg-amber-400 shadow-lg hover:shadow-xl">Buy Now</button></div>
+        </div>
+    );
+};
 
-                <div>
-                    <h3 className="font-semibold text-white text-left mb-2 text-sm">What's Included:</h3>
-                    <ul className="space-y-1.5 text-gray-300">
-                        {plan.features?.map((feature, idx) => (
-                            <li key={feature.id || idx} className="flex items-start">
-                                <svg className="w-4 h-4 text-green-400 mr-2 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path></svg>
-                                <span className="text-xs">{feature.title}</span>
-                            </li>
-                        ))}
-                    </ul>
+const AlreadySubscribedModal = ({ isOpen, onClose, onGoToDashboard }) => (
+    <Transition appear show={isOpen} as={Fragment}>
+        <Dialog as="div" className="relative z-[10000]" onClose={onClose}>
+            <Transition.Child as={Fragment} enter="ease-out duration-300" enterFrom="opacity-0" enterTo="opacity-100" leave="ease-in duration-200" leaveFrom="opacity-100" leaveTo="opacity-0"><div className="fixed inset-0 bg-black/60 backdrop-blur-sm" /></Transition.Child>
+            <div className="fixed inset-0 overflow-y-auto">
+                <div className="flex min-h-full items-center justify-center p-4 text-center">
+                    <Dialog.Panel className="w-full max-w-md transform overflow-hidden rounded-2xl bg-gray-800 p-6 text-left align-middle shadow-xl transition-all">
+                        <Dialog.Title as="h3" className="text-lg font-bold leading-6 text-white flex items-center">
+                            <CheckCircleIcon className="h-6 w-6 text-green-400 mr-3" />
+                            Plan Active
+                        </Dialog.Title>
+                        <div className="mt-4">
+                            <p className="text-sm text-gray-300">
+                                It looks like you are already subscribed to this exact plan. You can find all your accessible content on your dashboard.
+                            </p>
+                        </div>
+                        <div className="mt-6 flex justify-end">
+                            <button
+                                type="button"
+                                onClick={onGoToDashboard}
+                                className="inline-flex justify-center rounded-md border border-transparent bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 focus:outline-none"
+                            >
+                                Go to Dashboard
+                            </button>
+                        </div>
+                    </Dialog.Panel>
                 </div>
             </div>
+        </Dialog>
+    </Transition>
+);
 
-            <div className="mt-5 flex-shrink-0">
-                {/* BUTTON GLOW REMOVED: Replaced the bright custom shadow with a more subtle 'shadow-lg' */}
-                <button onClick={() => handleSubscribeClick(finalCheckoutLink)} className="w-full py-2.5 rounded-lg font-semibold text-sm transition-all duration-300 bg-amber-500 text-gray-900 hover:bg-amber-400 shadow-lg hover:shadow-xl">Subscribe Now</button>
-            </div>
+const PaymentStatusOverlay = ({ status, message, onComplete }) => {
+    if (status === 'idle') return null;
+
+    const content = {
+        processing: {
+            icon: <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-white mb-4"></div>,
+            title: "Processing Payment...",
+            message: message || "Please wait while we confirm your transaction."
+        },
+        success: {
+            icon: <FaCheckCircle className="h-16 w-16 text-green-400 mb-4" />,
+            title: "Payment Successful!",
+            message: "Your access has been upgraded. Welcome aboard!"
+        },
+        failed: {
+            icon: <ShieldExclamationIcon className="h-16 w-16 text-red-400 mb-4" />,
+            title: "Payment Failed",
+            message: message || "Your payment could not be processed. Please try again."
+        }
+    };
+
+    const currentContent = content[status];
+
+    return (
+        <div className="fixed inset-0 bg-gray-900 bg-opacity-90 flex flex-col items-center justify-center z-[9999]">
+            {currentContent.icon}
+            <h2 className="text-2xl font-bold text-white mb-2">{currentContent.title}</h2>
+            <p className="text-gray-400 mb-8 text-center px-4">{currentContent.message}</p>
+            {status !== 'processing' && (
+                <button
+                    onClick={onComplete}
+                    className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
+                >
+                    Back to Dashboard
+                </button>
+            )}
         </div>
     );
 };
 
 
-// --- Main Page Component ---
-const SubscriptionPage = ({ navigate, embedded = false }) => {
+const SubscriptionPage = ({ navigate, embedded = false, onGuestSubscribe, pendingCheckout }) => {
+    const { userData } = useAuth();
     const [plans, setPlans] = useState([]);
-    const [activeSaleTitle, setActiveSaleTitle] = useState('');
+    const [activeBanner, setActiveBanner] = useState(null);
     const [loading, setLoading] = useState(true);
+    const [razorpayKeyId, setRazorpayKeyId] = useState(null);
+    
+    const [paymentState, setPaymentState] = useState({ status: 'idle' });
+    const [showAlreadySubscribedModal, setShowAlreadySubscribedModal] = useState(false);
+    const [hasProcessedPending, setHasProcessedPending] = useState(false);
+
+    // --- FIX: Logic to handle the race condition after payment ---
+    const initiatePaymentForLoggedInUser = async (plan, selectedTier, currentUser) => {
+        // Get the most recently purchased tier from session storage to bridge the gap
+        // before the database update is reflected in the app.
+        const lastPurchasedTierId = sessionStorage.getItem('lastPurchasedTierId');
+
+        const isSubscribedInDB = currentUser.tierId && currentUser.tierId === selectedTier.id;
+        const isSubscribedInSession = lastPurchasedTierId && lastPurchasedTierId === selectedTier.id;
+
+        if (isSubscribedInDB || isSubscribedInSession) {
+            setShowAlreadySubscribedModal(true);
+            return;
+        }
+
+        await proceedToPayment(plan, selectedTier, currentUser);
+    };
+
+    const proceedToPayment = async (plan, selectedTier, currentUser) => {
+        setPaymentState({ status: 'processing', message: 'Connecting to payment gateway...' });
+        const isOfferActiveForSelected = selectedTier.hasOffer && selectedTier.offerEndTime && new Date(selectedTier.offerEndTime.toDate()) > new Date();
+        const currentPrice = isOfferActiveForSelected ? selectedTier.offerPrice : selectedTier.price;
+
+        const options = {
+            key: razorpayKeyId,
+            amount: currentPrice * 100,
+            currency: "INR",
+            name: `${plan.name} - ${selectedTier.durationText}`,
+            description: `Subscription for ${plan.name}`,
+            image: "https://rdfctest.site/logo.png",
+            handler: function (response) {
+                // --- FIX: Immediately store the tier ID in session storage on success ---
+                sessionStorage.setItem('lastPurchasedTierId', selectedTier.id);
+
+                setPaymentState({ status: 'processing', message: 'Payment authorized. Verifying...' });
+                setTimeout(() => setPaymentState({ status: 'success' }), 2000);
+            },
+            modal: {
+                ondismiss: function () {
+                    setPaymentState({ status: 'idle' });
+                }
+            },
+            prefill: {
+                name: currentUser?.displayName || "",
+                email: currentUser?.email || "",
+                contact: currentUser?.phoneNumber || ""
+            },
+            notes: {
+                user_id: currentUser.uid,
+                plan_id: plan.id,
+                tier_id: selectedTier.id,
+                plan_name: plan.name,
+                tier_duration: selectedTier.durationText,
+            },
+            theme: { color: "#f59e0b" }
+        };
+
+        try {
+            const rzp1 = new window.Razorpay(options);
+            rzp1.on('payment.failed', function (response){
+                console.error("Razorpay payment failed:", response.error);
+                setPaymentState({
+                    status: 'failed',
+                    message: response.error.description || 'The payment could not be completed.'
+                });
+            });
+            rzp1.open();
+        } catch (e) {
+            console.error("Razorpay initialization error:", e);
+            setPaymentState({
+                status: 'failed',
+                message: "Could not open payment window. Please check your connection and disable any ad-blockers."
+            });
+        }
+    };
+    
+    useEffect(() => {
+        if (!loading && pendingCheckout && userData && !hasProcessedPending) {
+            setHasProcessedPending(true);
+            const { planId, tierId } = pendingCheckout;
+            const plan = plans.find(p => p.id === planId);
+            if (plan) {
+                const selectedTier = plan.tiers.find(t => t.id === tierId);
+                if (selectedTier) { 
+                    initiatePaymentForLoggedInUser(plan, selectedTier, userData);
+                }
+            }
+        }
+    }, [pendingCheckout, userData, loading, plans, hasProcessedPending]);
 
     useEffect(() => {
-        const plansQuery = query(collection(db, 'subscriptionPlans'), orderBy('order', 'asc'));
-        const unsubscribePlans = onSnapshot(plansQuery, (snapshot) => {
-            const now = new Date();
-            const fetchedPlans = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        // --- FIX: Auto-cleanup for the temporary session storage item ---
+        const lastPurchasedTierId = sessionStorage.getItem('lastPurchasedTierId');
+        if (userData?.tierId && userData.tierId === lastPurchasedTierId) {
+            // The database has caught up, so we can clear the temporary flag.
+            sessionStorage.removeItem('lastPurchasedTierId');
+        }
+    }, [userData]); // This runs every time userData is updated.
 
-            const processedPlans = fetchedPlans.map(plan => {
-                let tiers = plan.tiers;
-                if (!tiers || !Array.isArray(tiers) || tiers.length === 0) {
-                    tiers = [{
-                        id: nanoid(), durationText: plan.durationText, price: plan.price, originalPrice: plan.originalPrice,
-                        checkoutLink: plan.checkoutLink, hasOffer: plan.hasOffer, offerName: plan.offerName,
-                        offerPrice: plan.offerPrice, offerEndTime: plan.offerEndTime, offerCheckoutLink: plan.offerCheckoutLink
-                    }];
-                }
-                
-                const tiersWithOfferStatus = tiers.map(tier => ({
-                    ...tier,
-                    hasOffer: tier.hasOffer && tier.offerEndTime?.toDate() && new Date() < tier.offerEndTime.toDate()
-                }));
-                
-                return { ...plan, tiers: tiersWithOfferStatus };
-            }).filter(plan => plan.isActive);
+    useEffect(() => {
+        const script = document.createElement("script");
+        script.src = "https://checkout.razorpay.com/v1/checkout.js";
+        script.async = true;
+        document.body.appendChild(script);
+        setRazorpayKeyId("rzp_live_dpCBtIAmY3C42X");
 
-            setPlans(processedPlans);
-            setLoading(false);
-        }, (error) => {
-            console.error("Error fetching subscription plans:", error);
+        const plansQuery = query(collection(db, 'subscriptionPlans'), where('isActive', '==', true), where('type', '==', 'Primary'), orderBy('order', 'asc'));
+        const unsubPlans = onSnapshot(plansQuery, snapshot => {
+            setPlans(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
             setLoading(false);
         });
-
+        
         const bannersQuery = query(collection(db, 'banners'), where('isActive', '==', true), orderBy('createdAt', 'desc'));
-        const unsubscribeBanners = onSnapshot(bannersQuery, (snapshot) => {
+        const unsubBanners = onSnapshot(bannersQuery, snapshot => {
             const now = new Date();
-            const activeBanner = snapshot.docs.map(doc => doc.data()).find(b => {
-                const startTime = b.startTime?.toDate();
-                const endTime = b.endTime?.toDate();
-                if (!startTime && !endTime) return true;
-                if (startTime && !endTime) return now >= startTime;
-                if (!startTime && endTime) return now <= endTime;
-                return now >= startTime && now <= endTime;
+            const trulyActiveBanner = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })).find(banner => {
+                const startTime = banner.startTime?.toDate(); const endTime = banner.endTime?.toDate();
+                return (!startTime || now >= startTime) && (!endTime || now <= endTime);
             });
-            setActiveSaleTitle(activeBanner?.saleTitle || '');
+            setActiveBanner(trulyActiveBanner || null);
         });
 
-        return () => { unsubscribePlans(); unsubscribeBanners(); };
+        return () => { unsubPlans(); unsubBanners(); if (document.body.contains(script)) { document.body.removeChild(script); } };
     }, []);
-
-    if (loading) {
-        return (
-            <div className={`flex items-center justify-center h-screen ${!embedded ? 'bg-gray-900' : 'bg-transparent'}`}>
-                <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-white"></div>
-            </div>
-        );
-    }
+    
+    if (loading && !pendingCheckout) { return <div className={`flex items-center justify-center h-screen ${!embedded ? 'bg-gray-900' : 'bg-transparent'}`}><div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-white"></div></div>; }
     
     return (
-        <div className={`max-w-7xl mx-auto ${!embedded ? 'py-12' : 'py-4'} px-4 sm:px-6 lg:px-8`}>
-            <div className="text-center mb-12">
-                <h1 className={`font-extrabold text-white ${embedded ? 'text-3xl' : 'text-4xl'} tracking-tight`}>Unlock Your Full Potential</h1>
-                <p className="mt-3 max-w-2xl mx-auto text-lg text-gray-400">Join our program to master Reading Comprehension and stay ahead.</p>
-                {activeSaleTitle && <h2 className="mt-6 text-3xl font-bold text-amber-400 animate-pulse">{activeSaleTitle}</h2>}
-            </div>
+        <div className={`relative max-w-7xl mx-auto ${!embedded ? 'py-12' : 'py-4'} px-4 sm:px-6 lg:px-8`}>
+            <PaymentStatusOverlay 
+                status={paymentState.status} 
+                message={paymentState.message}
+                onComplete={() => {
+                    setPaymentState({ status: 'idle' });
+                    navigate('home');
+                }}
+            />
+            <AlreadySubscribedModal
+                isOpen={showAlreadySubscribedModal}
+                onClose={() => setShowAlreadySubscribedModal(false)}
+                onGoToDashboard={() => navigate('home')}
+            />
             
-            <div className="flex flex-wrap justify-center gap-8 items-stretch">
-                {plans.length > 0 ? (
-                    plans.map((plan) => (
-                        <PlanCard key={plan.id} plan={plan} />
-                    ))
-                ) : (
-                    <div className="text-center text-gray-400 w-full p-8">No subscription plans available right now.</div>
-                )}
-            </div>
-
-            {!embedded && (
-                 <div className="text-center mt-12">
-                    <button onClick={() => navigate('home')} className="text-gray-400 hover:text-white font-semibold transition-colors">&larr; Back to Dashboard</button>
+            <div className={`transition-all duration-300 ${paymentState.status !== 'idle' || showAlreadySubscribedModal ? 'pointer-events-none blur-sm' : ''}`}>
+                {userData?.uid && ( <div className="mb-8 text-center md:text-left"> <button onClick={() => navigate('home')} className="inline-flex items-center px-4 py-2 text-sm font-semibold rounded-lg text-gray-400 hover:text-white bg-gray-800 hover:bg-gray-700 transition-colors"> <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg> Back to Dashboard </button> </div> )}
+                <div className="text-center mb-12"> <h1 className={`font-extrabold text-white ${embedded ? 'text-3xl' : 'text-4xl'} tracking-tight`}>Unlock Your Full Potential</h1> <p className="mt-3 max-w-2xl mx-auto text-lg text-gray-400">Join our program to master Reading Comprehension and stay ahead.</p> {activeBanner && activeBanner.saleTitle && ( <div className="mt-6 max-w-2xl mx-auto"> <h2 className="text-3xl font-bold text-amber-400 animate-pulse">{activeBanner.saleTitle}</h2> </div> )} </div>
+                <div className="flex flex-wrap justify-center gap-8 items-stretch">
+                    {plans.length > 0 ? (
+                        plans.map((plan) => (
+                            <PlanCard key={plan.id} plan={plan} userData={userData} navigate={navigate} onGuestSubscribe={onGuestSubscribe}
+                                initiatePaymentForLoggedInUser={initiatePaymentForLoggedInUser} />
+                        ))
+                    ) : ( <div className="text-center text-gray-400 w-full p-8">No subscription plans available right now.</div> )}
                 </div>
-            )}
+            </div>
         </div>
     );
 };

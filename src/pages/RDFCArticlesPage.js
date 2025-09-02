@@ -149,6 +149,26 @@ const RDFCArticlesPage = ({ navigate }) => {
     const totalPages = Math.ceil(filteredMaterials.length / ITEMS_PER_PAGE);
     const availableSubTabs = useMemo(() => managedTabs.find(t => t.name === selectedTab)?.subTabs || [], [selectedTab, managedTabs]);
 
+    const availableTestsForLinking = useMemo(() => {
+        if (!isLinkToTest || !selectedTab) return [];
+
+        // Create a set of test IDs already linked to a material (excluding the current one being edited)
+        const linkedTestIds = new Set(
+            materials
+                .filter(material => material.id !== currentMaterialId && material.linkedTestId)
+                .map(material => material.linkedTestId)
+        );
+
+        // Filter tests that match the selected category and are not already linked.
+        // The tests are already sorted by latest from the initial Firestore query.
+        return tests.filter(test => {
+            const isCorrectCategory = test.mainType === selectedTab;
+            const isNotLinked = !linkedTestIds.has(test.id);
+            return isCorrectCategory && isNotLinked;
+        });
+    }, [tests, materials, selectedTab, isLinkToTest, currentMaterialId]);
+
+
     if (loading) return <div className="flex justify-center items-center h-screen bg-gray-900 text-gray-400">Loading...</div>;
 
     // --- JSX Render ---
@@ -233,7 +253,11 @@ const RDFCArticlesPage = ({ navigate }) => {
                                         <label htmlFor="link-test" className="block mb-1.5 text-sm font-medium text-gray-300">Select Test to Link</label>
                                         <select id="link-test" value={selectedTestId} onChange={e => setSelectedTestId(e.target.value)} className="w-full rounded-lg bg-gray-900/70 border-gray-600 text-white placeholder-gray-500 shadow-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/50 transition-colors">
                                             <option value="">-- Please select a test --</option>
-                                            {tests.map(test => <option key={test.id} value={test.id}>{test.title}</option>)}
+                                            {availableTestsForLinking.length > 0 ? (
+                                                availableTestsForLinking.map(test => <option key={test.id} value={test.id}>{test.title}</option>)
+                                            ) : (
+                                                <option disabled>No unlinked tests in this category.</option>
+                                            )}
                                         </select>
                                     </div>
                                 )}

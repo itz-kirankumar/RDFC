@@ -1,58 +1,73 @@
-import React, { useState, useEffect, Fragment, useMemo } from 'react';
-import { doc, onSnapshot, setDoc, updateDoc, collection, serverTimestamp, deleteDoc, query, where, getDocs } from 'firebase/firestore';
+import React, { useState, useEffect, useMemo, Fragment } from 'react';
+import { doc, onSnapshot, updateDoc, collection, query, where, orderBy, getDocs, setDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { useAuth } from '../contexts/AuthContext';
+import { FaCog, FaHistory, FaRupeeSign, FaClock, FaChartBar, FaChartLine, FaSun, FaHandHoldingUsd } from 'react-icons/fa';
 import { Dialog, Transition } from '@headlessui/react';
+import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
-// Reusable form input component for admin settings
+// --- FIX: Helper function to safely convert Firestore Timestamps, returning null on failure ---
+const safeToDate = (timestamp) => {
+    if (timestamp && typeof timestamp.toDate === 'function') {
+        return timestamp.toDate();
+    }
+    // Fallback for invalid timestamps to prevent showing incorrect dates
+    return null;
+};
+
+
+// --- Reusable Input for Settings Modal ---
 const FormInput = ({ label, type = 'number', value, onChange, placeholder = '' }) => (
     <div>
         <label className="block text-sm font-medium text-gray-300">{label}</label>
-        <input
-            type={type}
-            value={value}
-            onChange={onChange}
-            placeholder={placeholder}
-            className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-white focus:ring focus:ring-gray-500 focus:ring-opacity-50"
-        />
+        <input type={type} value={value} onChange={onChange} placeholder={placeholder}
+            className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white" />
     </div>
 );
 
-// --- NEW SETTINGS MODAL ---
-const SettingsModal = ({ isOpen, setIsOpen, plansToShow, myPlanShares, setMyPlanShares, onSave }) => {
-    
+
+// --- Enhanced Settings Modal ---
+const SettingsModal = ({ isOpen, setIsOpen, plansToShow, myPlanShares, setMyPlanShares, charges, setCharges, onSave }) => {
     const handleShareChange = (planId, value) => {
         const percentage = parseInt(value, 10);
-        if (value === '') {
-            setMyPlanShares(prev => ({...prev, [planId]: ''}));
-        } else if (!isNaN(percentage) && percentage >= 0 && percentage <= 100) {
-            setMyPlanShares(prev => ({...prev, [planId]: percentage}));
+        if (value === '' || (!isNaN(percentage) && percentage >= 0 && percentage <= 100)) {
+            setMyPlanShares(prev => ({ ...prev, [planId]: value === '' ? '' : percentage }));
+        }
+    };
+    
+    const handleChargesChange = (e) => {
+        const percentage = parseFloat(e.target.value);
+        if (e.target.value === '' || (!isNaN(percentage) && percentage >= 0 && percentage <= 100)) {
+            setCharges(e.target.value === '' ? '' : percentage);
         }
     };
 
     return (
         <Transition appear show={isOpen} as={Fragment}>
             <Dialog as="div" className="relative z-50" onClose={() => setIsOpen(false)}>
-                <Transition.Child as={Fragment} enter="ease-out duration-300" enterFrom="opacity-0" enterTo="opacity-100" leave="ease-in duration-200" leaveFrom="opacity-100" leaveTo="opacity-0"><div className="fixed inset-0 bg-black bg-opacity-75" /></Transition.Child>
-                <div className="fixed inset-0 overflow-y-auto"><div className="flex min-h-full items-center justify-center p-4 text-center">
-                    <Dialog.Panel className="w-full max-w-md transform overflow-hidden rounded-2xl bg-gray-800 border border-gray-700 p-6 text-left align-middle shadow-xl transition-all">
+                <Transition.Child as={Fragment} enter="ease-out duration-300" enterFrom="opacity-0" enterTo="opacity-100" leave="ease-in duration-200" leaveFrom="opacity-100" leaveTo="opacity-0">
+                    <div className="fixed inset-0 bg-black/60" />
+                </Transition.Child>
+                <div className="fixed inset-0 overflow-y-auto"><div className="flex min-h-full items-center justify-center p-4">
+                    <Dialog.Panel className="w-full max-w-md transform overflow-hidden rounded-2xl bg-gray-800 p-6 text-left align-middle shadow-xl transition-all">
                         <Dialog.Title as="h3" className="text-lg font-medium leading-6 text-white">Earnings Settings</Dialog.Title>
-                        <p className="text-sm text-gray-400 mt-1">Set your share percentage for each subscription plan.</p>
-                        <div className="mt-4 max-h-60 overflow-y-auto space-y-4 pr-2">
-                            {plansToShow.map(plan => (
-                                <FormInput 
-                                    key={plan.id}
-                                    label={`Share for "${plan.name}" (%)`}
-                                    type="number" 
-                                    value={myPlanShares[plan.id] ?? ''} 
-                                    onChange={e => handleShareChange(plan.id, e.target.value)}
-                                    placeholder="e.g., 50"
-                                />
-                            ))}
+                        <div className="mt-4 space-y-4 max-h-[60vh] overflow-y-auto pr-2">
+                            <div className="p-4 border border-gray-700 rounded-lg">
+                                <h4 className="font-semibold text-gray-200 mb-2">Platform Charges</h4>
+                                <FormInput label="Charges (%)" value={charges} onChange={handleChargesChange} placeholder="e.g., 2.5" />
+                            </div>
+                             <div className="p-4 border border-gray-700 rounded-lg">
+                                <h4 className="font-semibold text-gray-200 mb-2">My Plan Shares</h4>
+                                {plansToShow.map(plan => (
+                                    <div key={plan.id} className="mb-3">
+                                        <FormInput label={plan.name} value={myPlanShares[plan.id] || ''} onChange={e => handleShareChange(plan.id, e.target.value)} placeholder="e.g., 70" />
+                                    </div>
+                                ))}
+                            </div>
                         </div>
                         <div className="mt-6 flex justify-end space-x-2">
-                            <button type="button" className="inline-flex justify-center rounded-md bg-gray-700 px-4 py-2 text-sm font-medium text-white hover:bg-gray-600" onClick={() => setIsOpen(false)}>Cancel</button>
-                            <button type="button" className="inline-flex justify-center rounded-md bg-white px-4 py-2 text-sm font-medium text-gray-900 hover:bg-gray-200" onClick={onSave}>Save Changes</button>
+                            <button type="button" className="bg-gray-600 px-4 py-2 rounded-md text-sm" onClick={() => setIsOpen(false)}>Cancel</button>
+                            <button type="button" className="bg-blue-600 px-4 py-2 rounded-md text-sm font-semibold" onClick={onSave}>Save Settings</button>
                         </div>
                     </Dialog.Panel>
                 </div></div>
@@ -61,276 +76,296 @@ const SettingsModal = ({ isOpen, setIsOpen, plansToShow, myPlanShares, setMyPlan
     );
 };
 
-
+// --- Main Earnings Component ---
 export default function Earnings() {
     const { userData } = useAuth();
-    const [users, setUsers] = useState([]);
-    const [mySettledUsers, setMySettledUsers] = useState([]);
+    
+    const [unsettledItems, setUnsettledItems] = useState([]);
+    const [settledItems, setSettledItems] = useState([]);
     const [allPlans, setAllPlans] = useState([]);
-    const [adminShares, setAdminShares] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [activeTab, setActiveTab] = useState('unsettled');
+    
     const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
     const [myPlanShares, setMyPlanShares] = useState({});
+    const [charges, setCharges] = useState(0);
 
     useEffect(() => {
-        if (!userData?.uid) {
+        if (!userData?.uid || !userData?.isAdmin) {
             setLoading(false);
             return;
         }
 
-        const unsubscribeUsers = onSnapshot(collection(db, 'users'), (snapshot) => {
-            const fetchedUsers = snapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() })).filter(u => !u.isAdmin);
-            setUsers(fetchedUsers);
+        const listeners = [];
+
+        // --- Listeners for AUTOMATED system (transactions collection) ---
+        const unsettledTxQuery = query(collection(db, "transactions"), where("status", "==", "unsettled"), orderBy("createdAt", "desc"));
+        const unsubUnsettledTx = onSnapshot(unsettledTxQuery, (snapshot) => {
+            const autoTransactions = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), type: 'transaction' }));
+            setUnsettledItems(prev => [...autoTransactions, ...prev.filter(item => item.type !== 'transaction')]);
             setLoading(false);
-        });
+        }, (err) => console.error("Error fetching unsettled transactions:", err));
+        listeners.push(unsubUnsettledTx);
 
-        // Fetch ALL plans (active and inactive) for settings modal logic
-        const unsubscribePlans = onSnapshot(collection(db, 'subscriptionPlans'), (snapshot) => {
-            setAllPlans(snapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() })));
-        });
+        const settledTxQuery = query(collection(db, "transactions"), where("status", "==", "settled"), orderBy("settledAt", "desc"));
+        const unsubSettledTx = onSnapshot(settledTxQuery, (snapshot) => {
+            const autoSettled = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), type: 'transaction' }));
+            setSettledItems(prev => [...autoSettled, ...prev.filter(item => item.type !== 'transaction')]);
+        }, (err) => console.error("Error fetching settled transactions:", err));
+        listeners.push(unsubSettledTx);
 
-        const mySettledUsersColRef = collection(db, 'adminSettings', userData.uid, 'settledUsers');
-        const unsubscribeMySettledUsers = onSnapshot(mySettledUsersColRef, (snapshot) => {
-            setMySettledUsers(snapshot.docs.map(docSnap => docSnap.id));
-        });
+        // --- Listeners for MANUAL system (users & adminSettings) ---
+        const subscribedUsersQuery = query(collection(db, 'users'), where('isSubscribed', '==', true));
+        const unsubManualUsers = onSnapshot(subscribedUsersQuery, async () => {
+             try {
+                const usersSnapshot = await getDocs(subscribedUsersQuery);
+                const settledUsersRef = collection(db, 'adminSettings', userData.uid, 'settledUsers');
+                const settledDocs = await getDocs(settledUsersRef);
+                const settledMap = new Map(settledDocs.docs.map(doc => [doc.id, doc.data()]));
 
-        const earningsConfigRef = doc(db, 'earnings', 'config');
-        const unsubscribeAdminShares = onSnapshot(earningsConfigRef, (docSnap) => {
-            if (docSnap.exists()) {
-                const data = docSnap.data();
-                const allShares = data.adminShares || [];
-                setAdminShares(allShares);
-                const myShareData = allShares.find(share => share.uid === userData.uid);
-                setMyPlanShares(myShareData?.planShares || {});
+                const manualUnsettled = [];
+                const manualSettled = [];
+
+                usersSnapshot.docs.forEach(doc => {
+                    const user = { id: doc.id, ...doc.data() };
+                    if (!user.planPrice && !user.pricePaid) return; // Skip users without a price
+
+                    const commonData = {
+                        id: user.id, userName: user.displayName || user.email,
+                        planName: user.planName || 'Manual Plan', tierText: '',
+                        amount: user.planPrice || user.pricePaid || 0, type: 'manual'
+                    };
+                    if (settledMap.has(user.id)) {
+                        manualSettled.push({ ...commonData, settledAt: settledMap.get(user.id).settledAt });
+                    } else {
+                        // FIX: Use user.purchaseDate which is expected to be a Timestamp.
+                        manualUnsettled.push({ ...commonData, createdAt: user.purchaseDate || null });
+                    }
+                });
+
+                setUnsettledItems(prev => [...prev.filter(item => item.type !== 'manual'), ...manualUnsettled]);
+                setSettledItems(prev => [...prev.filter(item => item.type !== 'manual'), ...manualSettled]);
+             } catch(err) {
+                 console.error("Error fetching manual users/settlements:", err)
+             }
+        }, (err) => console.error("Error setting up manual user listener:", err));
+        listeners.push(unsubManualUsers);
+
+
+        // --- Listener for Settings & Plans ---
+        const plansQuery = query(collection(db, 'subscriptionPlans'), orderBy('order'));
+        const unsubPlans = onSnapshot(plansQuery, (snapshot) => setAllPlans(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))));
+        listeners.push(unsubPlans);
+        
+        const settingsRef = doc(db, 'adminSettings', userData.uid);
+        const unsubSettings = onSnapshot(settingsRef, (doc) => { 
+            if (doc.exists()) {
+                const data = doc.data();
+                setMyPlanShares(data.planShares || {}); 
+                setCharges(data.charges || 0);
             }
         });
+        listeners.push(unsubSettings);
 
-        return () => {
-            unsubscribeUsers();
-            unsubscribePlans();
-            unsubscribeMySettledUsers();
-            unsubscribeAdminShares();
-        };
-    }, [userData?.uid]);
+        return () => listeners.forEach(unsub => unsub());
+    }, [userData]);
 
-    const handleUpdateMyShare = async () => {
-        try {
-            const earningsConfigRef = doc(db, 'earnings', 'config');
-            let newAdminShares = [...adminShares];
-            const adminIndex = newAdminShares.findIndex(share => share.uid === userData.uid);
-
-            const sharesToSave = {};
-            for (const planId in myPlanShares) {
-                const shareValue = parseInt(myPlanShares[planId], 10);
-                if (!isNaN(shareValue) && shareValue >= 0 && shareValue <= 100) {
-                    sharesToSave[planId] = shareValue;
-                }
-            }
-
-            if (adminIndex > -1) {
-                newAdminShares[adminIndex].planShares = sharesToSave;
-            } else {
-                newAdminShares.push({ uid: userData.uid, planShares: sharesToSave });
-            }
-
-            await updateDoc(earningsConfigRef, { adminShares: newAdminShares });
-            alert("Your share percentages have been updated.");
-            setIsSettingsModalOpen(false);
-        } catch (error) {
-            console.error("Error updating share percentages:", error);
-            alert("Failed to update share percentages.");
+    const handleSettleItem = async (item) => {
+        if (!userData?.uid) return;
+        if (item.type === 'transaction') {
+            await updateDoc(doc(db, 'transactions', item.id), { status: 'settled', settledAt: serverTimestamp(), settledBy: userData.displayName });
+        } else if (item.type === 'manual') {
+            await setDoc(doc(db, 'adminSettings', userData.uid, 'settledUsers', item.id), { settledAt: serverTimestamp() });
         }
+        alert('Item marked as settled!');
     };
     
-    const handleToggleMySettledStatus = async (userId, newStatus) => {
+    const handleUpdateSettings = async () => {
+        if (!userData || !userData.uid) {
+            alert("You must be logged in to save settings.");
+            return;
+        }
         try {
-            const mySettledUserRef = doc(db, 'adminSettings', userData.uid, 'settledUsers', userId);
-            if (newStatus) {
-                await setDoc(mySettledUserRef, { timestamp: serverTimestamp() });
-            } else {
-                await deleteDoc(mySettledUserRef);
-            }
+            await setDoc(doc(db, 'adminSettings', userData.uid), { 
+                planShares: myPlanShares,
+                charges: Number(charges) || 0 
+            }, { merge: true });
+            alert("Settings updated!");
+            setIsSettingsModalOpen(false);
         } catch (error) {
-            console.error(`Error toggling settled status for user ${userId}:`, error);
-            alert(`Failed to update settled status.`);
+            console.error("Error saving settings:", error);
+            alert("Failed to save settings. Please check console for details.");
         }
     };
 
-    const financialData = useMemo(() => {
-        const premiumUsers = users.filter(user => user.isSubscribed);
-        const DEDUCTION_RATE = 0.20;
-
-        const unsettledUsersList = premiumUsers.filter(user => user.planPrice && !mySettledUsers.includes(user.id));
+    const financialSummary = useMemo(() => {
+        const totalUnsettledGross = unsettledItems.reduce((acc, curr) => acc + (curr.amount || 0), 0);
+        const chargeAmount = totalUnsettledGross * (charges / 100);
+        const totalUnsettledNet = totalUnsettledGross - chargeAmount;
+        const totalSettled = settledItems.reduce((acc, curr) => acc + (curr.amount || 0), 0);
         
-        const planWiseEarnings = {};
+        // --- FIX: Calculate Total Sales (Gross Revenue) ---
+        const totalSales = totalUnsettledGross + totalSettled;
+        
+        const today = new Date().toLocaleDateString('en-CA');
+        const salesToday = [...unsettledItems, ...settledItems]
+            .filter(item => {
+                const itemDate = safeToDate(item.createdAt);
+                return itemDate ? itemDate.toLocaleDateString('en-CA') === today : false;
+            })
+            .reduce((acc, curr) => acc + (curr.amount || 0), 0);
 
-        unsettledUsersList.forEach(user => {
-            const planName = user.planName || 'Custom Plan';
-            const planId = user.planId || 'custom';
-            if (!planWiseEarnings[planName]) {
-                planWiseEarnings[planName] = { gross: 0, planId: planId };
+        const totalUnsettledShares = unsettledItems.reduce((acc, item) => {
+            const grossAmount = item.amount || 0;
+            const netAfterCharges = grossAmount * (1 - (charges / 100));
+            const plan = allPlans.find(p => p.name === item.planName);
+            let sharePercentage = 0;
+            if (plan && myPlanShares[plan.id]) {
+                sharePercentage = myPlanShares[plan.id];
             }
-            planWiseEarnings[planName].gross += user.planPrice;
+            const myShare = netAfterCharges * (sharePercentage / 100);
+            return acc + myShare;
+        }, 0);
+            
+        return { totalUnsettledNet, totalSettled, totalSales, salesToday, totalUnsettledShares };
+    }, [unsettledItems, settledItems, charges, myPlanShares, allPlans]);
+    
+    const analyticsSummary = useMemo(() => {
+        const allItems = [...unsettledItems, ...settledItems];
+        const planBreakdown = allItems.reduce((acc, item) => {
+            const planName = item.planName || 'Unknown Plan';
+            acc[planName] = (acc[planName] || 0) + (item.amount || 0);
+            return acc;
+        }, {});
+        
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+        const dailySales = Array(30).fill(0).map((_, i) => {
+            const date = new Date();
+            date.setDate(date.getDate() - i);
+            return { date: date.toLocaleDateString('en-CA'), revenue: 0 };
+        }).reverse();
+        
+        allItems.forEach(item => {
+            const itemDate = safeToDate(item.createdAt);
+            if (itemDate && itemDate >= thirtyDaysAgo) {
+                const dateStr = itemDate.toLocaleDateString('en-CA');
+                const day = dailySales.find(d => d.date === dateStr);
+                if (day) day.revenue += (item.amount || 0);
+            }
         });
 
-        let grandTotalGross = 0;
-        let myTotalShare = 0;
-
-        for (const planName in planWiseEarnings) {
-            const plan = planWiseEarnings[planName];
-            const deduction = plan.gross * DEDUCTION_RATE;
-            const net = plan.gross - deduction;
-            plan.deduction = deduction;
-            plan.net = net;
-            
-            const myShareForThisPlan = myPlanShares[plan.planId] || 0;
-            plan.mySharePercentage = myShareForThisPlan;
-            myTotalShare += (myShareForThisPlan / 100) * net;
-            
-            grandTotalGross += plan.gross;
-        }
-
-        const grandTotalNet = grandTotalGross * (1 - DEDUCTION_RATE);
-
-        const unsettledPlanIds = new Set(Object.values(planWiseEarnings).map(p => p.planId));
-        const plansToShowInSettings = allPlans.filter(p => p.isActive || unsettledPlanIds.has(p.id));
-
         return {
-            totalPremiumUsers: premiumUsers.length,
-            totalEarningsExpected: premiumUsers.reduce((sum, user) => sum + (user.planPrice || 0), 0),
-            settledByMeCount: mySettledUsers.length,
-            unsettledUsersCount: unsettledUsersList.length,
-            unsettledUsersList,
-            planWiseEarnings,
-            grandTotalNet,
-            myTotalShare,
-            plansToShowInSettings
+            planData: Object.entries(planBreakdown).map(([name, revenue]) => ({ name, revenue })).sort((a,b) => b.revenue - a.revenue),
+            trendData: dailySales.map(d => ({ name: new Date(d.date).toLocaleDateString('en-GB', {day:'2-digit', month:'short'}), revenue: d.revenue })),
         };
+    }, [unsettledItems, settledItems]);
 
-    }, [users, mySettledUsers, myPlanShares, allPlans]);
+    const itemsToShow = activeTab === 'unsettled' ? unsettledItems : settledItems.sort((a,b) => (safeToDate(b.settledAt)) - (safeToDate(a.settledAt)));
 
-    if (loading) {
-        return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-white"></div></div>;
-    }
+    const StatCard = ({ title, value, icon }) => (
+        <div className="bg-gray-800 p-5 rounded-lg flex items-center space-x-4 shadow-lg">
+            <div className="bg-gray-700 p-3 rounded-full">{icon}</div>
+            <div>
+                <p className="text-gray-400 text-sm font-medium">{title}</p>
+                <p className="text-white text-2xl font-bold">₹{value.toFixed(2)}</p>
+            </div>
+        </div>
+    );
 
     return (
-        <div className="max-w-7xl mx-auto">
-            <div className="flex justify-between items-center mb-6">
-                <h1 className="text-3xl font-bold text-white">Earnings Dashboard</h1>
-                <button onClick={() => setIsSettingsModalOpen(true)} className="bg-gray-700 text-white font-bold py-2 px-4 rounded-md hover:bg-gray-600 transition-colors">
-                    Settings
-                </button>
+        <div className="max-w-7xl mx-auto p-4 md:p-0">
+            <h1 className="text-2xl md:text-3xl font-bold text-white mb-6">Earnings Dashboard</h1>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
+                {/* --- FIX: Updated StatCard for Total Sales --- */}
+                <StatCard title="Total Sales" value={financialSummary.totalSales} icon={<FaRupeeSign className="h-6 w-6 text-green-400"/>}/>
+                <StatCard title="Net Unsettled" value={financialSummary.totalUnsettledNet} icon={<FaClock className="h-6 w-6 text-yellow-400"/>}/>
+                <StatCard title="My Unsettled Share" value={financialSummary.totalUnsettledShares} icon={<FaHandHoldingUsd className="h-6 w-6 text-indigo-400"/>}/>
+                <StatCard title="Total Settled" value={financialSummary.totalSettled} icon={<FaHistory className="h-6 w-6 text-blue-400"/>}/>
+                <StatCard title="Sales Today" value={financialSummary.salesToday} icon={<FaSun className="h-6 w-6 text-orange-400"/>}/>
             </div>
             
-            <div className="bg-gray-800 p-6 rounded-lg shadow-md mb-8">
-                <h2 className="text-2xl font-bold text-white mb-4">Overall Summary</h2>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-                    <div className="bg-gray-700 p-4 rounded-lg text-center">
-                        <p className="text-gray-400 text-sm">Total Premium Users</p>
-                        <p className="text-white text-2xl font-bold">{financialData.totalPremiumUsers}</p>
-                    </div>
-                    <div className="bg-gray-700 p-4 rounded-lg text-center">
-                        <p className="text-gray-400 text-sm">Total Earnings (Expected)</p>
-                        <p className="text-white text-2xl font-bold">₹{financialData.totalEarningsExpected.toLocaleString()}</p>
-                    </div>
-                    <div className="bg-gray-700 p-4 rounded-lg text-center">
-                        <p className="text-gray-400 text-sm">Net Unsettled (All Plans)</p>
-                        <p className="text-green-400 text-2xl font-bold">₹{financialData.grandTotalNet.toLocaleString()}</p>
-                    </div>
-                    <div className="bg-gray-700 p-4 rounded-lg text-center">
-                        <p className="text-gray-400 text-sm">My Total Share</p>
-                        <p className="text-white text-2xl font-bold">₹{financialData.myTotalShare.toLocaleString()}</p>
-                    </div>
+            <div className="mb-8 grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div className="bg-gray-800 p-4 rounded-lg shadow-md">
+                    <h3 className="font-bold text-white mb-4 flex items-center"><FaChartBar className="mr-2"/>Revenue by Plan</h3>
+                    <ResponsiveContainer width="100%" height={300}>
+                        <BarChart data={analyticsSummary.planData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="#4A5568" />
+                            <XAxis dataKey="name" stroke="#A0AEC0" fontSize={12} tick={{ fill: '#A0AEC0' }} interval={0} angle={-20} textAnchor="end" height={60} />
+                            <YAxis stroke="#A0AEC0" tick={{ fill: '#A0AEC0' }} />
+                            <Tooltip contentStyle={{ backgroundColor: '#1A202C', border: '1px solid #4A5568' }} formatter={(value) => `₹${value.toFixed(2)}`} />
+                            <Legend />
+                            <Bar dataKey="revenue" fill="#3b82f6" name="Total Revenue" />
+                        </BarChart>
+                    </ResponsiveContainer>
                 </div>
-
-                <h2 className="text-2xl font-bold text-white mb-4">Plan-wise Unsettled Earnings</h2>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {Object.keys(financialData.planWiseEarnings).length > 0 ? (
-                        Object.entries(financialData.planWiseEarnings).map(([planName, earnings]) => (
-                            <div key={planName} className="bg-gray-700 p-4 rounded-lg">
-                                <h3 className="font-bold text-lg text-white mb-3">{planName}</h3>
-                                <div className="space-y-2 text-sm">
-                                    <div className="flex justify-between"><span className="text-gray-400">Gross Unsettled:</span> <span className="font-semibold text-orange-400">₹{earnings.gross.toLocaleString()}</span></div>
-                                    <div className="flex justify-between"><span className="text-gray-400">Charges (20%):</span> <span className="font-semibold text-red-400">- ₹{earnings.deduction.toLocaleString()}</span></div>
-                                    <hr className="border-gray-600"/>
-                                    <div className="flex justify-between"><span className="text-gray-300 font-bold">Net Earnings:</span> <span className="font-bold text-green-400">₹{earnings.net.toLocaleString()}</span></div>
-                                    <div className="flex justify-between"><span className="text-gray-400">My Share ({earnings.mySharePercentage}%):</span> <span className="font-semibold text-white">₹{((earnings.mySharePercentage / 100) * earnings.net).toLocaleString()}</span></div>
-                                </div>
-                            </div>
-                        ))
-                    ) : (
-                        <p className="text-gray-400 text-center md:col-span-2 p-4">All earnings are settled!</p>
-                    )}
-                </div>
-
-                <div className="mt-8">
-                    <h3 className="text-xl font-bold text-white mb-4">Unsettled Users ({financialData.unsettledUsersCount})</h3>
-                    {financialData.unsettledUsersCount > 0 ? (
-                         <>
-                            {/* --- MOBILE CARD VIEW --- */}
-                            <div className="md:hidden space-y-3">
-                                {financialData.unsettledUsersList.map(user => (
-                                    <div key={user.id} className="bg-gray-700 rounded-lg p-4 shadow-md">
-                                        <div className="flex justify-between items-center mb-2 pb-2 border-b border-gray-600">
-                                            <span className="text-sm font-medium text-white truncate">{user.email}</span>
-                                            <span className="text-sm font-bold text-gray-300">₹{user.planPrice || '0'}</span>
-                                        </div>
-                                        <div className="flex justify-between items-center mb-4">
-                                            <span className="text-xs text-gray-400">Plan</span>
-                                            <span className="text-xs text-gray-300">{user.planName || 'N/A'}</span>
-                                        </div>
-                                        <button 
-                                            onClick={() => handleToggleMySettledStatus(user.id, true)} 
-                                            className="w-full bg-blue-600 text-white px-4 py-2 rounded-md text-sm font-semibold hover:bg-blue-700 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 focus:ring-blue-500"
-                                        >
-                                            Mark as Settled
-                                        </button>
-                                    </div>
-                                ))}
-                            </div>
-
-                            {/* --- DESKTOP TABLE VIEW --- */}
-                            <div className="hidden md:block bg-gray-700 rounded-lg overflow-hidden">
-                                <table className="min-w-full divide-y divide-gray-600">
-                                    <thead className="bg-gray-600">
-                                        <tr>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Email</th>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Plan</th>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Price</th>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase">Actions</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="bg-gray-700 divide-y divide-gray-600">
-                                        {financialData.unsettledUsersList.map(user => (
-                                            <tr key={user.id}>
-                                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-white">{user.email}</td>
-                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400">{user.planName || 'N/A'}</td>
-                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400">₹{user.planPrice || '0'}</td>
-                                                <td className="px-6 py-4 whitespace-nowrap text-sm">
-                                                    <button onClick={() => handleToggleMySettledStatus(user.id, true)} className="bg-blue-600 text-white px-4 py-1 rounded-md text-xs font-semibold hover:bg-blue-700">
-                                                        Mark as Settled
-                                                    </button>
-                                                </td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                         </>
-                    ) : (
-                        <p className="text-gray-400 text-center p-4">No unsettled users found.</p>
-                    )}
+                 <div className="bg-gray-800 p-4 rounded-lg shadow-md">
+                    <h3 className="font-bold text-white mb-4 flex items-center"><FaChartLine className="mr-2"/>Last 30 Days Sales Trend</h3>
+                    <ResponsiveContainer width="100%" height={300}>
+                        <LineChart data={analyticsSummary.trendData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="#4A5568" />
+                            <XAxis dataKey="name" stroke="#A0AEC0" fontSize={12} tick={{ fill: '#A0AEC0' }} />
+                            <YAxis stroke="#A0AEC0" tick={{ fill: '#A0AEC0' }} />
+                            <Tooltip contentStyle={{ backgroundColor: '#1A202C', border: '1px solid #4A5568' }} formatter={(value) => `₹${value.toFixed(2)}`} />
+                            <Legend />
+                            <Line type="monotone" dataKey="revenue" name="Daily Revenue" stroke="#34d399" strokeWidth={2} dot={{ r: 4 }} />
+                        </LineChart>
+                    </ResponsiveContainer>
                 </div>
             </div>
 
-            <SettingsModal
-                isOpen={isSettingsModalOpen}
-                setIsOpen={setIsSettingsModalOpen}
-                plansToShow={financialData.plansToShowInSettings}
-                myPlanShares={myPlanShares}
-                setMyPlanShares={setMyPlanShares}
-                onSave={handleUpdateMyShare}
-            />
+            <div className="bg-gray-800 rounded-lg shadow-md">
+                <div className="p-4 border-b border-gray-700 flex items-center justify-between">
+                    <div className="flex items-center space-x-2">
+                        <button onClick={() => setActiveTab('unsettled')} className={`px-3 py-1.5 text-sm font-medium rounded-md ${activeTab === 'unsettled' ? 'bg-white/10 text-white' : 'text-gray-400 hover:bg-white/5'}`}>Unsettled ({unsettledItems.length})</button>
+                        <button onClick={() => setActiveTab('settled')} className={`px-3 py-1.5 text-sm font-medium rounded-md ${activeTab === 'settled' ? 'bg-white/10 text-white' : 'text-gray-400 hover:bg-white/5'}`}>History</button>
+                    </div>
+                    <button onClick={() => setIsSettingsModalOpen(true)} className="p-2 text-gray-400 hover:text-white"><FaCog/></button>
+                </div>
+
+                <div className="overflow-x-auto">
+                    {loading ? <p className="text-center p-8">Loading...</p> : (
+                        itemsToShow.length > 0 ? (
+                            <table className="min-w-full divide-y divide-gray-700">
+                                <thead className="bg-gray-700/50">
+                                    <tr>
+                                        <th className="th">User</th><th className="th">Plan</th><th className="th">Amount</th>
+                                        <th className="th">{activeTab === 'unsettled' ? 'Purchased On' : 'Settled On'}</th><th className="th">Type</th><th className="th">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="bg-gray-800 divide-y divide-gray-700">
+                                    {itemsToShow.map(tx => (
+                                        <tr key={tx.id}>
+                                            <td className="px-6 py-4 text-sm font-medium text-white">{tx.userName}</td>
+                                            <td className="px-6 py-4 text-sm text-gray-300">{tx.planName} {tx.tierText ? `(${tx.tierText})` : ''}</td>
+                                            <td className="px-6 py-4 text-sm text-green-400 font-semibold">₹{(tx.amount || 0).toFixed(2)}</td>
+                                            <td className="px-6 py-4 text-sm text-gray-400">
+                                                {/* --- FIX: Safely display the date or 'N/A' --- */}
+                                                {(() => {
+                                                    const date = safeToDate(activeTab === 'unsettled' ? tx.createdAt : tx.settledAt);
+                                                    return date ? date.toLocaleDateString() : 'N/A';
+                                                })()}
+                                            </td>
+                                            <td className="px-6 py-4 text-sm">
+                                                <span className={`px-2 py-1 text-xs font-semibold rounded-full ${tx.type === 'transaction' ? 'bg-purple-600/50 text-purple-300' : 'bg-gray-600/50 text-gray-300'}`}>
+                                                    {tx.type === 'transaction' ? 'Auto' : 'Manual'}
+                                                </span>
+                                            </td>
+                                            <td className="px-6 py-4 text-sm">
+                                                {activeTab === 'unsettled' && (<button onClick={() => handleSettleItem(tx)} className="bg-blue-600 text-white px-3 py-1 rounded-md text-xs font-semibold hover:bg-blue-700">Mark as Settled</button>)}
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        ) : <p className="text-gray-400 text-center p-8">No {activeTab} items found.</p>
+                    )}
+                </div>
+            </div>
+            <style>{`.th { padding: 0.75rem 1.5rem; text-align: left; font-size: 0.75rem; font-weight: 500; color: #D1D5DB; text-transform: uppercase; }`}</style>
+            
+            <SettingsModal isOpen={isSettingsModalOpen} setIsOpen={setIsSettingsModalOpen} plansToShow={allPlans}
+                myPlanShares={myPlanShares} setMyPlanShares={setMyPlanShares} charges={charges} setCharges={setCharges} onSave={handleUpdateSettings} />
         </div>
     );
 }

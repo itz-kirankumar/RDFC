@@ -1,9 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Fragment } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { db } from '../firebase/config';
-import { collection, getDocs, query, where, onSnapshot, orderBy, limit } from 'firebase/firestore';
+import { db, auth } from '../firebase/config';
+import { collection, getDocs, query, where, onSnapshot, orderBy, limit, doc, getDoc } from 'firebase/firestore';
 import Navbar from '../components/Navbar';
 import SubscriptionPage from './SubscriptionPage';
+import { Dialog, Transition } from '@headlessui/react';
+
 
 // Helper Component: CountdownTimer
 const CountdownTimer = ({ targetDate, offerName }) => {
@@ -121,6 +123,124 @@ const FaqSection = () => {
     );
 }
 
+const CheckoutModal = ({ isOpen, setIsOpen, checkoutDetails, navigate }) => {
+    const { signInWithGoogle, user: currentUser, userData } = useAuth();
+    const [isLoading, setIsLoading] = useState(false);
+    const [error, setError] = useState('');
+
+    const initiatePayment = async (userToPay, plan, selectedTier) => {
+        if (!plan || !selectedTier || !userToPay) {
+            setError("Checkout details are incomplete. Please try again.");
+            return;
+        }
+
+        // Final check: Does the user already have this plan?
+        const userDocRef = doc(db, 'users', userToPay.uid);
+        const userDocSnap = await getDoc(userDocRef);
+        const liveUserData = userDocSnap.data();
+
+        if (liveUserData?.planId === plan.id) {
+             alert("It looks like you are already subscribed to this plan. You will be redirected to your dashboard.");
+             navigate('home'); // Redirect to dashboard
+             return;
+        }
+        
+        const razorpayKeyId = "rzp_live_dpCBtIAmY3C42X";
+        const isOfferActive = selectedTier.hasOffer && selectedTier.offerEndTime && new Date(selectedTier.offerEndTime.toDate()) > new Date();
+        const currentPrice = isOfferActive ? selectedTier.offerPrice : selectedTier.price;
+
+        const options = {
+            key: razorpayKeyId, amount: currentPrice * 100, currency: "INR", name: plan.name || "RDFC Test Series",
+            description: selectedTier.durationText || "Subscription Plan", image: "https://rdfctest.site/logo.png",
+            handler: function (response) {
+                alert("Payment successful! Redirecting to your dashboard.");
+                navigate('home');
+            },
+            prefill: { name: userToPay.displayName || "", email: userToPay.email || "", contact: userToPay.phoneNumber || "" },
+            notes: { user_id: userToPay.uid, plan_id: plan.id, tier_id: selectedTier.id, plan_name: plan.name, tier_duration: selectedTier.durationText, },
+            theme: { color: "#f59e0b" }
+        };
+
+        try {
+            const rzp1 = new window.Razorpay(options);
+            rzp1.on('payment.failed', (response) => {
+                console.error("Payment Failed:", response.error);
+                setError(`Payment failed: ${response.error.description}. Please try again.`);
+            });
+            rzp1.open();
+        } catch (e) {
+            console.error("Razorpay Error:", e);
+            setError("Could not initialize payment. Please disable ad-blockers or try a different browser.");
+        }
+    };
+
+    const handleCheckout = async () => {
+        setIsLoading(true);
+        setError('');
+        if (currentUser) {
+            await initiatePayment(currentUser, checkoutDetails.plan, checkoutDetails.selectedTier);
+        } else {
+            try {
+                sessionStorage.setItem('pendingCheckout', JSON.stringify({
+                    planId: checkoutDetails.plan.id,
+                    tierId: checkoutDetails.selectedTier.id,
+                }));
+                await signInWithGoogle();
+                // The main App component will handle the post-login flow.
+            } catch (err) {
+                console.error("Google Sign-In failed during checkout:", err);
+                setError("Google Sign-In failed. Please try again.");
+                sessionStorage.removeItem('pendingCheckout');
+            }
+        }
+        setIsLoading(false);
+    };
+    
+    useEffect(() => {
+        const script = document.createElement("script");
+        script.src = "https://checkout.razorpay.com/v1/checkout.js";
+        script.async = true;
+        document.body.appendChild(script);
+        return () => {
+             if (document.body.contains(script)) {
+                document.body.removeChild(script);
+            }
+        }
+    }, []);
+
+    return (
+        <Transition appear show={isOpen} as={Fragment}>
+            <Dialog as="div" className="relative z-[1001]" onClose={() => setIsOpen(false)}>
+                <Transition.Child as={Fragment} enter="ease-out duration-300" enterFrom="opacity-0" enterTo="opacity-100" leave="ease-in duration-200" leaveFrom="opacity-100" leaveTo="opacity-0"><div className="fixed inset-0 bg-black/70" /></Transition.Child>
+                <div className="fixed inset-0 overflow-y-auto"><div className="flex min-h-full items-center justify-center p-4">
+                    <Dialog.Panel className="w-full max-w-md transform overflow-hidden rounded-2xl bg-gray-900 border border-gray-700 p-6 text-left align-middle shadow-2xl transition-all">
+                        <Dialog.Title as="h3" className="text-xl font-bold leading-6 text-white">Complete Your Purchase</Dialog.Title>
+                        {currentUser ? (
+                            <div className="mt-4">
+                                <p className="text-gray-400">You are signed in as <span className="font-semibold text-white">{currentUser.email}</span>.</p>
+                                <p className="mt-2 text-sm text-gray-400">Click below to proceed to our secure payment gateway.</p>
+                            </div>
+                        ) : (
+                            <div className="mt-4">
+                                <p className="text-gray-400">Please sign in with Google to continue with your subscription.</p>
+                                <p className="mt-2 text-sm text-gray-500">Your plan selection is saved and will be ready after you log in.</p>
+                            </div>
+                        )}
+                        {error && <p className="mt-4 text-sm text-red-400 bg-red-900/50 p-3 rounded-lg">{error}</p>}
+                        <div className="mt-6 flex justify-end space-x-4">
+                            <button type="button" onClick={() => setIsOpen(false)} className="px-5 py-2.5 rounded-lg text-sm font-medium text-gray-300 hover:bg-gray-700">Cancel</button>
+                            <button type="button" onClick={handleCheckout} disabled={isLoading} className="bg-amber-600 px-5 py-2.5 rounded-lg text-sm font-semibold text-white hover:bg-amber-500 disabled:bg-gray-500">
+                                {isLoading ? 'Processing...' : (currentUser ? 'Proceed to Pay' : 'Sign in with Google')}
+                            </button>
+                        </div>
+                    </Dialog.Panel>
+                </div></div>
+            </Dialog>
+        </Transition>
+    );
+};
+
+
 const LoginPage = ({ navigate }) => {
     const { signInWithGoogle } = useAuth();
     const [freeTests, setFreeTests] = useState([]);
@@ -128,6 +248,14 @@ const LoginPage = ({ navigate }) => {
     const [activeBanners, setActiveBanners] = useState([]);
     const [testimonials, setTestimonials] = useState([]);
     const [loadingTestimonials, setLoadingTestimonials] = useState(true);
+    const [isCheckoutModalOpen, setIsCheckoutModalOpen] = useState(false);
+    const [checkoutDetails, setCheckoutDetails] = useState(null);
+
+
+    const handleGuestSubscribe = (details) => {
+        setCheckoutDetails(details);
+        setIsCheckoutModalOpen(true);
+    };
 
     useEffect(() => {
         const fetchFreeTests = async () => {
@@ -264,6 +392,15 @@ const LoginPage = ({ navigate }) => {
                     </div>
                 </div>
             )}
+            
+            {isCheckoutModalOpen && (
+                <CheckoutModal 
+                    isOpen={isCheckoutModalOpen} 
+                    setIsOpen={setIsCheckoutModalOpen} 
+                    checkoutDetails={checkoutDetails} 
+                    navigate={navigate}
+                />
+            )}
 
             <Navbar navigate={navigate} bannerHeight={bannerHeight} />
             <main style={{ paddingTop: `${bannerHeight + 64}px` }}>
@@ -331,8 +468,7 @@ const LoginPage = ({ navigate }) => {
 
                 <section id="subscription" className="py-16 sm:py-20 bg-zinc-900">
                     <div className="container mx-auto px-4">
-                        
-                        <SubscriptionPage embedded={true} />
+                        <SubscriptionPage embedded={true} navigate={navigate} onGuestSubscribe={handleGuestSubscribe} />
                     </div>
                 </section>
 
@@ -435,3 +571,4 @@ const LoginPage = ({ navigate }) => {
 };
 
 export default LoginPage;
+
