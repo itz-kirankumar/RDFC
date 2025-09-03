@@ -5,7 +5,7 @@ import { getFirestore } from 'firebase/firestore';
 // --- Firebase Configuration ---
 const firebaseConfig = {
     apiKey: "AIzaSyCu99ausCvfcfuxaEl0ZWv5tHckTfdkjjE",
-    authDomain: "rdfcblog-81a45.firebaseapp.com",
+    authDomain: "www.rdfctest.site",
     projectId: "rdfcblog-81a45",
     storageBucket: "rdfcblog-81a45.appspot.com",
     messagingSenderId: "770994813528",
