@@ -836,7 +836,13 @@ const TestInterfacePage = ({ navigate, testId }) => {
 
     const handleMarkForReview = () => {
         updateQuestionStatus(currentSectionIndex, currentQuestionIndex, 'marked');
-        handleSaveAndNext();
+        
+        // FIX: Only navigate to the next question if it's not the last question of the section.
+        // This prevents accidental submission when "Mark for Review" is clicked on the last question.
+        if (currentSection && currentQuestionIndex < currentSection.questions.length - 1) {
+            handleSaveAndNext();
+        }
+
         setIsMoreMenuOpen(false);
     };
 
