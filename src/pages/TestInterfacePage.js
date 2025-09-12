@@ -489,7 +489,6 @@ const TestInterfacePage = ({ navigate, testId }) => {
         }
     }, [isOnline, syncToFirestore]);
     
-    // --- CORRECTED SUBMIT FUNCTION ---
     const submitTest = useCallback(async () => {
         if (submittingTestRef.current) return;
         submittingTestRef.current = true;
@@ -497,6 +496,8 @@ const TestInterfacePage = ({ navigate, testId }) => {
 
         // Record the final time spent on the last question.
         recordTimeSpentOnCurrentQuestion();
+
+        // --- Calculate total score upon submission ---
         let calculatedTotalScore = 0;
         if (test && test.sections) {
             test.sections.forEach((section, secIdx) => {
@@ -514,7 +515,6 @@ const TestInterfacePage = ({ navigate, testId }) => {
                         if (isCorrect) {
                             correct++;
                         } else {
-                            // Negative marking only for incorrect MCQs
                             if (q.type !== 'TITA') {
                                 incorrectMcq++;
                             }
@@ -525,18 +525,20 @@ const TestInterfacePage = ({ navigate, testId }) => {
                 calculatedTotalScore += sectionScore;
             });
         }
-        // Prepare the final data to be saved to Firestore.
-        // We only save the raw data. The results page will handle calculations.
+        
+        // --- Prepare the final data with the calculated score included ---
         const finalAttemptData = {
             status: 'completed',
             answers,
             timeTaken,
             questionStatuses,
             completedAt: Timestamp.fromDate(new Date()),
+            totalScore: calculatedTotalScore, // FIX: Added total score to the data object
         };
 
         const key = getLocalStorageKey();
         if (key) {
+             // This now correctly saves the totalScore for offline scenarios as well
              localStorage.setItem(key, JSON.stringify(finalAttemptData));
         }
         
@@ -548,23 +550,19 @@ const TestInterfacePage = ({ navigate, testId }) => {
         }
 
         try {
-            // Update the document in Firestore
+            // Update the document in Firestore with the complete data
             if (attemptDocId) {
                 await updateDoc(doc(db, "attempts", attemptDocId), finalAttemptData);
             }
             
-            // Clean up local storage
             if (key) localStorage.removeItem(key);
             
-            // Ensure we don't navigate to the dashboard on fullscreen exit
             navigateOnExitRef.current = false;
             
             if (document.fullscreenElement) {
                  await document.exitFullscreen();
             }
 
-            // **FIX**: Navigate to the results page with the attemptId.
-            // The ResultAnalysis page will use this ID to fetch the data it needs.
             navigate('results', { attemptId: attemptDocId });
 
         } catch (error) {

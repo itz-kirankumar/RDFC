@@ -55,7 +55,7 @@ const AllTestsPage = ({ navigate, tests: initialTests = [], title, contentType }
     const [userAttempts, setUserAttempts] = useState({});
     const [userStatus, setUserStatus] = useState(null);
     const [liveTests, setLiveTests] = useState({});
-    const [visibleCount, setVisibleCount] = useState(10);
+    const [visibleCount, setVisibleCount] = useState(100);
 
     const hasMaterials = useMemo(() => 
         initialTests.some(test => test.material || test.isMaterialOnly), 
@@ -326,7 +326,7 @@ const AllTestsPage = ({ navigate, tests: initialTests = [], title, contentType }
             </table>
             {sortedTests.length > visibleCount && (
                 <div className="p-4 bg-gray-800 text-center">
-                    <button onClick={() => setVisibleCount(prev => prev + 10)} className="text-sm font-semibold text-blue-400 hover:text-blue-300">
+                    <button onClick={() => setVisibleCount(prev => prev + 100)} className="text-sm font-semibold text-blue-400 hover:text-blue-300">
                         Load more...
                     </button>
                 </div>
