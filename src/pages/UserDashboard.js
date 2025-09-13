@@ -411,6 +411,18 @@ const UserDashboard = ({ navigate }) => {
     const userStatus = useUserStatus(userData?.uid);
     const userAttempts = useUserAttempts(userData?.uid);
     const performanceData = usePerformanceData(userData?.uid, allContent);
+    const welcomeText = useMemo(() => {
+        if (userData?.metadata) {
+            const creationTime = new Date(userData.metadata.creationTime).getTime();
+            const lastSignInTime = new Date(userData.metadata.lastSignInTime).getTime();
+
+            // If the last sign-in is within 10 seconds of creation, treat as a new user.
+            if (lastSignInTime - creationTime < 10000) {
+                return 'Welcome,';
+            }
+        }
+        return 'Welcome back,';
+    }, [userData]);
 
     // REFACTORED: Simplified to only use mainType and subType
     const getTestCategory = (content) => {
@@ -1150,7 +1162,12 @@ const UserDashboard = ({ navigate }) => {
             
         `}</style>
              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6">
-                 <h2 className="text-2xl sm:text-3xl font-bold text-white mb-2 sm:mb-0">User Dashboard</h2>
+                <h2 className="text-2xl sm:text-3xl font-bold text-white mb-2 sm:mb-0">
+    {welcomeText}{' '}
+    <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500">
+        {userData?.displayName || 'User'}!
+    </span>
+</h2>
                  {renderUserStatus()}
             </div>
 
