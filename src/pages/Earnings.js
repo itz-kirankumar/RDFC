@@ -278,22 +278,37 @@ export default function Earnings() {
     const handleToggleApproval = async (tx) => { if (!isMasterAdmin || tx.type !== 'transaction') return; await updateDoc(doc(db, 'transactions', tx.id), { isApproved: !tx.isApproved }); };
     const handleToggleHidden = async (tx) => { if (!isMasterAdmin || tx.type !== 'transaction') return; await updateDoc(doc(db, 'transactions', tx.id), { isHidden: !tx.isHidden }); };
     
-    const handleSaveSettings = async () => {
+const handleSaveSettings = async () => {
         if (!userData?.uid) return;
         setIsProcessing(true);
         try {
-            await setDoc(doc(db, 'adminSettings', userData.uid), { planShares: myPlanShares, charges: Number(charges) || 0 }, { merge: true });
+            // Save the personal settings for any admin
+            await setDoc(doc(db, 'adminSettings', userData.uid), { 
+                planShares: myPlanShares, 
+                charges: Number(charges) || 0 
+            }, { merge: true });
+
+            // If the user is the master admin, also save the masterConfig
             if (isMasterAdmin) {
+                // FIX: Ensure date objects are valid before converting to Timestamp
+                const startDate = masterConfig.automationStartDate ? new Date(masterConfig.automationStartDate) : null;
+                const endDate = masterConfig.automationEndDate ? new Date(masterConfig.automationEndDate) : null;
+
                 const configToSave = {
                     ...masterConfig,
-                    automationStartDate: masterConfig.automationStartDate ? Timestamp.fromDate(new Date(masterConfig.automationStartDate)) : null,
-                    automationEndDate: masterConfig.automationEndDate ? Timestamp.fromDate(new Date(masterConfig.automationEndDate)) : null,
+                    automationStartDate: startDate && !isNaN(startDate) ? Timestamp.fromDate(startDate) : null,
+                    automationEndDate: endDate && !isNaN(endDate) ? Timestamp.fromDate(endDate) : null,
                 };
+                
                 await setDoc(doc(db, 'adminSettings', 'masterConfig'), configToSave, { merge: true });
                 alert("Master settings saved. Backend functions will now use the new automation rules for new transactions.");
             }
             setIsSettingsModalOpen(false);
-        } catch (error) { console.error("Error saving settings:", error); } finally { setIsProcessing(false); }
+        } catch (error) { 
+            console.error("Error saving settings:", error); 
+        } finally { 
+            setIsProcessing(false); 
+        }
     };
     
     const financialSummary = useMemo(() => {
