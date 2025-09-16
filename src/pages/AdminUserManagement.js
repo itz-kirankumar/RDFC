@@ -1,5 +1,5 @@
 import React, { useState, useEffect, Fragment, useMemo } from 'react';
-import { collection, doc, updateDoc, Timestamp, serverTimestamp, onSnapshot, query, orderBy } from 'firebase/firestore';
+import { collection, doc, updateDoc, Timestamp, serverTimestamp, onSnapshot, query, orderBy, where } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { Dialog, Transition, Switch as HeadlessSwitch } from '@headlessui/react';
 import { useAuth } from '../contexts/AuthContext';
@@ -174,7 +174,8 @@ const UserCard = ({ user, planName, expiryStatus, onOpenModal, onRevokeAccess })
 // --- Main Component ---
 export default function AdminUserManagement() {
     const { userData } = useAuth();
-    const [users, setUsers] = useState([]);
+    const [allUsers, setAllUsers] = useState([]);
+    const [transactions, setTransactions] = useState([]);
     const [plans, setPlans] = useState([]);
     const [managedTabs, setManagedTabs] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -184,20 +185,47 @@ export default function AdminUserManagement() {
     const [currentPage, setCurrentPage] = useState(1);
     const [activeTab, setActiveTab] = useState('All');
     const usersPerPage = 10;
+
+    const MASTER_ADMIN_EMAIL = "kiran160703kumar@gmail.com";
+    const isMasterAdmin = userData?.email === MASTER_ADMIN_EMAIL;
     
     useEffect(() => {
         const unsubUsers = onSnapshot(collection(db, "users"), snap => {
             const allDocs = snap.docs.map(d => ({ uid: d.id, ...d.data() }));
-            // Filter out admins from the list used everywhere
-            setUsers(allDocs.filter(u => !u.isAdmin));
+            setAllUsers(allDocs.filter(u => !u.isAdmin));
         });
         const unsubPlans = onSnapshot(collection(db, "subscriptionPlans"), snap => setPlans(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
-        const unsubTabs = onSnapshot(query(collection(db, 'tabManager'), orderBy('order')), snap => {
-            setManagedTabs(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+        const unsubTabs = onSnapshot(query(collection(db, 'tabManager'), orderBy('order')), snap => setManagedTabs(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+        
+        const unsubTransactions = onSnapshot(collection(db, "transactions"), snap => {
+            setTransactions(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+        });
+
+        Promise.all([unsubUsers, unsubPlans, unsubTabs, unsubTransactions]).then(() => {
             setLoading(false);
         });
-        return () => { unsubUsers(); unsubPlans(); unsubTabs(); };
+
+        return () => { unsubUsers(); unsubPlans(); unsubTabs(); unsubTransactions(); };
     }, []);
+    
+    // Filter users based on admin role
+    const visibleUsers = useMemo(() => {
+        if (isMasterAdmin) {
+            return allUsers; // Master admin sees all users
+        }
+
+        // For other admins, hide users whose transactions are marked as hidden.
+        const hiddenUserIds = new Set(
+            transactions
+                .filter(tx => tx.isHidden) // Find all hidden transactions
+                .map(tx => tx.userId)      // Get the corresponding user IDs
+        );
+
+        // Return all users except those in the hidden set.
+        return allUsers.filter(user => !hiddenUserIds.has(user.uid));
+
+    }, [allUsers, transactions, isMasterAdmin]);
+
 
     const handleGrantAccess = async (user, payload) => {
         const { useGranularValidity, isVerified, pricePaid, selectedPlanId, accessCheckboxes, overallExpiryDate, granularValidityMap } = payload;
@@ -220,21 +248,17 @@ export default function AdminUserManagement() {
             grantedAccessKeys.forEach(key => { finalAccessControl[key] = true; });
         }
 
-        // --- DUAL-WRITE & MIGRATION LOGIC ---
-        
-        // **FIX APPLIED HERE**: Convert the price string to a number before saving.
         const numericPrice = pricePaid !== '' && pricePaid !== null ? parseFloat(pricePaid) : (user.pricePaid || null);
 
         const updateData = {
             isSubscribed, isVerified,
             pricePaid: numericPrice,
-            planPrice: numericPrice, // Now writes the correct number type to both fields
+            planPrice: numericPrice,
             planId: selectedPlanId || null,
             planName: plan?.name || 'Custom Plan',
             expiryDate: useGranularValidity ? null : (overallExpiryDate ? Timestamp.fromDate(new Date(overallExpiryDate + 'T23:59:59')) : null),
             accessControl: finalAccessControl,
             lastUpdatedByAdmin: serverTimestamp(),
-            // Set old fields for full backward compatibility
             rdfc_articles: !!accessCheckboxes['RDFC'],
             rdfc_tests: !!accessCheckboxes['RDFC'],
             mock: !!accessCheckboxes['Mocks'],
@@ -250,7 +274,7 @@ export default function AdminUserManagement() {
             const userRef = doc(db, 'users', user.uid);
             await updateDoc(userRef, {
                 isSubscribed: false, expiryDate: null, planId: null, planName: null,
-                accessControl: {}, isVerified: false, pricePaid: null, planPrice: null, // CORRECTED: Clears both price fields
+                accessControl: {}, isVerified: false, pricePaid: null, planPrice: null,
                 lastUpdatedByAdmin: serverTimestamp(),
                 rdfc_articles: false, rdfc_tests: false, mock: false, sectional: false, test: false, ten_min_tests: false
             });
@@ -263,12 +287,11 @@ export default function AdminUserManagement() {
         const today = new Date();
         if (!user.isSubscribed) return { needsAction: false, text: 'N/A', color: 'text-gray-500' };
 
-        // Granular check first
         if (user.accessControl?.validityMap) {
             const actionKeys = Object.keys(user.accessControl.validityMap).filter(key => {
                 const expiry = user.accessControl.validityMap[key].toDate();
                 const daysLeft = Math.ceil((expiry - today) / (1000 * 60 * 60 * 24));
-                return daysLeft <= 7; // Flag if expiring within 7 days or already expired
+                return daysLeft <= 7;
             });
             if (actionKeys.length > 0) {
                 const hasExpired = actionKeys.some(k => user.accessControl.validityMap[k].toDate() < today);
@@ -277,7 +300,6 @@ export default function AdminUserManagement() {
             return { needsAction: false, text: 'Granular', color: 'text-gray-300' };
         }
         
-        // Overall check
         if (user.expiryDate) {
             const expiry = user.expiryDate.toDate();
             const daysLeft = Math.ceil((expiry - today) / (1000 * 60 * 60 * 24));
@@ -291,23 +313,24 @@ export default function AdminUserManagement() {
 
         return { needsAction: false, text: 'N/A', color: 'text-gray-500' };
     };
-
-    const usersInExpiryTab = useMemo(() => users.filter(u => !u.isVerified && getExpiryStatusForUser(u).needsAction), [users]);
+    
+    // Calculations below now use `visibleUsers` instead of `users` or `allUsers`
+    const usersInExpiryTab = useMemo(() => visibleUsers.filter(u => !u.isVerified && getExpiryStatusForUser(u).needsAction), [visibleUsers]);
 
     const filteredUsers = useMemo(() => {
-        let sorted = [...users].sort((a, b) => (b.createdAt?.toDate() || 0) - (a.createdAt?.toDate() || 0));
+        let sorted = [...visibleUsers].sort((a, b) => (b.createdAt?.toDate() || 0) - (a.createdAt?.toDate() || 0));
         
         if (activeTab === 'Premium') sorted = sorted.filter(u => u.isSubscribed);
-        if (activeTab === 'Expiry') return usersInExpiryTab; // Directly use the memoized expiring list
+        if (activeTab === 'Expiry') return usersInExpiryTab;
         if (activeTab === 'Verified') sorted = sorted.filter(u => u.isVerified);
 
         if (searchTerm) {
             sorted = sorted.filter(u => (u.displayName?.toLowerCase() || '').includes(searchTerm.toLowerCase()) || (u.email?.toLowerCase() || '').includes(searchTerm.toLowerCase()));
         }
         return sorted;
-    }, [users, activeTab, searchTerm, usersInExpiryTab]);
+    }, [visibleUsers, activeTab, searchTerm, usersInExpiryTab]);
     
-    const premiumUsersCount = useMemo(() => users.filter(u => u.isSubscribed).length, [users]);
+    const premiumUsersCount = useMemo(() => visibleUsers.filter(u => u.isSubscribed).length, [visibleUsers]);
     const totalPages = Math.ceil(filteredUsers.length / usersPerPage);
     const currentUsers = filteredUsers.slice((currentPage * usersPerPage) - usersPerPage, currentPage * usersPerPage);
     
@@ -321,7 +344,7 @@ export default function AdminUserManagement() {
         <div className="max-w-7xl mx-auto p-4 md:p-0">
             <h1 className="text-2xl md:text-3xl font-bold text-white mb-6">User Management</h1>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                <StatCard title="Total Users" value={users.length} icon={<UserGroupIcon className="h-6 w-6 text-indigo-400"/>}/>
+                <StatCard title="Total Users" value={visibleUsers.length} icon={<UserGroupIcon className="h-6 w-6 text-indigo-400"/>}/>
                 <StatCard title="Premium Users" value={premiumUsersCount} icon={<CheckCircleIcon className="h-6 w-6 text-green-400"/>}/>
                 <StatCard title="Action Required" value={usersInExpiryTab.length} icon={<XCircleIcon className="h-6 w-6 text-red-400"/>}/>
             </div>

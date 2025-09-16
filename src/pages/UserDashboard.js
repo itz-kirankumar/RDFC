@@ -473,8 +473,22 @@ const UserDashboard = ({ navigate }) => {
     }), [managedTabs, contentByTab]);
     
     useEffect(() => {
-      setActiveSubTab(null);
-    }, [activeTab]);
+        const currentTabConfig = managedTabs.find(t => t.name === activeTab);
+        const contentForCurrentTab = contentByTab[activeTab];
+
+        if (currentTabConfig?.subTabs?.length > 0 && contentForCurrentTab) {
+            // Find the first sub-tab that has been configured AND has content.
+            const firstSubTabWithContent = currentTabConfig.subTabs.find(sub => 
+                contentForCurrentTab.subTabs[sub.name]?.content?.length > 0
+            );
+
+            // Set the active sub-tab to the first one with content, or null if none have content.
+            setActiveSubTab(firstSubTabWithContent ? firstSubTabWithContent.name : null);
+        } else {
+            // If the main tab has no sub-tabs configured, ensure activeSubTab is null.
+            setActiveSubTab(null);
+        }
+    }, [activeTab, managedTabs, contentByTab]);
 
     const updateLiveTests = (testId) => {
         setLiveTests(prev => ({...prev, [testId]: true}));
