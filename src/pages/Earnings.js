@@ -341,8 +341,24 @@ const handleSaveSettings = async () => {
     }, [activeTab, unsettledItems, settledItems, searchTerm, sortConfig]);
 
     const paginatedItems = sortedAndFilteredItems.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
-    const exportToCSV = () => { /* Logic unchanged */ };
-    
+        const exportToCSV = () => {
+        const headers = activeTab === 'unsettled' ? 'User,Plan,Amount,Purchased On,Type' : 'User,Plan,Amount,Transaction Date,Settled On,Settled By,Type';
+        const rows = sortedAndFilteredItems.map(tx => {
+            const rowData = activeTab === 'unsettled'
+                ? [tx.userName, tx.planName, (tx.amount||0).toFixed(2), formatTimestamp(tx.createdAt), tx.type]
+                : [tx.userName, tx.planName, (tx.amount||0).toFixed(2), formatTimestamp(tx.createdAt), formatTimestamp(tx.settledAt), tx.settledBy, tx.type];
+            return rowData.map(val => `"${String(val).replace(/"/g, '""')}"`).join(',');
+        });
+        const csvContent = "data:text/csv;charset=utf-8," + [headers, ...rows].join("\n");
+        const encodedUri = encodeURI(csvContent);
+        const link = document.createElement("a");
+        link.setAttribute("href", encodedUri);
+        link.setAttribute("download", `earnings_${activeTab}_${new Date().toISOString().split('T')[0]}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
+        
     return (
         <div className="earnings-page bg-slate-900 text-white min-h-screen p-4 md:p-8">
             <div className="max-w-8xl mx-auto">
