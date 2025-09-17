@@ -5,8 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import FeedbackForm from '../components/FeedbackForm';
 import { motion, AnimatePresence } from 'framer-motion';
 // --- ICONS ---
-import { FaEye, FaLock, FaPlay, FaCheckCircle, FaHourglassHalf, FaBookOpen, FaCrown, FaTachometerAlt, FaVial, FaCommentDots, FaHeadset, FaChevronDown, FaArrowRight, FaChartLine, FaBullseye, FaStar, FaTrophy, FaBolt, FaCalendarAlt, FaChartPie, FaArrowUp } from 'react-icons/fa';
-// --- CHARTING LIBRARY ---
+import { FaEye, FaLock, FaPlay,FaUser, FaCheckCircle, FaHourglassHalf, FaBookOpen, FaCrown, FaTachometerAlt, FaVial, FaCommentDots, FaHeadset, FaChevronDown, FaArrowRight, FaChartLine, FaBullseye, FaStar, FaTrophy, FaBolt, FaCalendarAlt, FaChartPie, FaArrowUp, FaWhatsapp } from 'react-icons/fa';// --- CHARTING LIBRARY ---
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
 
@@ -670,44 +669,108 @@ const UserDashboard = ({ navigate }) => {
 
         if (userStatus.isSubscribed) {
             let expiryText = '';
-            if(userStatus.accessControl?.validityMap) {
-                expiryText = 'Granular Validity';
-            }
-            else if (userStatus.expiryDate && userStatus.expiryDate.toDate) {
-                const expiryDate = userStatus.expiryDate.toDate();
+            const expiryDate = userStatus.expiryDate?.toDate();
+            if (expiryDate) {
                 const now = new Date();
                 const difference = expiryDate.getTime() - now.getTime();
-                if (difference > 0) {
-                    const daysRemaining = Math.ceil(difference / (1000 * 60 * 60 * 24));
-                    expiryText = `Expires in: ${daysRemaining} day${daysRemaining !== 1 ? 's' : ''}`;
-                } else {
-                    expiryText = 'Expired';
-                }
+                expiryText = difference > 0
+                    ? `Expires in ${Math.ceil(difference / (1000 * 60 * 60 * 24))} days`
+                    : 'Expired';
             }
             return (
-                <div className="flex items-center flex-wrap gap-x-4 gap-y-2">
-                    <style jsx>{` @keyframes shine { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } } .premium-badge { background: linear-gradient(90deg, #ffde5e, #ffef97, #ffde5e); background-size: 200% 100%; animation: shine 4s linear infinite; color: #2d3748; font-weight: 700; box-shadow: 0 2px 4px rgba(0,0,0,0.2); } `}</style>
-                    <span className="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-semibold premium-badge space-x-2">
-                        <FaCrown />
-                        <span>Premium Member</span>
-                    </span>
-                    {userStatus.planName && <span className="inline-flex items-center px-3 py-1 text-sm font-semibold bg-gray-700 text-gray-200 rounded">{userStatus.planName}</span>}
-                    {needsUpgrade && (
-                        <button onClick={() => navigate('upgrade')} className="bg-purple-600 hover:bg-purple-500 text-white font-semibold px-3 py-1 text-sm flex items-center space-x-2 rounded transition-colors">
-                            <FaArrowUp />
-                            <span>Upgrade Plan</span>
-                        </button>
-                    )}
-                    {expiryText && (<span className="text-sm text-gray-400">{expiryText}</span>)}
-                </div>
+                <>
+                    <style jsx>{`
+                        .premium-plaque-final {
+                            background: radial-gradient(circle at 15% 50%, rgba(250, 204, 21, 0.1), transparent 60%), 
+                                        linear-gradient(to right, hsl(222, 22%, 15%), hsl(222, 22%, 12%));
+                        }
+                        @keyframes shine { 
+                            0% { background-position: -200% 0; } 
+                            100% { background-position: 200% 0; } 
+                        }
+                        .upgrade-button {
+                            background: linear-gradient(90deg, #a855f7, #c084fc, #a855f7); 
+                            background-size: 200% 100%; 
+                            animation: shine 4s linear infinite; 
+                            color: white; 
+                            font-weight: 700; 
+                            box-shadow: 0 2px 4px rgba(168, 85, 247, 0.3);
+                        }
+                    `}</style>
+                    <div className="premium-plaque-final flex items-center justify-between w-full px-4 py-2 rounded-lg shadow-xl border border-yellow-500/30">
+                        <div className="flex items-center gap-x-3 min-w-0">
+                            <FaCrown className="text-yellow-400 text-xl flex-shrink-0" />
+                            <div className="flex flex-col min-w-0">
+                                <h4 className="font-bold text-white leading-tight truncate" title={userStatus.planName || 'Premium Access'}>
+                                    {userStatus.planName || 'Premium Access'}
+                                </h4>
+                                {expiryText && <p className="text-xs text-gray-400 leading-tight">{expiryText}</p>}
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-x-2 flex-shrink-0">
+                            {/* --- Mobile WhatsApp Button --- */}
+                            <a href="https://chat.whatsapp.com/EH4Nx6wNiBCHcOX2S5nIGO?mode=ems_wa_t" target="_blank" rel="noopener noreferrer"
+                               className="sm:hidden flex items-center justify-center h-9 w-9 rounded-full bg-green-600/20 hover:bg-green-600/30 text-green-300">
+                               <FaWhatsapp className="text-base" />
+                            </a>
+                            {/* --- Desktop WhatsApp Button --- */}
+                            <a href="https://chat.whatsapp.com/EH4Nx6wNiBCHcOX2S5nIGO?mode=ems_wa_t" target="_blank" rel="noopener noreferrer"
+                               className="hidden sm:flex items-center gap-x-1.5 px-2.5 py-1 rounded-md text-xs font-semibold transition-all duration-200 bg-green-600/20 hover:bg-green-600/30 text-green-300">
+                               <FaWhatsapp /> <span>Group</span>
+                            </a>
+                            {needsUpgrade && (
+                                <>
+                                    {/* --- Mobile Upgrade Button --- */}
+                                    <button onClick={() => navigate('upgrade')} className="sm:hidden flex items-center justify-center h-9 w-9 rounded-full bg-purple-600/50 hover:bg-purple-600 text-purple-100">
+                                        <FaArrowUp className="text-base" />
+                                    </button>
+                                    {/* --- Desktop Upgrade Button --- */}
+                                    <button onClick={() => navigate('upgrade')} className="hidden sm:flex items-center gap-x-2 upgrade-button px-4 py-2 rounded-md text-sm font-bold hover:opacity-90 transition-opacity transform hover:scale-105">
+                                        <FaArrowUp /> <span>Upgrade</span>
+                                    </button>
+                                </>
+                            )}
+                        </div>
+                    </div>
+                </>
             );
         } else {
+            // --- STANDARD USER CARD (No changes) ---
             return (
-                <div className="flex items-center space-x-3">
-                     <style jsx>{` @keyframes shine { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } } .subscribe-button { background: linear-gradient(90deg, #ffde5e, #ffef97, #ffde5e); background-size: 200% 100%; animation: shine 4s linear infinite; color: #2d3748; font-weight: 700; box-shadow: 0 2px 4px rgba(0,0,0,0.2); } `}</style>
-                    <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold bg-gray-700 text-gray-300">Standard User</span>
-                    <button onClick={() => navigate('subscription')} className="subscribe-button text-gray-900 px-4 py-2 rounded-md font-bold hover:opacity-90 transition-opacity transform hover:scale-105">Subscribe Now</button>
-                </div>
+                <>
+                    <style jsx>{`
+                        @keyframes shine { 
+                            0% { background-position: -200% 0; } 
+                            100% { background-position: 200% 0; } 
+                        } 
+                        .subscribe-button { 
+                            background: linear-gradient(90deg, #ffde5e, #ffef97, #ffde5e); 
+                            background-size: 200% 100%; 
+                            animation: shine 4s linear infinite; 
+                            color: #2d3748; 
+                            font-weight: 700; 
+                            box-shadow: 0 2px 4px rgba(0,0,0,0.2); 
+                        } 
+                    `}</style>
+                    <div className="flex flex-col sm:flex-row items-center justify-between w-full gap-3 px-3 py-2 rounded-lg bg-gray-800/50 backdrop-blur-sm border border-gray-600/30">
+                        <div className="flex items-center gap-x-3 flex-shrink-0 self-start sm:self-center">
+                            <FaUser className="text-gray-400 text-xl flex-shrink-0" />
+                            <div className="flex flex-col">
+                                <h4 className="font-bold text-white leading-tight whitespace-nowrap">Standard Access</h4>
+                                <p className="text-xs text-gray-400 leading-tight">Unlock all features</p>
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-2 w-full sm:w-auto">
+                            <a href="https://chat.whatsapp.com/EH4Nx6wNiBCHcOX2S5nIGO?mode=ems_wa_t" target="_blank" rel="noopener noreferrer"
+                               className="h-10 w-10 sm:w-auto flex-shrink-0 flex items-center justify-center sm:gap-x-1.5 sm:px-2.5 sm:py-1 rounded-full sm:rounded-md text-xs font-semibold transition-all duration-200 bg-green-600/20 hover:bg-green-600/30 text-green-300">
+                               <FaWhatsapp /> <span className="hidden sm:inline">Group</span>
+                            </a>
+                            <button onClick={() => navigate('subscription')} className="subscribe-button h-10 flex-grow sm:flex-grow-0 w-full sm:w-auto text-gray-900 px-4 py-2 rounded-md font-bold hover:opacity-90 transition-opacity transform hover:scale-105">
+                                Subscribe Now
+                            </button>
+                        </div>
+                    </div>
+                </>
             );
         }
     };
@@ -1175,14 +1238,20 @@ const UserDashboard = ({ navigate }) => {
             .type-tag-challenge { background-color: #f59e0b20; color: #fcd34d; border-color: #f59e0b80; }
             
         `}</style>
-             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6">
-                <h2 className="text-2xl sm:text-3xl font-bold text-white mb-2 sm:mb-0">
-    {welcomeText}{' '}
-    <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500">
-        {userData?.displayName || 'User'}!
-    </span>
-</h2>
-                 {renderUserStatus()}
+             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6 mb-8">
+                {/* Welcome Text */}
+                <div className="flex-shrink-0">
+                    <h2 className="text-2xl sm:text-3xl font-bold text-white">
+                        {welcomeText}{' '}
+                        <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500">
+                            {userData?.displayName || 'User'}!
+                        </span>
+                    </h2>
+                </div>
+                {/* User Status Card Container */}
+                <div className="flex-grow md:max-w-md lg:max-w-lg">
+                    {renderUserStatus()}
+                </div>
             </div>
 
             <div className="hidden md:block">
