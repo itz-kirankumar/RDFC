@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, memo } from 'react';
 import { collection, getDocs, query, where, doc, onSnapshot, updateDoc, orderBy, limit, getDoc } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { useAuth } from '../contexts/AuthContext';
@@ -286,7 +286,7 @@ const useUserAttempts = (uid) => {
     return userAttempts;
 };
 
-const usePerformanceData = (uid, allContent) => {
+const usePerformanceData = (uid, allContent, timeFilter = 'all') => {
     const [data, setData] = useState({ loading: true, overall: null, byType: {} });
 
     useEffect(() => {
@@ -298,17 +298,36 @@ const usePerformanceData = (uid, allContent) => {
         const fetchData = async () => {
             setData({ loading: true, overall: null, byType: {} });
             try {
+                // --- Timeline Filter Logic ---
+                const getCutoffDate = (filter) => {
+                    const now = new Date();
+                    if (filter === '7d') return new Date(now.setDate(now.getDate() - 7));
+                    if (filter === '30d') return new Date(now.setDate(now.getDate() - 30));
+                    if (filter === '90d') return new Date(now.setDate(now.getDate() - 90));
+                    return null; // for 'all' time
+                };
+                const cutoffDate = getCutoffDate(timeFilter);
+
+                // --- Fetch and Filter Data ---
                 const userAttemptsQuery = query(collection(db, 'attempts'), where('userId', '==', uid), where('status', '==', 'completed'));
-                const userAttemptsSnap = await getDocs(userAttemptsQuery);
-                const userAttemptsData = userAttemptsSnap.docs.map(doc => doc.data());
+                const allAttemptsQuery = query(collection(db, 'attempts'), where('status', '==', 'completed'));
+
+                const [userAttemptsSnap, allAttemptsSnapshot] = await Promise.all([getDocs(userAttemptsQuery), getDocs(allAttemptsQuery)]);
+                
+                let userAttemptsData = userAttemptsSnap.docs.map(doc => doc.data());
+                let allAttempts = allAttemptsSnapshot.docs.map(doc => doc.data());
+
+                if (cutoffDate) {
+                    userAttemptsData = userAttemptsData.filter(a => a.completedAt && a.completedAt.toDate() > cutoffDate);
+                    allAttempts = allAttempts.filter(a => a.completedAt && a.completedAt.toDate() > cutoffDate);
+                }
 
                 const testInfoMap = allContent.reduce((acc, test) => {
-                    if (test.contentType !== 'material') {
-                        acc[test.id] = test;
-                    }
+                    if (test.contentType !== 'material') acc[test.id] = test;
                     return acc;
                 }, {});
 
+                // --- Process User's Personal Data ---
                 const byType = {};
                 const overallScoreHistory = [];
 
@@ -317,70 +336,108 @@ const usePerformanceData = (uid, allContent) => {
                     if (!test || !test.mainType) return;
 
                     const category = test.mainType;
+                    const score = typeof attempt.totalScore === 'number' ? attempt.totalScore : 0;
+                    const scoreEntry = { name: test.title, score, date: attempt.completedAt?.toDate().toLocaleDateString() };
 
                     if (!byType[category]) {
                         byType[category] = { scores: [], totalScore: 0, count: 0, scoreHistory: [] };
                     }
-                    const score = typeof attempt.totalScore === 'number' ? attempt.totalScore : 0;
                     byType[category].scores.push(score);
                     byType[category].totalScore += score;
                     byType[category].count += 1;
-
-                    const scoreEntry = {
-                        name: test.title,
-                        score,
-                        date: attempt.completedAt?.toDate().toLocaleDateString()
-                    };
                     byType[category].scoreHistory.push(scoreEntry);
                     overallScoreHistory.push(scoreEntry);
                 });
-
-                Object.keys(byType).forEach(type => {
-                    const d = byType[type];
+                
+                let userTotalScore = 0;
+                let userTotalCount = 0;
+                let userAllScores = [];
+                Object.values(byType).forEach(d => {
                     d.metrics = {
                         testsCompleted: d.count,
                         avgScore: d.count > 0 ? (d.totalScore / d.count).toFixed(1) : 0,
                         bestScore: d.scores.length > 0 ? Math.max(...d.scores) : 0,
                     };
+                    userTotalScore += d.totalScore;
+                    userTotalCount += d.count;
+                    userAllScores.push(...d.scores);
                 });
 
-                const allAttemptsQuery = query(collection(db, 'attempts'), where('status', '==', 'completed'));
-                const allAttemptsSnapshot = await getDocs(allAttemptsQuery);
-                const allAttempts = allAttemptsSnapshot.docs.map(doc => doc.data());
-                const userScores = {};
+                // --- Process Leaderboard Data ---
+                const overallUserScores = {};
+                const byTypeUserScores = {};
+
                 allAttempts.forEach(attempt => {
                     const score = typeof attempt.totalScore === 'number' ? attempt.totalScore : 0;
-                    if (!userScores[attempt.userId]) userScores[attempt.userId] = { totalScore: 0, count: 0, scores: [] };
-                    userScores[attempt.userId].totalScore += score;
-                    userScores[attempt.userId].count += 1;
-                    userScores[attempt.userId].scores.push(score);
+                    const test = testInfoMap[attempt.testId];
+
+                    // Aggregate for Overall Leaderboard
+                    if (!overallUserScores[attempt.userId]) overallUserScores[attempt.userId] = { totalScore: 0, count: 0 };
+                    overallUserScores[attempt.userId].totalScore += score;
+                    overallUserScores[attempt.userId].count += 1;
+                    
+                    // Aggregate for Per-Category Leaderboards
+                    if (test && test.mainType) {
+                        const category = test.mainType;
+                        if (!byTypeUserScores[category]) byTypeUserScores[category] = {};
+                        if (!byTypeUserScores[category][attempt.userId]) byTypeUserScores[category][attempt.userId] = { totalScore: 0, count: 0 };
+                        byTypeUserScores[category][attempt.userId].totalScore += score;
+                        byTypeUserScores[category][attempt.userId].count += 1;
+                    }
                 });
-                const rankedUsers = Object.entries(userScores).map(([userId, data]) => ({ userId, totalScore: data.totalScore, testCount: data.count })).sort((a, b) => b.totalScore - a.totalScore);
-                const currentUserIndex = rankedUsers.findIndex(user => user.userId === uid);
-                const top10Users = rankedUsers.slice(0, 10);
-                const userIdsToFetch = [...new Set(top10Users.map(u => u.userId).concat(uid))];
-                const userDocs = await Promise.all(userIdsToFetch.map(id => getDoc(doc(db, 'users', id))));
+
+                // --- Rank Users and Prepare for Fetching ---
+                const rankAndSlice = (scores) => Object.entries(scores).map(([userId, data]) => ({ userId, totalScore: data.totalScore })).sort((a, b) => b.totalScore - a.totalScore);
+
+                const overallRanked = rankAndSlice(overallUserScores);
+                const byTypeRanked = {};
+                Object.keys(byTypeUserScores).forEach(cat => {
+                    byTypeRanked[cat] = rankAndSlice(byTypeUserScores[cat]);
+                });
+
+                // --- Collect all unique user IDs for fetching ---
+                const userIdsToFetch = new Set([uid]);
+                overallRanked.slice(0, 10).forEach(u => userIdsToFetch.add(u.userId));
+                Object.values(byTypeRanked).forEach(list => list.slice(0, 10).forEach(u => userIdsToFetch.add(u.userId)));
+
+                // --- Fetch User Info ---
+                const userDocs = await Promise.all(Array.from(userIdsToFetch).map(id => getDoc(doc(db, 'users', id))));
                 const usersMap = userDocs.reduce((acc, userDoc) => {
                     if (userDoc.exists()) acc[userDoc.id] = userDoc.data().displayName || 'Anonymous';
                     return acc;
                 }, {});
-                const leaderboard = top10Users.map((user, index) => ({ name: usersMap[user.userId] || 'Anonymous', score: user.totalScore, rank: index + 1, userId: user.userId }));
-                const currentUserEntry = currentUserIndex !== -1 ? { name: usersMap[uid], score: rankedUsers[currentUserIndex].totalScore, rank: currentUserIndex + 1, userId: uid } : null;
 
+                // --- Build Leaderboards ---
+                const buildLeaderboard = (rankedList, currentUserId) => {
+                    const top10 = rankedList.slice(0, 10).map((user, index) => ({ name: usersMap[user.userId] || 'Anonymous', score: user.totalScore, rank: index + 1, userId: user.userId }));
+                    const currentUserIndex = rankedList.findIndex(user => user.userId === currentUserId);
+                    const currentUserEntry = currentUserIndex !== -1 ? { name: usersMap[currentUserId], score: rankedList[currentUserIndex].totalScore, rank: currentUserIndex + 1, userId: currentUserId } : null;
+                    return { leaderboard: top10, currentUserEntry };
+                };
+                
+                const overallLeaderboardData = buildLeaderboard(overallRanked, uid);
+                Object.keys(byType).forEach(type => {
+                    const rankedList = byTypeRanked[type] || [];
+                    const leaderboardData = buildLeaderboard(rankedList, uid);
+                    byType[type].leaderboard = leaderboardData.leaderboard;
+                    byType[type].currentUserEntry = leaderboardData.currentUserEntry;
+                });
+                
                 setData({
                     loading: false,
                     byType,
                     overall: {
                         metrics: {
-                            testsCompleted: userAttemptsData.length,
-                            avgScore: userScores[uid] ? (userScores[uid].totalScore / userScores[uid].count).toFixed(1) : 0,
-                            bestScore: userScores[uid] && userScores[uid].scores.length > 0 ? Math.max(...userScores[uid].scores) : 0
+                            testsCompleted: userTotalCount,
+                            avgScore: userTotalCount > 0 ? (userTotalScore / userTotalCount).toFixed(1) : 0,
+                            bestScore: userAllScores.length > 0 ? Math.max(...userAllScores) : 0
                         },
-                        leaderboard,
-                        currentUserEntry,
+                        leaderboard: overallLeaderboardData.leaderboard,
+                        currentUserEntry: overallLeaderboardData.currentUserEntry,
                         scoreHistory: overallScoreHistory
                     }
                 });
+
             } catch (error) {
                 console.error("Error fetching performance data:", error);
                 setData({ loading: false, overall: null, byType: {} });
@@ -388,12 +445,10 @@ const usePerformanceData = (uid, allContent) => {
         };
 
         fetchData();
-    }, [uid, allContent]);
+    }, [uid, allContent, timeFilter]);
 
     return data;
 }
-
-// --- MAIN DASHBOARD COMPONENT ---
 
 // --- MAIN DASHBOARD COMPONENT ---
 
@@ -404,12 +459,15 @@ const UserDashboard = ({ navigate }) => {
     const [activeTab, setActiveTab] = useState('dashboard');
     const [activeSubTab, setActiveSubTab] = useState(null);
     const [openAccordion, setOpenAccordion] = useState(null);
+    const [activeMobileSubTab, setActiveMobileSubTab] = useState(null);
 
     const managedTabs = useManagedTabs();
     const { allContent, linkedMaterials, loading: masterDataLoading } = useMasterData();
     const userStatus = useUserStatus(userData?.uid);
     const userAttempts = useUserAttempts(userData?.uid);
-    const performanceData = usePerformanceData(userData?.uid, allContent);
+    const [performanceTimeFilter, setPerformanceTimeFilter] = useState('all');
+    const performanceData = usePerformanceData(userData?.uid, allContent, performanceTimeFilter);
+    // Performance hook call is now in the PerformanceContent component
     const welcomeText = useMemo(() => {
         if (userData?.metadata) {
             const creationTime = new Date(userData.metadata.creationTime).getTime();
@@ -502,8 +560,19 @@ const UserDashboard = ({ navigate }) => {
                     newLiveTests[item.id] = true;
                 }
             });
-            setLiveTests(newLiveTests);
+
+            // This logic now prevents re-renders unless the live tests have actually changed
+            setLiveTests(prevLiveTests => {
+                const prevKeys = Object.keys(prevLiveTests);
+                const newKeys = Object.keys(newLiveTests);
+                
+                if (prevKeys.length === newKeys.length && prevKeys.every(key => newKeys.includes(key))) {
+                    return prevLiveTests; // Return the old state if nothing changed
+                }
+                return newLiveTests; // Return the new state only if there's a difference
+            });
         };
+
         const interval = setInterval(checkLiveStatus, 1000 * 60);
         checkLiveStatus();
         return () => clearInterval(interval);
@@ -898,69 +967,95 @@ const UserDashboard = ({ navigate }) => {
         </div>
     );
     
-    const PerformanceContent = () => {
-        const [filter, setFilter] = useState('OVERALL');
-        const { loading, overall, byType } = performanceData;
+    const PerformanceContent = memo(({ userData, performanceData, timeFilter, setTimeFilter }) => {
+    const [categoryFilter, setCategoryFilter] = useState('OVERALL');
+    
+    const { loading, overall, byType } = performanceData;
 
-        if (loading) {
-            return <div className="text-center text-gray-400 p-8">Loading Performance Insights...</div>;
-        }
+    if (loading) {
+        return <div className="text-center text-gray-400 p-8">Loading Performance Insights...</div>;
+    }
 
-        const availableFilters = ['OVERALL', ...Object.keys(byType)];
-        const currentData = filter === 'OVERALL' ? overall : byType[filter];
-        const scoreHistory = filter === 'OVERALL' ? overall?.scoreHistory : byType[filter]?.scoreHistory;
-        
-        if (!overall || overall.metrics.testsCompleted === 0) {
-             return <p className="text-center text-gray-500 py-8">Complete some tests to see your performance analysis here.</p>
-        }
+    const availableFilters = ['OVERALL', ...Object.keys(byType)];
+    const currentData = categoryFilter === 'OVERALL' ? overall : byType[categoryFilter];
+    const scoreHistory = categoryFilter === 'OVERALL' ? overall?.scoreHistory : byType[categoryFilter]?.scoreHistory;
+    const timeFilters = [
+        { label: 'Last 7 Days', value: '7d' },
+        { label: 'Last 30 Days', value: '30d' },
+        { label: 'Last 90 Days', value: '90d' },
+        { label: 'All Time', value: 'all' },
+    ];
+    
+    if (!overall || overall.metrics.testsCompleted === 0) {
+         return <p className="text-center text-gray-500 py-8">Complete some tests to see your performance analysis here.</p>
+    }
 
-        return (
-            <div>
-                <div className="flex items-center space-x-2 mb-6 overflow-x-auto pb-2">
+    return (
+        <div>
+            <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
+                {/* Left side: Category Tabs */}
+                <div className="flex items-center space-x-2 overflow-x-auto pb-2">
                     {availableFilters.map(f => (
-                        <button key={f} onClick={() => setFilter(f)} disabled={!byType[f] && f !== 'OVERALL'} className={`px-4 py-2 text-sm font-semibold rounded-md transition-colors whitespace-nowrap ${filter === f ? 'bg-blue-600 text-white' : 'bg-gray-700 hover:bg-gray-600 text-gray-300'} disabled:opacity-50 disabled:cursor-not-allowed`}>{f}</button>
+                        <button key={f} onClick={() => setCategoryFilter(f)} disabled={!byType[f] && f !== 'OVERALL'} className={`px-4 py-2 text-sm font-semibold rounded-md transition-colors whitespace-nowrap ${categoryFilter === f ? 'bg-blue-600 text-white' : 'bg-gray-700 hover:bg-gray-600 text-gray-300'} disabled:opacity-50 disabled:cursor-not-allowed`}>
+                            {f}
+                        </button>
                     ))}
                 </div>
-                
-                {!currentData ? <p className="text-center text-gray-500 py-4">No completed tests yet for this category.</p> : (
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                        <div className="lg:col-span-1 flex flex-col space-y-4">
-                            <h3 className="text-xl font-bold text-white mb-2">{filter} Insights</h3>
-                            <PerformanceMetricCard icon={<FaCheckCircle />} value={currentData.metrics.testsCompleted} label="Tests Completed" color="text-green-400" />
-                            <PerformanceMetricCard icon={<FaBullseye />} value={currentData.metrics.avgScore} label="Average Score" color="text-blue-400" />
-                            <PerformanceMetricCard icon={<FaStar />} value={currentData.metrics.bestScore} label="Best Score" color="text-yellow-400" />
-                        </div>
-                        <div className="lg:col-span-2">
-                            <h3 className="text-xl font-bold text-white mb-4">Performance Charts</h3>
-                            {scoreHistory && scoreHistory.length > 1
-                                ? <ScoreTrendChart data={scoreHistory} color="#38bdf8" />
-                                : <div className="bg-gray-800/50 p-4 rounded-lg h-80 flex items-center justify-center text-gray-500 border border-gray-700">Complete at least two tests in this category to see your score trend.</div>
-                            }
-                        </div>
+
+                {/* Right side: Timeline Dropdown */}
+                <div className="relative">
+                    <select 
+                        value={timeFilter} 
+                        onChange={(e) => setTimeFilter(e.target.value)}
+                        className="bg-gray-700 text-white text-sm font-semibold rounded-md pl-3 pr-8 py-2 appearance-none focus:outline-none focus:ring-2 focus:ring-purple-500 cursor-pointer"
+                    >
+                        {timeFilters.map(tf => (
+                            <option key={tf.value} value={tf.value} className="font-semibold">{tf.label}</option>
+                        ))}
+                    </select>
+                    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-400">
+                        <FaChevronDown className="h-4 w-4" />
                     </div>
-                )}
-                
-                {filter === 'OVERALL' && (
-                    <div className="mt-12">
-                         <h3 className="text-xl font-bold text-white mb-4">Overall Leaderboard (All Tests)</h3>
-                         <div className="bg-gray-800 rounded-lg shadow-lg border border-gray-700 p-2 space-y-1">
-                             {overall.leaderboard.length > 0 ? (
-                                 <>
-                                     {overall.leaderboard.map((entry) => ( <LeaderboardRow key={entry.rank} entry={entry} rank={entry.rank} isCurrentUser={entry.userId === userData.uid} /> ))}
-                                     {overall.currentUserEntry && !overall.leaderboard.some(e => e.userId === overall.currentUserEntry.userId) && (
-                                         <>
-                                             <hr className="border-gray-700 my-2" />
-                                             <LeaderboardRow entry={overall.currentUserEntry} rank={overall.currentUserEntry.rank} isCurrentUser />
-                                         </>
-                                     )}
-                                 </>
-                             ) : <p className="text-center text-gray-500 py-4">No completed tests yet to rank.</p>}
-                         </div>
-                    </div>
-                )}
+                </div>
             </div>
-        );
-    };
+
+            {!currentData ? <p className="text-center text-gray-500 py-4">No completed tests yet for this category.</p> : (
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                    <div className="lg:col-span-1 flex flex-col space-y-4">
+                        <h3 className="text-xl font-bold text-white mb-2">{categoryFilter} Insights</h3>
+                        <PerformanceMetricCard icon={<FaCheckCircle />} value={currentData.metrics.testsCompleted} label="Tests Completed" color="text-green-400" />
+                        <PerformanceMetricCard icon={<FaBullseye />} value={currentData.metrics.avgScore} label="Average Score" color="text-blue-400" />
+                        <PerformanceMetricCard icon={<FaStar />} value={currentData.metrics.bestScore} label="Best Score" color="text-yellow-400" />
+                    </div>
+                    <div className="lg:col-span-2">
+                        <h3 className="text-xl font-bold text-white mb-4">Performance Charts</h3>
+                        {scoreHistory && scoreHistory.length > 1
+                            ? <ScoreTrendChart data={scoreHistory} color="#38bdf8" />
+                            : <div className="bg-gray-800/50 p-4 rounded-lg h-80 flex items-center justify-center text-gray-500 border border-gray-700">Complete at least two tests in this category and timeline to see your score trend.</div>
+                        }
+                    </div>
+                </div>
+            )}
+            
+            <div className="mt-12">
+                 <h3 className="text-xl font-bold text-white mb-4">{categoryFilter} Leaderboard</h3>
+                 <div className="bg-gray-800 rounded-lg shadow-lg border border-gray-700 p-2 space-y-1">
+                     {currentData && currentData.leaderboard && currentData.leaderboard.length > 0 ? (
+                         <>
+                             {currentData.leaderboard.map((entry) => ( <LeaderboardRow key={entry.rank} entry={entry} rank={entry.rank} isCurrentUser={entry.userId === userData.uid} /> ))}
+                             {currentData.currentUserEntry && !currentData.leaderboard.some(e => e.userId === currentData.currentUserEntry.userId) && (
+                                 <>
+                                     <hr className="border-gray-700 my-2" />
+                                     <LeaderboardRow entry={currentData.currentUserEntry} rank={currentData.currentUserEntry.rank} isCurrentUser />
+                                 </>
+                             )}
+                         </>
+                     ) : <p className="text-center text-gray-500 py-4">No completed tests yet to rank for this category and timeline.</p>}
+                 </div>
+            </div>
+        </div>
+    );
+});
 
     const ContentCard = ({ content }) => {
         const material = linkedMaterials[content.id];
@@ -1028,12 +1123,32 @@ const UserDashboard = ({ navigate }) => {
         );
     };
 
-    const AccordionSection = ({ title, icon: Icon, sectionKey, children }) => {
+    const AccordionSection = ({ title, icon: Icon, sectionKey, children, tab }) => {
         const isOpen = openAccordion === sectionKey;
+
+        const handleToggle = () => {
+            if (isOpen) {
+                setOpenAccordion(null);
+                setActiveMobileSubTab(null); // Reset when closing
+            } else {
+                setOpenAccordion(sectionKey);
+                // Automatically select the first available sub-tab when opening
+                const contentForTab = contentByTab[tab.name];
+                const hasSubTabs = tab.subTabs && tab.subTabs.some(sub => contentForTab.subTabs[sub.name]?.content?.length > 0);
+
+                if (hasSubTabs) {
+                    const firstSubTabWithContent = tab.subTabs.find(sub => contentForTab.subTabs[sub.name]?.content?.length > 0);
+                    setActiveMobileSubTab(firstSubTabWithContent ? firstSubTabWithContent.name : null);
+                } else {
+                    setActiveMobileSubTab(null);
+                }
+            }
+        };
+
         return (
             <div className="mb-2">
                 <button 
-                    onClick={() => setOpenAccordion(isOpen ? null : sectionKey)}
+                    onClick={handleToggle}
                     className="w-full flex items-center justify-between p-4 bg-gray-800 rounded-lg text-left text-white font-semibold"
                 >
                     <div className="flex items-center space-x-3">
@@ -1295,7 +1410,7 @@ const UserDashboard = ({ navigate }) => {
                             </div>
                         </div>
                     )}
-                    {activeTab === 'performance' && <PerformanceContent />}
+                    {activeTab === 'performance' && <PerformanceContent userData={userData} performanceData={performanceData} timeFilter={performanceTimeFilter} setTimeFilter={setPerformanceTimeFilter} />}
                     
                     {visibleTabs.map(tab => {
                         if (activeTab !== tab.name) return null;
@@ -1332,24 +1447,55 @@ const UserDashboard = ({ navigate }) => {
                     <ExamCountdownWidget title="CAT 2025" targetDate="2025-11-29T23:59:59" />
                     <VocabCardWidget />
                 </div>
-                <AccordionSection title="Performance" icon={FaChartLine} sectionKey="performance"><PerformanceContent /></AccordionSection>
+                <AccordionSection title="Performance" icon={FaChartLine} sectionKey="performance" tab={{ name: 'Performance' }}>
+                    <PerformanceContent userData={userData} performanceData={performanceData} timeFilter={performanceTimeFilter} setTimeFilter={setPerformanceTimeFilter} />
+                </AccordionSection>
                 {visibleTabs.map(tab => {
                     const contentForTab = contentByTab[tab.name];
-                    const allContentInTab = [...contentForTab.content, ...(tab.subTabs ? Object.values(contentForTab.subTabs).flatMap(s => s.content) : [])];
+                    const hasSubTabs = tab.subTabs && tab.subTabs.some(sub => contentForTab.subTabs[sub.name]?.content?.length > 0);
+                    
+                    let contentToShow = [];
+                    let allContentForViewAll = [];
+
+                    if (hasSubTabs && activeMobileSubTab) {
+                        contentToShow = contentForTab.subTabs[activeMobileSubTab]?.content || [];
+                    } else {
+                        contentToShow = [...contentForTab.content, ...(tab.subTabs ? Object.values(contentForTab.subTabs).flatMap(s => s.content) : [])];
+                    }
+                    
+                    allContentForViewAll = contentToShow;
 
                     return (
-                        <AccordionSection key={tab.id} title={tab.name} icon={iconMap[tab.name] || FaVial} sectionKey={tab.id}>
-                            {allContentInTab.slice(0, 10).map(item => <MobileContentListItem key={item.id} content={item} tabName={tab.name} /> )}
-                            {allContentInTab.length > 10 && (
-                                <button onClick={() => navigate('allTests', { tests: allContentInTab.map(t => ({...t, material: linkedMaterials[t.id]})), title: `All ${tab.name}` })} className="text-blue-400 font-semibold text-sm mt-2 w-full text-center">
-                                    View All {allContentInTab.length} Items...
+                        <AccordionSection key={tab.id} title={tab.name} icon={iconMap[tab.name] || FaVial} sectionKey={tab.id} tab={tab}>
+                             {hasSubTabs && (
+                                <div className="flex items-center space-x-2 overflow-x-auto pb-3 mb-3 border-b border-gray-700">
+                                    {tab.subTabs.map(subTab => {
+                                        const subContent = contentForTab.subTabs[subTab.name]?.content || [];
+                                        if (subContent.length === 0) return null;
+                                        const isSubTabActive = activeMobileSubTab === subTab.name;
+                                        return (
+                                            <button
+                                                key={subTab.name}
+                                                onClick={() => setActiveMobileSubTab(subTab.name)}
+                                                className={`px-3 py-1 text-xs font-semibold rounded-md transition-colors whitespace-nowrap ${isSubTabActive ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300'}`}
+                                            >
+                                                {subTab.name}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                            {contentToShow.slice(0, 10).map(item => <MobileContentListItem key={item.id} content={item} tabName={tab.name} /> )}
+                            {allContentForViewAll.length > 10 && (
+                                <button onClick={() => navigate('allTests', { tests: allContentForViewAll.map(t => ({...t, material: linkedMaterials[t.id]})), title: `${tab.name}${activeMobileSubTab ? ` / ${activeMobileSubTab}` : ''}` })} className="text-blue-400 font-semibold text-sm mt-2 w-full text-center">
+                                    View All {allContentForViewAll.length} Items...
                                 </button>
                             )}
                         </AccordionSection>
                     )
                 })}
-                {userStatus?.isSubscribed && !userStatus.hasSubmittedFeedback && ( <AccordionSection title="Feedback" icon={FaCommentDots} sectionKey="feedback">{showFeedbackThanks ? <p className="text-green-400 text-center">Thank you for your feedback!</p> : <FeedbackForm userStatus={userStatus} onSuccessfulSubmit={handleFeedbackSuccess} />}</AccordionSection> )}
-                <AccordionSection title="Support" icon={FaHeadset} sectionKey="support"><p className="text-gray-400 text-center mb-4">Need help? Visit our support center.</p><button onClick={() => navigate('support')} className="w-full bg-blue-600 text-white px-4 py-2 rounded-md font-semibold hover:bg-blue-700">Go to Support</button></AccordionSection>
+                {userStatus?.isSubscribed && !userStatus.hasSubmittedFeedback && ( <AccordionSection title="Feedback" icon={FaCommentDots} sectionKey="feedback" tab={{ name: 'Feedback' }}>{showFeedbackThanks ? <p className="text-green-400 text-center">Thank you for your feedback!</p> : <FeedbackForm userStatus={userStatus} onSuccessfulSubmit={handleFeedbackSuccess} />}</AccordionSection> )}
+                <AccordionSection title="Support" icon={FaHeadset} sectionKey="support" tab={{ name: 'Support' }}><p className="text-gray-400 text-center mb-4">Need help? Visit our support center.</p><button onClick={() => navigate('support')} className="w-full bg-blue-600 text-white px-4 py-2 rounded-md font-semibold hover:bg-blue-700">Go to Support</button></AccordionSection>
             </div>
         </div>
     );
