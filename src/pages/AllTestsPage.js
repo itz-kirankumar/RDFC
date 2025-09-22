@@ -267,6 +267,26 @@ const AllTestsPage = ({ navigate, tests: initialTests = [], title, contentType }
         const { main, sub } = getTestCategory(test);
         const typeColors = { MOCKS: 'type-tag-mock', SECTIONALS: 'type-tag-sectional', 'ADD-ONS': 'type-tag-addon', '10 MIN RC': 'type-tag-10min', RDFC: 'type-tag-rdfc' };
         const displayType = sub ? sub : main;
+
+        // --- NEW LOGIC TO COMBINE DESCRIPTIONS ---
+        const testDesc = test.description;
+        const materialDesc = material?.description;
+        let combinedDescription;
+
+        if (testDesc && materialDesc) {
+            // Case 1: Both descriptions exist. Stack them for clarity.
+            combinedDescription = (
+                <div>
+                    <p className="truncate" title={testDesc}>{testDesc}</p>
+                    <p className="text-xs text-gray-500 mt-1 italic truncate" title={materialDesc}>{materialDesc}</p>
+                </div>
+            );
+        } else {
+            // Case 2: Only one (or none) exists. Display it directly.
+            const singleDesc = testDesc || materialDesc || '';
+            combinedDescription = <p className="truncate" title={singleDesc}>{singleDesc}</p>;
+        }
+        // --- END OF NEW LOGIC ---
     
         return (
             <tr key={test.id} className="hover:bg-gray-700/50 transition-colors">
@@ -282,7 +302,7 @@ const AllTestsPage = ({ navigate, tests: initialTests = [], title, contentType }
                  <td className="px-6 py-4 text-sm text-gray-400">
                     <span className={`tag-type ${typeColors[displayType.toUpperCase()] || 'type-tag-addon'}`}>{displayType}</span>
                  </td>
-                 <td className="px-6 py-4 text-sm text-gray-400 max-w-xs truncate">{test.description || (material ? material.description : '')}</td>
+                 <td className="px-6 py-4 text-sm text-gray-400 max-w-xs">{combinedDescription}</td>
                  <td className="px-6 py-4 text-sm text-center">{renderActionButtons(test)}</td>
             </tr>
         );

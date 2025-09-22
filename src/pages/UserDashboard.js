@@ -666,6 +666,26 @@ const UserDashboard = ({ navigate }) => {
         const isScheduled = content.liveAt && content.liveAt.toDate() > new Date() && !liveTests[content.id];
         const isLocked = getIsLocked(content);
         const { main, sub } = getTestCategory(content);
+
+        // --- NEW LOGIC TO COMBINE DESCRIPTIONS ---
+        const testDesc = content.description;
+        const materialDesc = material?.description;
+        let combinedDescription;
+
+        if (testDesc && materialDesc) {
+            // Case 1: Both descriptions exist. Stack them for clarity.
+            combinedDescription = (
+                <div>
+                    <p className="truncate" title={testDesc}>{testDesc}</p>
+                    <p className="text-xs text-gray-500 mt-1 italic truncate" title={materialDesc}>{materialDesc}</p>
+                </div>
+            );
+        } else {
+            // Case 2: Only one (or none) exists. Display it directly.
+            const singleDesc = testDesc || materialDesc || '';
+            combinedDescription = <p className="truncate" title={singleDesc}>{singleDesc}</p>;
+        }
+        // --- END OF NEW LOGIC ---
         
         const renderActionButtons = () => {
             if (isScheduled) return <div className="flex items-center justify-center h-full"><CountdownTimer targetDate={content.liveAt.toDate()} onComplete={() => updateLiveTests(content.id)} /></div>;
@@ -727,11 +747,12 @@ const UserDashboard = ({ navigate }) => {
                  <td className="px-6 py-4 text-sm text-gray-400">
                       <span className={`tag-type ${typeColors[displayType.toUpperCase()] || 'type-tag-addon'}`}>{displayType}</span>
                  </td>
-                 <td className="px-6 py-4 text-sm text-gray-400 max-w-xs truncate">{content.description || (material ? material.description : '')}</td>
+                 <td className="px-6 py-4 text-sm text-gray-400 max-w-xs">{combinedDescription}</td>
                  <td className="px-6 py-4 text-sm text-center">{renderActionButtons()}</td>
             </tr>
         );
     };
+    
 
     const renderUserStatus = () => {
         if (!userStatus) return null;
