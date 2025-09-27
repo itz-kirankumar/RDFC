@@ -138,7 +138,8 @@ const TransactionRow = ({ tx, isMasterAdmin, activeTab, onSettle, onToggleApprov
     return (
         <tr className={`transaction-row ${rowClass}`}>
             <td className="td user-cell"><FaUserCircle className="text-slate-500 text-2xl mr-3 flex-shrink-0" /><div><p className="font-medium text-white">{tx.userName || 'N/A'}</p><p className="text-xs text-slate-400 truncate max-w-[200px]">{tx.userEmail || 'N/A'}</p></div></td>
-            <td className="td"><p className="text-emerald-400 font-semibold text-lg">₹{(tx.amount || 0).toFixed(2)}</p><p className="text-xs text-slate-400">{tx.planName || 'N/A'}</p></td>
+            <p className="text-emerald-400 font-semibold text-lg">₹{(tx.amount || 0).toFixed(2)}</p>
+            <p className="text-xs text-slate-400">{`${tx.planName || 'N/A'} ${tx.tierText ? `(${tx.tierText})` : ''}`.trim()}</p>
             <td className="td"><p className="text-slate-300">{formatTimestamp(tx.createdAt)}</p><p className="text-xs text-slate-500">Transaction Date</p></td>
             {activeTab === 'settled' && (<td className="td"><p className="text-slate-300">{formatTimestamp(tx.settledAt)}</p><p className="text-xs text-slate-500">by {tx.settledBy || 'N/A'}</p></td>)}
             <td className="td"><TypePill type={tx.type} /></td>

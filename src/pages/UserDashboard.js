@@ -791,8 +791,8 @@ const UserDashboard = ({ navigate }) => {
                         <div className="flex items-center gap-x-3 min-w-0">
                             <FaCrown className="text-yellow-400 text-xl flex-shrink-0" />
                             <div className="flex flex-col min-w-0">
-                                <h4 className="font-bold text-white leading-tight truncate" title={userStatus.planName || 'Premium Access'}>
-                                    {userStatus.planName || 'Premium Access'}
+                                <h4 className="font-bold text-white leading-tight truncate" title={`${userStatus.planName || 'Premium Access'} ${userStatus.tierText ? `(${userStatus.tierText})` : ''}`.trim()}>
+                                    {`${userStatus.planName || 'Premium Access'} ${userStatus.tierText ? `(${userStatus.tierText})` : ''}`.trim()}
                                 </h4>
                                 {expiryText && <p className="text-xs text-gray-400 leading-tight">{expiryText}</p>}
                             </div>

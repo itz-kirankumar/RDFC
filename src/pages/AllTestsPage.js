@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { collection, query, where, onSnapshot, doc, updateDoc } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, doc, updateDoc, orderBy } from 'firebase/firestore'; // <-- FIX IS HERE
 import { db } from '../firebase/config';
 import { FaEye, FaLock, FaPlay, FaCheckCircle, FaBookOpen, FaArrowLeft, FaArrowUp, FaHourglassHalf } from 'react-icons/fa';
 
@@ -47,6 +47,20 @@ const CountdownTimer = ({ targetDate, onComplete }) => {
     );
 };
 
+// --- NEW HOOK TO FETCH TAB CONFIGURATION ---
+const useManagedTabs = () => {
+    const [managedTabs, setManagedTabs] = useState([]);
+    useEffect(() => {
+        const tabsQuery = query(collection(db, 'tabManager'), orderBy('order'));
+        const unsubscribe = onSnapshot(tabsQuery, (snapshot) => {
+            const tabs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            setManagedTabs(tabs);
+        });
+        return () => unsubscribe();
+    }, []);
+    return managedTabs;
+};
+
 
 // --- MAIN PAGE COMPONENT ---
 
@@ -56,6 +70,7 @@ const AllTestsPage = ({ navigate, tests: initialTests = [], title, contentType }
     const [userStatus, setUserStatus] = useState(null);
     const [liveTests, setLiveTests] = useState({});
     const [visibleCount, setVisibleCount] = useState(100);
+    const managedTabs = useManagedTabs(); // <-- Fetch tab rules
 
     const hasMaterials = useMemo(() => 
         initialTests.some(test => test.material || test.isMaterialOnly), 
@@ -110,7 +125,6 @@ const AllTestsPage = ({ navigate, tests: initialTests = [], title, contentType }
         if (test.mainType) {
             return { main: test.mainType, sub: test.subType || null };
         }
-        // The `material` property is passed from the dashboard navigate function
         if (test.material) return { main: 'RDFC', sub: null };
         const oldType = test.type?.toUpperCase();
         if (oldType === 'MOCK') return { main: 'Mocks', sub: null };
@@ -119,36 +133,47 @@ const AllTestsPage = ({ navigate, tests: initialTests = [], title, contentType }
         return { main: 'Add-Ons', sub: null };
     };
 
+    // --- REPLACED: CORRECT getIsLocked FUNCTION ---
     const getIsLocked = (test) => {
+        // Rule 1: Free content is never locked for anyone.
         if (test.isFree) return false;
+    
+        // For non-free content, the user must be a premium subscriber.
         if (!userStatus?.isSubscribed) return true;
         
-        const access = userStatus.accessControl;
-        if (!access) return true;
-        
         const { main, sub } = getTestCategory(test);
-        let requiredPermissionKey = sub ? `${main}/${sub}` : main;
+        const tabInfo = managedTabs.find(t => t.name === main);
+        const subTabInfo = tabInfo?.subTabs?.find(s => s.name === sub);
+        const requiredPermissionKey = sub ? `${main}/${sub}` : main;
+        const access = userStatus.accessControl;
 
-        if (access.validityMap && access.validityMap[requiredPermissionKey]) {
-            const expiry = access.validityMap[requiredPermissionKey];
-            if (expiry && expiry.toDate() > new Date()) return false;
+        // Check for a specific, valid access date first. This overrides everything.
+        if (access?.validityMap?.[requiredPermissionKey] && access.validityMap[requiredPermissionKey].toDate() > new Date()) {
+            return false;
         }
 
-        const hasOverallAccess = userStatus.expiryDate ? userStatus.expiryDate.toDate() > new Date() : true;
-        if (!hasOverallAccess) return true;
+        // Check for an overall subscription expiry date. If it's expired and no valid granular access was found, lock the content.
+        const overallExpiry = userStatus.expiryDate?.toDate();
+        if (overallExpiry && overallExpiry < new Date()) {
+            return true;
+        }
 
+        // Rule 3: Determine if the content's category requires special access from the tab manager.
+        const requiresSpecialAccess = subTabInfo ? subTabInfo.requiresAccess : (tabInfo ? tabInfo.requiresAccess : true);
+
+        // If it does NOT require special access, and the user is a subscriber whose plan hasn't expired, they have access.
+        if (!requiresSpecialAccess) {
+            return false;
+        }
+
+        // Rule 2: If it DOES require special access, check the user's specific permissions.
+        if (!access) return true; // No accessControl object means no special permissions.
+
+        // Check for boolean-based access (e.g., accessControl.Mocks = true).
         if (access[requiredPermissionKey] === true) return false;
 
-        const oldKeyMap = {
-            'RDFC': userStatus.rdfc_articles || userStatus.rdfc_tests,
-            'Mocks': userStatus.mock,
-            'Sectionals': userStatus.sectional,
-            'Add-Ons': userStatus.test,
-            '10 Min RC': userStatus.ten_min_tests
-        };
-        if (oldKeyMap[requiredPermissionKey]) return false;
-
-        return false; // CORRECTED: Defaults to unlocked for subscribed users
+        // If no specific permission is found for a category that requires it, it is locked.
+        return true;
     };
 
     const handleViewArticle = async (articleUrl, testId) => {
@@ -268,13 +293,11 @@ const AllTestsPage = ({ navigate, tests: initialTests = [], title, contentType }
         const typeColors = { MOCKS: 'type-tag-mock', SECTIONALS: 'type-tag-sectional', 'ADD-ONS': 'type-tag-addon', '10 MIN RC': 'type-tag-10min', RDFC: 'type-tag-rdfc' };
         const displayType = sub ? sub : main;
 
-        // --- NEW LOGIC TO COMBINE DESCRIPTIONS ---
         const testDesc = test.description;
         const materialDesc = material?.description;
         let combinedDescription;
 
         if (testDesc && materialDesc) {
-            // Case 1: Both descriptions exist. Stack them for clarity.
             combinedDescription = (
                 <div>
                     <p className="truncate" title={testDesc}>{testDesc}</p>
@@ -282,11 +305,9 @@ const AllTestsPage = ({ navigate, tests: initialTests = [], title, contentType }
                 </div>
             );
         } else {
-            // Case 2: Only one (or none) exists. Display it directly.
             const singleDesc = testDesc || materialDesc || '';
             combinedDescription = <p className="truncate" title={singleDesc}>{singleDesc}</p>;
         }
-        // --- END OF NEW LOGIC ---
     
         return (
             <tr key={test.id} className="hover:bg-gray-700/50 transition-colors">
