@@ -333,6 +333,19 @@ export default function AdminUserManagement() {
     const premiumUsersCount = useMemo(() => visibleUsers.filter(u => u.isSubscribed).length, [visibleUsers]);
     const totalPages = Math.ceil(filteredUsers.length / usersPerPage);
     const currentUsers = filteredUsers.slice((currentPage * usersPerPage) - usersPerPage, currentPage * usersPerPage);
+
+    const latestTierTextMap = useMemo(() => {
+        const userTiers = {};
+        // Sort transactions descending to easily find the latest one for each user
+        [...transactions].sort((a, b) => (b.createdAt?.toDate() || 0) - (a.createdAt?.toDate() || 0))
+            .forEach(tx => {
+                // Since we sorted, the first one we find for a user is their latest
+                if (tx.userId && !userTiers[tx.userId]) {
+                    userTiers[tx.userId] = tx.tierText;
+                }
+            });
+        return userTiers;
+    }, [transactions]);
     
     const TabButton = ({ name, count }) => (
         <button onClick={() => { setActiveTab(name); setCurrentPage(1); }} className={`relative px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${activeTab === name ? 'bg-white/10 text-white' : 'text-gray-400 hover:bg-white/5'}`}>
@@ -359,9 +372,12 @@ export default function AdminUserManagement() {
                         {/* Mobile View */}
                         <div className="md:hidden p-4 grid grid-cols-1 gap-4">
                             {currentUsers.length > 0 ? currentUsers.map(user => {
-                                const planName = plans.find(p => p.id === user.planId)?.name || user.planName || 'N/A';
+                                const basePlanName = plans.find(p => p.id === user.planId)?.name || user.planName || 'N/A';
+                                // Get tier text from the reliable transaction map, with a fallback to the user document.
+                                const durationText = latestTierTextMap[user.uid] || user.tierText;
+                                const fullPlanName = durationText ? `${basePlanName} (${durationText})` : basePlanName;
                                 const expiryStatus = getExpiryStatusForUser(user);
-                                return <UserCard key={user.uid} user={user} planName={planName} expiryStatus={expiryStatus} onOpenModal={() => openUserModal(user)} onRevokeAccess={() => handleRevokeAccess(user)} />;
+                                return <UserCard key={user.uid} user={user} planName={fullPlanName} expiryStatus={expiryStatus} onOpenModal={() => openUserModal(user)} onRevokeAccess={() => handleRevokeAccess(user)} />;
                             }) : <p className="text-center p-8 text-gray-400">No users found.</p>}
                         </div>
                         {/* Desktop View */}
@@ -370,14 +386,17 @@ export default function AdminUserManagement() {
                                 <thead className="bg-gray-700/50"><tr><th className="th">User</th><th className="th">Status</th><th className="th">Verified</th><th className="th">Plan</th><th className="th">Expires On</th><th className="th">Price Paid</th><th className="th">Actions</th></tr></thead>
                                 <tbody className="bg-gray-800 divide-y divide-gray-700">
                                     {currentUsers.length > 0 ? currentUsers.map(user => {
-                                        const planName = plans.find(p => p.id === user.planId)?.name || user.planName || 'N/A';
+                                        const basePlanName = plans.find(p => p.id === user.planId)?.name || user.planName || 'N/A';
+                                        // Get tier text from the reliable transaction map, with a fallback to the user document.
+                                        const durationText = latestTierTextMap[user.uid] || user.tierText;
+                                        const fullPlanName = durationText ? `${basePlanName} (${durationText})` : basePlanName;
                                         const expiryStatus = getExpiryStatusForUser(user);
                                         return (
                                             <tr key={user.uid}>
                                                 <td className="px-6 py-4 text-sm font-medium text-white">{user.displayName || user.email}</td>
                                                 <td className="px-6 py-4 text-sm">{user.isSubscribed ? <span className="badge-green"><CheckCircleIcon className="h-4 w-4"/>Subscribed</span> : <span className="badge-red"><XCircleIcon className="h-4 w-4"/>Not Subscribed</span>}</td>
                                                 <td className="px-6 py-4 text-sm">{user.isVerified ? <ShieldCheckIcon className="h-5 w-5 text-green-400" /> : <ShieldCheckIcon className="h-5 w-5 text-gray-500" />}</td>
-                                                <td className="px-6 py-4 text-sm text-gray-300">{planName}</td>
+                                                <td className="px-6 py-4 text-sm text-gray-300">{fullPlanName}</td>
                                                 <td className={`px-6 py-4 text-sm font-semibold ${expiryStatus.color}`}>{expiryStatus.text}</td>
                                                 <td className="px-6 py-4 text-sm text-gray-300">{user.pricePaid || 'N/A'}</td>
                                                 <td className="px-6 py-4 text-sm font-medium flex items-center space-x-4"><button onClick={() => openUserModal(user)} className="text-indigo-400 hover:text-indigo-300"><PencilIcon className="h-4 w-4"/></button><button onClick={() => handleRevokeAccess(user)} className="text-red-500 hover:text-red-400"><XCircleIcon className="h-4 w-4" /></button></td>
