@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { addDoc, updateDoc, doc, serverTimestamp, collection, getDocs, query, orderBy } from 'firebase/firestore';
-import { db, SECTIONS } from '../firebase/config';
+// --- UPDATED: New imports for dynamic sections ---
+import { addDoc, updateDoc, doc, serverTimestamp, collection, getDocs, query, orderBy, onSnapshot, deleteDoc } from 'firebase/firestore';
+// --- UPDATED: Removed SECTIONS from config import ---
+import { db } from '../firebase/config';
 import { Switch } from '@headlessui/react';
 import { TrashIcon, EyeIcon, EyeSlashIcon, PencilSquareIcon, DocumentTextIcon, ListBulletIcon, ArrowUpOnSquareIcon, ArrowDownOnSquareIcon } from '@heroicons/react/24/outline';
 import Papa from 'papaparse';
@@ -88,8 +90,58 @@ const MultiImageUrlManager = ({ label, urls, onChange }) => {
     );
 };
 
+// --- NEW: Modal to manage custom section names ---
+const SectionNameManagerModal = ({ isOpen, onClose, customSectionNames, onAdd, onDelete }) => {
+    const [newSectionName, setNewSectionName] = useState('');
+
+    const handleAdd = () => {
+        if (newSectionName.trim() && !customSectionNames.some(s => s.name.toLowerCase() === newSectionName.trim().toLowerCase())) {
+            onAdd(newSectionName.trim());
+            setNewSectionName('');
+        } else {
+            alert("Section name cannot be empty or a duplicate.");
+        }
+    };
+
+    return (
+        <div className={`fixed inset-0 z-50 flex items-center justify-center p-4 ${isOpen ? '' : 'hidden'}`}>
+            <div className="fixed inset-0 bg-black/70" onClick={onClose}></div>
+            <div className="relative bg-gray-800 rounded-lg shadow-xl w-full max-w-md p-6">
+                <h3 className="text-lg font-bold text-white mb-4">Manage Custom Section Names</h3>
+                <div className="space-y-2 max-h-60 overflow-y-auto mb-4 pr-2">
+                    {customSectionNames.length === 0 && <p className="text-gray-400 text-sm text-center">No custom sections added yet.</p>}
+                    {customSectionNames.map(section => (
+                        <div key={section.id} className="flex justify-between items-center bg-gray-700/50 p-2 rounded">
+                            <span className="text-gray-300">{section.name}</span>
+                            <button onClick={() => onDelete(section.id)} className="p-1 text-red-400 hover:text-red-300">
+                                <TrashIcon className="h-5 w-5" />
+                            </button>
+                        </div>
+                    ))}
+                </div>
+                <div className="flex items-center gap-2 pt-4 border-t border-gray-700">
+                    <input
+                        type="text"
+                        value={newSectionName}
+                        onChange={(e) => setNewSectionName(e.target.value)}
+                        placeholder="Add new section name..."
+                        className="flex-grow rounded-md bg-gray-700 border-gray-600 text-white shadow-sm"
+                    />
+                    <button onClick={handleAdd} className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-md font-semibold">
+                        Add
+                    </button>
+                </div>
+                 <p className="text-xs text-gray-500 mt-3">Note: Core sections (VARC, DILR, QA) are permanent and cannot be deleted.</p>
+            </div>
+        </div>
+    );
+};
+
 
 const CreateTestPage = ({ navigate, testToEdit }) => {
+    // --- NEW: Hardcoded core sections ---
+    const CORE_SECTIONS = ['VARC', 'DILR', 'QA'];
+
     const BLANK_QUESTION = { 
         type: 'MCQ', passage: '', passageImageUrls: [], 
         questionText: '', options: ['', '', '', ''], 
@@ -102,13 +154,34 @@ const CreateTestPage = ({ navigate, testToEdit }) => {
     const [testCategory, setTestCategory] = useState('');
     const [managedTabs, setManagedTabs] = useState([]);
     const [isFree, setIsFree] = useState(false);
-    const [sections, setSections] = useState([{ name: SECTIONS[0], duration: 40, questions: [BLANK_QUESTION] }]);
+    // --- UPDATED: Initial section uses the first core section ---
+    const [sections, setSections] = useState([{ name: CORE_SECTIONS[0], duration: 40, questions: [BLANK_QUESTION] }]);
     const [loading, setLoading] = useState(false);
     const [activeQuestion, setActiveQuestion] = useState({ sec: 0, q: 0 });
     const [showNavigator, setShowNavigator] = useState(true);
     const [showPassage, setShowPassage] = useState(true);
     const [mobileView, setMobileView] = useState('question');
 
+    // --- NEW: State for custom section names and the modal ---
+    const [customSectionNames, setCustomSectionNames] = useState([]);
+    const [isSectionManagerOpen, setIsSectionManagerOpen] = useState(false);
+
+    // --- NEW: Combines core and custom sections for dropdowns ---
+    const allAvailableSections = React.useMemo(() => {
+        const customNames = customSectionNames.map(s => s.name);
+        return [...CORE_SECTIONS, ...customNames];
+    }, [customSectionNames]);
+
+    // --- NEW: useEffect to fetch dynamic custom section names ---
+    useEffect(() => {
+        const q = query(collection(db, 'sectionNames'), orderBy('name'));
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            const names = snapshot.docs.map(doc => ({ id: doc.id, name: doc.data().name }));
+            setCustomSectionNames(names);
+        });
+        return () => unsubscribe();
+    }, []);
+    
     useEffect(() => {
         const fetchTabs = async () => {
             try {
@@ -132,7 +205,7 @@ const CreateTestPage = ({ navigate, testToEdit }) => {
         fetchTabs();
     }, [testToEdit]);
     
-    // --- UPDATED: CSV Parsing with Independent Passage Logic ---
+    // --- CSV Parsing logic (Unchanged) ---
     const handleCsvUpload = (event) => {
         const file = event.target.files[0];
         if (!file) return;
@@ -173,14 +246,12 @@ const CreateTestPage = ({ navigate, testToEdit }) => {
                         setTitle(firstRow.testTitle || `Imported Test ${new Date().toLocaleDateString()}`);
                         setDescription(firstRow.testDescription || '');
                         
-                        // --- FIX STARTS HERE ---
                         const mainType = firstRow.mainType;
                         const subType = firstRow.subType;
                         if (mainType) {
                             const category = subType ? `${mainType}/${subType}` : mainType;
                             setTestCategory(category);
                         }
-                        // --- FIX ENDS HERE ---
 
                         dataRows.forEach((questionData, index) => {
                             if (questionData.sectionName) currentSectionDetails.name = questionData.sectionName;
@@ -203,11 +274,8 @@ const CreateTestPage = ({ navigate, testToEdit }) => {
                             
                             const newQuestion = { ...BLANK_QUESTION };
                             
-                            // --- LOGIC CHANGE ---
-                            // Directly assign passage from the current row. No more carry-over.
                             newQuestion.passage = questionData.passageText ? questionData.passageText.replace(/\\n/g, '\n') : '';
                             newQuestion.passageImageUrls = questionData.passageImageUrls ? questionData.passageImageUrls.split(';').map(url => url.trim()) : [];
-
                             newQuestion.questionText = questionText.replace(/\\n/g, '\n');
                             newQuestion.questionImageUrls = questionData.questionImageUrls ? questionData.questionImageUrls.split(';').map(url => url.trim()) : [];
                             newQuestion.type = questionType.toUpperCase() === 'TITA' ? 'TITA' : 'MCQ';
@@ -361,8 +429,10 @@ const CreateTestPage = ({ navigate, testToEdit }) => {
         setActiveQuestion(prev => ({ ...prev, q: Math.max(0, qIndex - 1) }));
     };
 
+    // --- UPDATED: addSection now uses the combined list of available sections ---
     const addSection = () => {
-        setSections([...sections, { name: SECTIONS[0], duration: 40, questions: [{ ...BLANK_QUESTION }] }]);
+        const defaultName = allAvailableSections.length > 0 ? allAvailableSections[0] : 'VARC';
+        setSections([...sections, { name: defaultName, duration: 40, questions: [{ ...BLANK_QUESTION }] }]);
     };
     
     const removeSection = (secIndex) => {
@@ -420,12 +490,31 @@ const CreateTestPage = ({ navigate, testToEdit }) => {
             setLoading(false);
         }
     };
+
+    // --- NEW: Functions to handle adding/deleting custom section names ---
+    const handleAddSectionName = async (name) => {
+        await addDoc(collection(db, 'sectionNames'), { name });
+    };
+
+    const handleDeleteSectionName = async (id) => {
+        if (window.confirm("Are you sure? This will not affect existing tests, but it cannot be undone.")) {
+            await deleteDoc(doc(db, 'sectionNames', id));
+        }
+    };
     
     const activeSec = sections[activeQuestion.sec];
     const activeQ = activeSec?.questions[activeQuestion.q];
 
     return (
         <div className="max-w-full mx-auto p-2 sm:p-0">
+            {/* --- NEW: Render the section manager modal --- */}
+            <SectionNameManagerModal
+                isOpen={isSectionManagerOpen}
+                onClose={() => setIsSectionManagerOpen(false)}
+                customSectionNames={customSectionNames}
+                onAdd={handleAddSectionName}
+                onDelete={handleDeleteSectionName}
+            />
             <div className="flex justify-between items-center mb-4">
                 <button onClick={() => navigate('manageTests')} className="text-sm text-gray-400 hover:text-white">&larr; Back to Test Manager</button>
                 <button onClick={() => setShowNavigator(!showNavigator)} className="text-sm text-gray-400 hover:text-white hidden sm:flex items-center">
@@ -535,9 +624,10 @@ const CreateTestPage = ({ navigate, testToEdit }) => {
                                                 <label className="text-sm font-medium text-gray-300">Section {secIndex + 1}</label>
                                                 <button type="button" onClick={() => removeSection(secIndex)} disabled={sections.length <= 1} className="p-1 text-red-500 hover:text-red-400 disabled:text-gray-600"><TrashIcon className="h-4 w-4" /></button>
                                             </div>
+                                             {/* --- UPDATED: Select dropdown now uses the combined list of sections --- */}
                                              <select value={section.name} onChange={e => handleSectionChange(secIndex, 'name', e.target.value)} className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white text-sm">
-                                                    {SECTIONS.map(s => <option key={s} value={s}>{s}</option>)}
-                                                </select>
+                                                    {allAvailableSections.map(s => <option key={s} value={s}>{s}</option>)}
+                                             </select>
                                              <FormInput label="Duration (mins)" type="number" value={section.duration} onChange={e => handleSectionChange(secIndex, 'duration', e.target.value)} required />
                                         </div>
                                         <div className="grid grid-cols-5 gap-1.5 mt-2">
@@ -551,6 +641,8 @@ const CreateTestPage = ({ navigate, testToEdit }) => {
                                     </div>
                                 ))}
                                 <button type="button" onClick={addSection} className="w-full mt-4 bg-gray-700 text-white px-2 py-1 text-sm rounded-md hover:bg-gray-600">+ Add Section</button>
+                                {/* --- NEW: Button to open the section manager --- */}
+                                <button type="button" onClick={() => setIsSectionManagerOpen(true)} className="w-full mt-2 bg-gray-600 text-white px-2 py-1 text-xs rounded-md hover:bg-gray-500">Manage Custom Sections</button>
                              </div>
                         </div>
                     )}
