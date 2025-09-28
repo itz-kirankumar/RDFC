@@ -1,10 +1,12 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+// REPLACE your old imports with this entire block
+import React, { useState, useEffect, useCallback, useRef, Fragment } from 'react';
 import { doc, getDoc, updateDoc, addDoc, collection, serverTimestamp, query, where, getDocs, Timestamp } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { useAuth } from '../contexts/AuthContext';
 import ConfirmModal from '../components/ConfirmModal';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FaBook, FaTimes, FaCalculator, FaChevronLeft, FaChevronRight, FaArrowLeft, FaArrowRight } from 'react-icons/fa';
+import { FaBook, FaTimes, FaCalculator, FaChevronLeft, FaChevronRight } from 'react-icons/fa';
+import { Dialog, Transition } from '@headlessui/react';
 
 // --- Helper Hook for reliable intervals ---
 function useInterval(callback, delay) {
@@ -350,7 +352,6 @@ const TestInterfacePage = ({ navigate, testId }) => {
     const { user, userData } = useAuth();
     const [test, setTest] = useState(null);
     const [loading, setLoading] = useState(true);
-    const [isConfirmOpen, setIsConfirmOpen] = useState(false);
     const [isExitConfirmOpen, setIsExitConfirmOpen] = useState(false);
     const [isResumeConfirmOpen, setIsResumeConfirmOpen] = useState(false);
     const [isFullScreenActive, setIsFullScreenActive] = useState(document.fullscreenElement !== null);
@@ -566,8 +567,8 @@ const TestInterfacePage = ({ navigate, testId }) => {
     }, [answers, timeTaken, questionStatuses, getLocalStorageKey, isOnline, attemptDocId, navigate, recordTimeSpentOnCurrentQuestion, test]);
 
     const handleSubmitClick = useCallback(() => {
-        setIsConfirmOpen(true);
-    }, []);
+        submitTest();
+}, [submitTest]);
 
     const handleSectionSubmit = useCallback(() => {
         recordTimeSpentOnCurrentQuestion();
@@ -610,9 +611,7 @@ const TestInterfacePage = ({ navigate, testId }) => {
         }
     }, [answers, timeTaken, questionStatuses, sectionTimers, currentSectionIndex, currentQuestionIndex, getLocalStorageKey, syncToFirestore, navigate, recordTimeSpentOnCurrentQuestion]);
     
-    const handleBackToDashboardClick = useCallback(() => {
-        setIsExitConfirmOpen(true);
-    }, []);
+
 
     useEffect(() => {
         const fetchAndPrepareTest = async () => {
@@ -924,6 +923,84 @@ const TestInterfacePage = ({ navigate, testId }) => {
 
         return (
             <>
+                
+                
+
+<ConfirmModal
+    isOpen={isExitConfirmOpen}
+    setIsOpen={setIsExitConfirmOpen}
+    onConfirm={saveProgressAndExit}
+    title="Exit Test"
+>
+    Your progress will be saved. Are you sure you want to exit and return to the dashboard?
+</ConfirmModal>
+
+{/* This handles the special "Resume" case where cancelling navigates home */}
+<Transition appear show={isResumeConfirmOpen} as={Fragment}>
+    <Dialog as="div" className="relative z-50" onClose={() => {
+        setIsResumeConfirmOpen(false);
+        navigate('home');
+    }}>
+        <Transition.Child
+            as={Fragment}
+            enter="ease-out duration-300"
+            enterFrom="opacity-0"
+            enterTo="opacity-100"
+            leave="ease-in duration-200"
+            leaveFrom="opacity-100"
+            leaveTo="opacity-0"
+        >
+            <div className="fixed inset-0 bg-black bg-opacity-75" />
+        </Transition.Child>
+        <div className="fixed inset-0 overflow-y-auto">
+            <div className="flex min-h-full items-center justify-center p-4 text-center">
+                <Transition.Child
+                    as={Fragment}
+                    enter="ease-out duration-300"
+                    enterFrom="opacity-0 scale-95"
+                    enterTo="opacity-100 scale-100"
+                    leave="ease-in duration-200"
+                    leaveFrom="opacity-100 scale-100"
+                    leaveTo="opacity-0 scale-95"
+                >
+                    <Dialog.Panel className="w-full max-w-md transform overflow-hidden rounded-2xl bg-gray-800 border border-gray-700 p-6 text-left align-middle shadow-xl transition-all">
+                        <Dialog.Title as="h3" className="text-lg font-medium leading-6 text-white">
+                            Resume Test
+                        </Dialog.Title>
+                        <div className="mt-2">
+                            <p className="text-sm text-gray-400">
+                                You have a test in progress. Would you like to resume where you left off?
+                            </p>
+                        </div>
+                        <div className="mt-4 flex justify-end space-x-4">
+                            <button
+                                type="button"
+                                className="inline-flex justify-center rounded-md border border-transparent bg-gray-700 px-4 py-2 text-sm font-medium text-white hover:bg-gray-600"
+                                onClick={() => {
+                                    setIsResumeConfirmOpen(false);
+                                    navigate('home');
+                                }}
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="button"
+                                className="inline-flex justify-center rounded-md border border-transparent bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700"
+                                onClick={() => {
+                                    handleConfirmResume();
+                                    setIsResumeConfirmOpen(false);
+                                }}
+                            >
+                                Resume
+                            </button>
+                        </div>
+                    </Dialog.Panel>
+                </Transition.Child>
+            </div>
+        </div>
+    </Dialog>
+</Transition>
+
                 {isSubmitting && (
                     <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
                         <div className="bg-white p-6 rounded-lg shadow-xl text-center text-lg font-semibold animate-bounce">
