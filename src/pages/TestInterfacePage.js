@@ -355,7 +355,7 @@ const TestInterfacePage = ({ navigate, testId }) => {
     const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
     const [sectionTimers, setSectionTimers] = useState([]);
     const [answers, setAnswers] = useState({});
-    const [questionStatuses, setQuestionStatuses] = useState({});
+    const [questionStatuses, setQuestionStatuses] = useState({}); 
     const [timeTaken, setTimeTaken] = useState({});
     const [isCalculatorOpen, setIsCalculatorOpen] = useState(false);
     const [isQuestionPaperOpen, setIsQuestionPaperOpen] = useState(false);
@@ -365,19 +365,23 @@ const TestInterfacePage = ({ navigate, testId }) => {
     const [mobileView, setMobileView] = useState('question');
     const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
     const [isMobileDevice, setIsMobileDevice] = useState(window.innerWidth < 1024);
+    
     const [isOnline, setIsOnline] = useState(navigator.onLine);
     const [showOfflineModal, setShowOfflineModal] = useState(false);
     const lastSyncTimestamp = useRef(Date.now());
+
     const [instructionStep, setInstructionStep] = useState(0);
     const [termsAccepted, setTermsAccepted] = useState(false);
     const [isResuming, setIsResuming] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
-    const questionEnterTimestampRef = useRef(Date.now());
+
+    const questionEnterTimestampRef = useRef(Date.now()); 
+    
     const testContainerRef = useRef(null);
     const submittingTestRef = useRef(false);
     const isResumeConfirmedRef = useRef(false);
     const navigateOnExitRef = useRef(false);
-
+    
     const currentSection = test?.sections ? test.sections[currentSectionIndex] : null;
     const currentQuestion = currentSection ? currentSection.questions[currentQuestionIndex] : null;
     const showPassagePanel = currentSection && currentQuestion && (currentQuestion.passage || currentQuestion.passageImageUrl) && currentSection.name !== 'QA';
@@ -386,7 +390,7 @@ const TestInterfacePage = ({ navigate, testId }) => {
         if (!user || !testId) return null;
         return `test_progress_${user.uid}_${testId}`;
     }, [user, testId]);
-
+    
     useEffect(() => {
         const handleOnline = () => setIsOnline(true);
         const handleOffline = () => setIsOnline(false);
@@ -482,18 +486,23 @@ const TestInterfacePage = ({ navigate, testId }) => {
         }
     }, [isOnline, syncToFirestore]);
     
+    
+    
     const submitTest = useCallback(async () => {
         if (submittingTestRef.current) return;
         submittingTestRef.current = true;
         setIsSubmitting(true);
         recordTimeSpentOnCurrentQuestion();
 
+        // --- DYNAMIC SCORE CALCULATION ---
         let calculatedTotalScore = 0;
         const markingScheme = test?.markingScheme;
+
         if (test && test.sections) {
             test.sections.forEach((section, secIdx) => {
                 let correct = 0;
                 let incorrectMcq = 0;
+                
                 section.questions.forEach((q, qIdx) => {
                     const userAnswer = answers?.[secIdx]?.[qIdx];
                     const isAttempted = userAnswer !== undefined && userAnswer !== null && userAnswer !== '';
@@ -506,6 +515,7 @@ const TestInterfacePage = ({ navigate, testId }) => {
                     }
                 });
 
+                // Apply the correct marking scheme
                 if (markingScheme) {
                     const { marksForCorrect, negativeMarksMCQ, sectionsWithNoNegativeMarking } = markingScheme;
                     let sectionScore = correct * (marksForCorrect || 0);
@@ -514,6 +524,7 @@ const TestInterfacePage = ({ navigate, testId }) => {
                     }
                     calculatedTotalScore += sectionScore;
                 } else {
+                    // Default fallback logic
                     calculatedTotalScore += (correct * 3) - (incorrectMcq * 1);
                 }
             });
@@ -552,8 +563,8 @@ const TestInterfacePage = ({ navigate, testId }) => {
     }, [answers, timeTaken, questionStatuses, getLocalStorageKey, isOnline, attemptDocId, navigate, recordTimeSpentOnCurrentQuestion, test]);
 
     const handleSubmitClick = useCallback(() => {
-        submitTest();
-    }, [submitTest]);
+        submitTest();
+}, [submitTest]);
 
     const handleSectionSubmit = useCallback(() => {
         recordTimeSpentOnCurrentQuestion();
@@ -570,6 +581,34 @@ const TestInterfacePage = ({ navigate, testId }) => {
         }
     }, [currentSectionIndex, test, recordTimeSpentOnCurrentQuestion, resetQuestionTimerForNewQuestion, handleSubmitClick, currentSection]);
     
+    const saveProgressAndExit = useCallback(async () => {
+        recordTimeSpentOnCurrentQuestion();
+        const progressData = {
+            status: 'in-progress',
+            answers,
+            timeTaken,
+            questionStatuses,
+            sectionTimers,
+            currentSectionIndex,
+            currentQuestionIndex,
+            lastUpdatedAt: Date.now(),
+        };
+        const key = getLocalStorageKey();
+        if (key) localStorage.setItem(key, JSON.stringify(progressData));
+        
+        await syncToFirestore();
+        
+        navigateOnExitRef.current = true;
+        
+        if (!document.fullscreenElement) {
+            navigate('home');
+        } else {
+             document.exitFullscreen();
+        }
+    }, [answers, timeTaken, questionStatuses, sectionTimers, currentSectionIndex, currentQuestionIndex, getLocalStorageKey, syncToFirestore, navigate, recordTimeSpentOnCurrentQuestion]);
+    
+
+
     useEffect(() => {
         const fetchAndPrepareTest = async () => {
             if (!testId || !user?.uid) { navigate('home'); return; }
@@ -617,7 +656,6 @@ const TestInterfacePage = ({ navigate, testId }) => {
                         setCurrentSectionIndex(attemptData.currentSectionIndex || 0);
                         setCurrentQuestionIndex(attemptData.currentQuestionIndex || 0);
                     }
-                    // This is the corrected logic to go straight to instructions
                     setIsResuming(true);
                     setInstructionStep(1);
                 } else {
@@ -643,11 +681,6 @@ const TestInterfacePage = ({ navigate, testId }) => {
         };
         fetchAndPrepareTest();
     }, [testId, user, navigate]);
-    
-    // ... all other functions like handleFullscreen, handleSaveAndNext, etc. remain the same ...
-
-    // --- PASTE THE REST OF YOUR FUNCTIONS HERE ---
-    // (from handleFullscreen down to the end of handleMarkForReview)
 
     const handleFullscreen = useCallback(() => {
         if (testContainerRef.current) {
@@ -709,18 +742,18 @@ const TestInterfacePage = ({ navigate, testId }) => {
 
     useEffect(() => {
         const disableSelectionAndRightClick = (event) => event.preventDefault();
-        const currentRef = testContainerRef.current;
-        if (currentRef) {
-            currentRef.style.userSelect = 'none';
-            currentRef.addEventListener('contextmenu', disableSelectionAndRightClick);
+        if (testContainerRef.current) {
+            testContainerRef.current.style.userSelect = 'none';
+            testContainerRef.current.addEventListener('contextmenu', disableSelectionAndRightClick);
         }
-        return () => { if (currentRef) currentRef.removeEventListener('contextmenu', disableSelectionAndRightClick); };
+        return () => { if (testContainerRef.current) testContainerRef.current.removeEventListener('contextmenu', disableSelectionAndRightClick); };
     }, []);
 
     const changeQuestion = (newIndex) => {
         recordTimeSpentOnCurrentQuestion();
         setCurrentQuestionIndex(newIndex);
         resetQuestionTimerForNewQuestion();
+        // This is the change: automatically switch back to the question view on mobile.
         if (isMobileDevice) {
             setMobileView('question');
         }
@@ -791,11 +824,16 @@ const TestInterfacePage = ({ navigate, testId }) => {
 
     const handleMarkForReview = () => {
         updateQuestionStatus(currentSectionIndex, currentQuestionIndex, 'marked');
+        
+        // FIX: Only navigate to the next question if it's not the last question of the section.
+        // This prevents accidental submission when "Mark for Review" is clicked on the last question.
         if (currentSection && currentQuestionIndex < currentSection.questions.length - 1) {
             handleSaveAndNext();
         }
+
         setIsMoreMenuOpen(false);
     };
+
     
     const isRestrictedType = test?.type === 'sectional' || test?.type === 'full-length';
     const shouldShowInstructions = instructionStep > 0;
@@ -854,8 +892,10 @@ const TestInterfacePage = ({ navigate, testId }) => {
                 </div>
             );
         }
-
+        // INSERT THIS CODE
         if (!currentSection || !currentQuestion) {
+            // This handles brief moments during state transitions (like switching sections)
+            // where the question data might not be immediately available.
             return <div className="text-center text-gray-400 p-8">Loading question...</div>;
         }
 
@@ -870,6 +910,9 @@ const TestInterfacePage = ({ navigate, testId }) => {
 
         return (
             <>
+                
+                
+
                 {isSubmitting && (
                     <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
                         <div className="bg-white p-6 rounded-lg shadow-xl text-center text-lg font-semibold animate-bounce">
@@ -926,6 +969,7 @@ const TestInterfacePage = ({ navigate, testId }) => {
                             <div className="absolute inset-0 z-0" style={watermarkStyle}></div>
                             <div className="relative z-10">
                                 <h2 className="font-bold mb-2">Directions</h2>
+                                {/* FIX: Reordered to show text before image */}
                                 <div className="prose max-w-none text-gray-800 whitespace-pre-wrap">{currentQuestion.passage}</div>
                                 {currentQuestion.passageImageUrl && <img src={currentQuestion.passageImageUrl} alt="Passage" className="max-w-full h-auto mt-4 rounded"/>}
                             </div>
@@ -936,6 +980,7 @@ const TestInterfacePage = ({ navigate, testId }) => {
                         <div className="absolute inset-0 z-0" style={watermarkStyle}></div>
                         <div className="relative z-10">
                             <h2 className="font-bold mb-4">Question No. {currentQuestionIndex + 1}</h2>
+                            {/* FIX: Reordered to show text before image */}
                             <div className="prose max-w-none text-gray-800 mb-4 whitespace-pre-wrap">{currentQuestion.questionText}</div>
                             {currentQuestion.questionImageUrl && <img src={currentQuestion.questionImageUrl} alt="Question" className="max-w-full h-auto mt-4 rounded"/>}
                             
