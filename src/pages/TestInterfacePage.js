@@ -3,10 +3,8 @@ import React, { useState, useEffect, useCallback, useRef, Fragment } from 'react
 import { doc, getDoc, updateDoc, addDoc, collection, serverTimestamp, query, where, getDocs, Timestamp } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { useAuth } from '../contexts/AuthContext';
-import ConfirmModal from '../components/ConfirmModal';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FaBook, FaTimes, FaCalculator, FaChevronLeft, FaChevronRight } from 'react-icons/fa';
-import { Dialog, Transition } from '@headlessui/react';
 
 // --- Helper Hook for reliable intervals ---
 function useInterval(callback, delay) {
@@ -352,14 +350,12 @@ const TestInterfacePage = ({ navigate, testId }) => {
     const { user, userData } = useAuth();
     const [test, setTest] = useState(null);
     const [loading, setLoading] = useState(true);
-    const [isExitConfirmOpen, setIsExitConfirmOpen] = useState(false);
-    const [isResumeConfirmOpen, setIsResumeConfirmOpen] = useState(false);
     const [isFullScreenActive, setIsFullScreenActive] = useState(document.fullscreenElement !== null);
     const [currentSectionIndex, setCurrentSectionIndex] = useState(0);
     const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
     const [sectionTimers, setSectionTimers] = useState([]);
     const [answers, setAnswers] = useState({});
-    const [questionStatuses, setQuestionStatuses] = useState({}); 
+    const [questionStatuses, setQuestionStatuses] = useState({});
     const [timeTaken, setTimeTaken] = useState({});
     const [isCalculatorOpen, setIsCalculatorOpen] = useState(false);
     const [isQuestionPaperOpen, setIsQuestionPaperOpen] = useState(false);
@@ -369,23 +365,19 @@ const TestInterfacePage = ({ navigate, testId }) => {
     const [mobileView, setMobileView] = useState('question');
     const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
     const [isMobileDevice, setIsMobileDevice] = useState(window.innerWidth < 1024);
-    
     const [isOnline, setIsOnline] = useState(navigator.onLine);
     const [showOfflineModal, setShowOfflineModal] = useState(false);
     const lastSyncTimestamp = useRef(Date.now());
-
     const [instructionStep, setInstructionStep] = useState(0);
     const [termsAccepted, setTermsAccepted] = useState(false);
     const [isResuming, setIsResuming] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
-
-    const questionEnterTimestampRef = useRef(Date.now()); 
-    
+    const questionEnterTimestampRef = useRef(Date.now());
     const testContainerRef = useRef(null);
     const submittingTestRef = useRef(false);
     const isResumeConfirmedRef = useRef(false);
     const navigateOnExitRef = useRef(false);
-    
+
     const currentSection = test?.sections ? test.sections[currentSectionIndex] : null;
     const currentQuestion = currentSection ? currentSection.questions[currentQuestionIndex] : null;
     const showPassagePanel = currentSection && currentQuestion && (currentQuestion.passage || currentQuestion.passageImageUrl) && currentSection.name !== 'QA';
@@ -394,7 +386,7 @@ const TestInterfacePage = ({ navigate, testId }) => {
         if (!user || !testId) return null;
         return `test_progress_${user.uid}_${testId}`;
     }, [user, testId]);
-    
+
     useEffect(() => {
         const handleOnline = () => setIsOnline(true);
         const handleOffline = () => setIsOnline(false);
@@ -490,23 +482,18 @@ const TestInterfacePage = ({ navigate, testId }) => {
         }
     }, [isOnline, syncToFirestore]);
     
-    
-    
     const submitTest = useCallback(async () => {
         if (submittingTestRef.current) return;
         submittingTestRef.current = true;
         setIsSubmitting(true);
         recordTimeSpentOnCurrentQuestion();
 
-        // --- DYNAMIC SCORE CALCULATION ---
         let calculatedTotalScore = 0;
         const markingScheme = test?.markingScheme;
-
         if (test && test.sections) {
             test.sections.forEach((section, secIdx) => {
                 let correct = 0;
                 let incorrectMcq = 0;
-                
                 section.questions.forEach((q, qIdx) => {
                     const userAnswer = answers?.[secIdx]?.[qIdx];
                     const isAttempted = userAnswer !== undefined && userAnswer !== null && userAnswer !== '';
@@ -519,7 +506,6 @@ const TestInterfacePage = ({ navigate, testId }) => {
                     }
                 });
 
-                // Apply the correct marking scheme
                 if (markingScheme) {
                     const { marksForCorrect, negativeMarksMCQ, sectionsWithNoNegativeMarking } = markingScheme;
                     let sectionScore = correct * (marksForCorrect || 0);
@@ -528,7 +514,6 @@ const TestInterfacePage = ({ navigate, testId }) => {
                     }
                     calculatedTotalScore += sectionScore;
                 } else {
-                    // Default fallback logic
                     calculatedTotalScore += (correct * 3) - (incorrectMcq * 1);
                 }
             });
@@ -567,8 +552,8 @@ const TestInterfacePage = ({ navigate, testId }) => {
     }, [answers, timeTaken, questionStatuses, getLocalStorageKey, isOnline, attemptDocId, navigate, recordTimeSpentOnCurrentQuestion, test]);
 
     const handleSubmitClick = useCallback(() => {
-        submitTest();
-}, [submitTest]);
+        submitTest();
+    }, [submitTest]);
 
     const handleSectionSubmit = useCallback(() => {
         recordTimeSpentOnCurrentQuestion();
@@ -585,34 +570,6 @@ const TestInterfacePage = ({ navigate, testId }) => {
         }
     }, [currentSectionIndex, test, recordTimeSpentOnCurrentQuestion, resetQuestionTimerForNewQuestion, handleSubmitClick, currentSection]);
     
-    const saveProgressAndExit = useCallback(async () => {
-        recordTimeSpentOnCurrentQuestion();
-        const progressData = {
-            status: 'in-progress',
-            answers,
-            timeTaken,
-            questionStatuses,
-            sectionTimers,
-            currentSectionIndex,
-            currentQuestionIndex,
-            lastUpdatedAt: Date.now(),
-        };
-        const key = getLocalStorageKey();
-        if (key) localStorage.setItem(key, JSON.stringify(progressData));
-        
-        await syncToFirestore();
-        
-        navigateOnExitRef.current = true;
-        
-        if (!document.fullscreenElement) {
-            navigate('home');
-        } else {
-             document.exitFullscreen();
-        }
-    }, [answers, timeTaken, questionStatuses, sectionTimers, currentSectionIndex, currentQuestionIndex, getLocalStorageKey, syncToFirestore, navigate, recordTimeSpentOnCurrentQuestion]);
-    
-
-
     useEffect(() => {
         const fetchAndPrepareTest = async () => {
             if (!testId || !user?.uid) { navigate('home'); return; }
@@ -660,8 +617,8 @@ const TestInterfacePage = ({ navigate, testId }) => {
                         setCurrentSectionIndex(attemptData.currentSectionIndex || 0);
                         setCurrentQuestionIndex(attemptData.currentQuestionIndex || 0);
                     }
+                    // This is the corrected logic to go straight to instructions
                     setIsResuming(true);
-                    setIsResumeConfirmOpen(true);
                     setInstructionStep(1);
                 } else {
                     const initialSectionTimers = testData.sections.map(s => s.duration * 60);
@@ -686,6 +643,11 @@ const TestInterfacePage = ({ navigate, testId }) => {
         };
         fetchAndPrepareTest();
     }, [testId, user, navigate]);
+    
+    // ... all other functions like handleFullscreen, handleSaveAndNext, etc. remain the same ...
+
+    // --- PASTE THE REST OF YOUR FUNCTIONS HERE ---
+    // (from handleFullscreen down to the end of handleMarkForReview)
 
     const handleFullscreen = useCallback(() => {
         if (testContainerRef.current) {
@@ -747,18 +709,18 @@ const TestInterfacePage = ({ navigate, testId }) => {
 
     useEffect(() => {
         const disableSelectionAndRightClick = (event) => event.preventDefault();
-        if (testContainerRef.current) {
-            testContainerRef.current.style.userSelect = 'none';
-            testContainerRef.current.addEventListener('contextmenu', disableSelectionAndRightClick);
+        const currentRef = testContainerRef.current;
+        if (currentRef) {
+            currentRef.style.userSelect = 'none';
+            currentRef.addEventListener('contextmenu', disableSelectionAndRightClick);
         }
-        return () => { if (testContainerRef.current) testContainerRef.current.removeEventListener('contextmenu', disableSelectionAndRightClick); };
+        return () => { if (currentRef) currentRef.removeEventListener('contextmenu', disableSelectionAndRightClick); };
     }, []);
 
     const changeQuestion = (newIndex) => {
         recordTimeSpentOnCurrentQuestion();
         setCurrentQuestionIndex(newIndex);
         resetQuestionTimerForNewQuestion();
-        // This is the change: automatically switch back to the question view on mobile.
         if (isMobileDevice) {
             setMobileView('question');
         }
@@ -829,24 +791,11 @@ const TestInterfacePage = ({ navigate, testId }) => {
 
     const handleMarkForReview = () => {
         updateQuestionStatus(currentSectionIndex, currentQuestionIndex, 'marked');
-        
-        // FIX: Only navigate to the next question if it's not the last question of the section.
-        // This prevents accidental submission when "Mark for Review" is clicked on the last question.
         if (currentSection && currentQuestionIndex < currentSection.questions.length - 1) {
             handleSaveAndNext();
         }
-
         setIsMoreMenuOpen(false);
     };
-
-
-    const handleConfirmResume = useCallback(() => {
-        isResumeConfirmedRef.current = true;
-        setIsResumeConfirmOpen(false);
-        if (!document.fullscreenElement) {
-            handleFullscreen();
-        }
-    }, [handleFullscreen]);
     
     const isRestrictedType = test?.type === 'sectional' || test?.type === 'full-length';
     const shouldShowInstructions = instructionStep > 0;
@@ -905,10 +854,8 @@ const TestInterfacePage = ({ navigate, testId }) => {
                 </div>
             );
         }
-        // INSERT THIS CODE
+
         if (!currentSection || !currentQuestion) {
-            // This handles brief moments during state transitions (like switching sections)
-            // where the question data might not be immediately available.
             return <div className="text-center text-gray-400 p-8">Loading question...</div>;
         }
 
@@ -923,84 +870,6 @@ const TestInterfacePage = ({ navigate, testId }) => {
 
         return (
             <>
-                
-                
-
-<ConfirmModal
-    isOpen={isExitConfirmOpen}
-    setIsOpen={setIsExitConfirmOpen}
-    onConfirm={saveProgressAndExit}
-    title="Exit Test"
->
-    Your progress will be saved. Are you sure you want to exit and return to the dashboard?
-</ConfirmModal>
-
-{/* This handles the special "Resume" case where cancelling navigates home */}
-<Transition appear show={isResumeConfirmOpen} as={Fragment}>
-    <Dialog as="div" className="relative z-50" onClose={() => {
-        setIsResumeConfirmOpen(false);
-        navigate('home');
-    }}>
-        <Transition.Child
-            as={Fragment}
-            enter="ease-out duration-300"
-            enterFrom="opacity-0"
-            enterTo="opacity-100"
-            leave="ease-in duration-200"
-            leaveFrom="opacity-100"
-            leaveTo="opacity-0"
-        >
-            <div className="fixed inset-0 bg-black bg-opacity-75" />
-        </Transition.Child>
-        <div className="fixed inset-0 overflow-y-auto">
-            <div className="flex min-h-full items-center justify-center p-4 text-center">
-                <Transition.Child
-                    as={Fragment}
-                    enter="ease-out duration-300"
-                    enterFrom="opacity-0 scale-95"
-                    enterTo="opacity-100 scale-100"
-                    leave="ease-in duration-200"
-                    leaveFrom="opacity-100 scale-100"
-                    leaveTo="opacity-0 scale-95"
-                >
-                    <Dialog.Panel className="w-full max-w-md transform overflow-hidden rounded-2xl bg-gray-800 border border-gray-700 p-6 text-left align-middle shadow-xl transition-all">
-                        <Dialog.Title as="h3" className="text-lg font-medium leading-6 text-white">
-                            Resume Test
-                        </Dialog.Title>
-                        <div className="mt-2">
-                            <p className="text-sm text-gray-400">
-                                You have a test in progress. Would you like to resume where you left off?
-                            </p>
-                        </div>
-                        <div className="mt-4 flex justify-end space-x-4">
-                            <button
-                                type="button"
-                                className="inline-flex justify-center rounded-md border border-transparent bg-gray-700 px-4 py-2 text-sm font-medium text-white hover:bg-gray-600"
-                                onClick={() => {
-                                    setIsResumeConfirmOpen(false);
-                                    navigate('home');
-                                }}
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                type="button"
-                                className="inline-flex justify-center rounded-md border border-transparent bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700"
-                                onClick={() => {
-                                    handleConfirmResume();
-                                    setIsResumeConfirmOpen(false);
-                                }}
-                            >
-                                Resume
-                            </button>
-                        </div>
-                    </Dialog.Panel>
-                </Transition.Child>
-            </div>
-        </div>
-    </Dialog>
-</Transition>
-
                 {isSubmitting && (
                     <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
                         <div className="bg-white p-6 rounded-lg shadow-xl text-center text-lg font-semibold animate-bounce">
@@ -1057,7 +926,6 @@ const TestInterfacePage = ({ navigate, testId }) => {
                             <div className="absolute inset-0 z-0" style={watermarkStyle}></div>
                             <div className="relative z-10">
                                 <h2 className="font-bold mb-2">Directions</h2>
-                                {/* FIX: Reordered to show text before image */}
                                 <div className="prose max-w-none text-gray-800 whitespace-pre-wrap">{currentQuestion.passage}</div>
                                 {currentQuestion.passageImageUrl && <img src={currentQuestion.passageImageUrl} alt="Passage" className="max-w-full h-auto mt-4 rounded"/>}
                             </div>
@@ -1068,7 +936,6 @@ const TestInterfacePage = ({ navigate, testId }) => {
                         <div className="absolute inset-0 z-0" style={watermarkStyle}></div>
                         <div className="relative z-10">
                             <h2 className="font-bold mb-4">Question No. {currentQuestionIndex + 1}</h2>
-                            {/* FIX: Reordered to show text before image */}
                             <div className="prose max-w-none text-gray-800 mb-4 whitespace-pre-wrap">{currentQuestion.questionText}</div>
                             {currentQuestion.questionImageUrl && <img src={currentQuestion.questionImageUrl} alt="Question" className="max-w-full h-auto mt-4 rounded"/>}
                             
