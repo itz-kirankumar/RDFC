@@ -417,7 +417,67 @@ const ResultAnalysis = ({ navigate, attemptId }) => {
     useEffect(() => { const hC = (e) => e.preventDefault(); const hS = (e) => e.preventDefault(); document.addEventListener('contextmenu', hC); document.addEventListener('selectstart', hS); return () => { document.removeEventListener('contextmenu', hC); document.removeEventListener('selectstart', hS); }; }, []);
     const handleFullscreen = useCallback(() => { if (analysisContainerRef.current) { if (!document.fullscreenElement) { analysisContainerRef.current.requestFullscreen().catch(err => console.error(err)); } else { document.exitFullscreen(); } } }, []);
     useEffect(() => { if (!attemptId) { if (navigate) navigate('home'); return; } const fetchData = async () => { setLoading(true); try { const aRef = doc(db, 'attempts', attemptId); const aSnap = await getDoc(aRef); if (!aSnap.exists()) throw new Error("Attempt not found."); const aData = { ...aSnap.data(), id: aSnap.id }; setAttempt(aData); const tRef = doc(db, 'tests', aData.testId); const tSnap = await getDoc(tRef); if (!tSnap.exists()) throw new Error("Test not found."); const tData = { id: tSnap.id, ...tSnap.data() }; setTest(tData); const q = query(collection(db, 'attempts'), where('testId', '==', aData.testId), where('status', '==', 'completed')); const qSnap = await getDocs(q); const allAData = qSnap.docs.map(d => ({ ...d.data(), id: d.id })); setAllAttempts(allAData); } catch (error) { console.error(error); alert(error.message); } finally { setLoading(false); } }; fetchData(); }, [attemptId, navigate]);
-    const analysisData = useMemo(() => { if (!attempt || !test) return { sectionWiseResults: [], totalScore: 0, totalCorrect: 0, totalIncorrect: 0, totalAttempted: 0, totalQuestions: 0, totalAccuracy: 0, totalTime: 0, synchronizedAllAttempts: [] }; const sWR = test.sections.map((sec, sIdx) => { let c = 0, i = 0, u = 0, t = 0, iM = 0; sec.questions.forEach((q, qIdx) => { const uA = attempt.answers?.[sIdx]?.[qIdx]; const isAtt = uA !== undefined && uA !== null && uA !== ''; if (!isAtt) { u++; } else { const isC = q.type === 'TITA' ? String(uA).toLowerCase() === String(q.correctOption).toLowerCase() : uA === q.correctOption; if (isC) c++; else { i++; if (q.type !== 'TITA') iM++; } } t += attempt.timeTaken?.[sIdx]?.[qIdx] || 0; }); const score = (c * 3) - (iM * 1); return { name: sec.name, score, correct: c, incorrect: i, unattempted: u, time: t, totalQuestions: sec.questions.length }; }); const tS = attempt.totalScore ?? sWR.reduce((acc, sec) => acc + sec.score, 0); const tC = sWR.reduce((acc, sec) => acc + sec.correct, 0); const tI = sWR.reduce((acc, sec) => acc + sec.incorrect, 0); const tA = tC + tI; const tQ = test.sections.reduce((acc, sec) => acc + sec.questions.length, 0); const tAcc = tA > 0 ? (tC / tA) * 100 : 0; const tT = sWR.reduce((acc, sec) => acc + sec.time, 0); const sAA = allAttempts.map(a => a.id === attempt.id ? { ...a, totalScore: tS } : a); return { sectionWiseResults: sWR, totalScore: tS, totalCorrect: tC, totalIncorrect: tI, totalAttempted: tA, totalQuestions: tQ, totalAccuracy: tAcc, totalTime: tT, synchronizedAllAttempts: sAA }; }, [attempt, test, allAttempts]);
+    const analysisData = useMemo(() => {
+        if (!attempt || !test) return { /* ... initial empty state ... */ };
+        
+        const markingScheme = test.markingScheme;
+        let totalUnattemptedForPenalty = 0;
+
+        const sWR = test.sections.map((sec, sIdx) => {
+            let c = 0, i = 0, u = 0, t = 0, iM = 0;
+            sec.questions.forEach((q, qIdx) => {
+                const uA = attempt.answers?.[sIdx]?.[qIdx];
+                const isAtt = uA !== undefined && uA !== null && uA !== '';
+                if (!isAtt) { u++; } else {
+                    const isC = q.type === 'TITA' ? String(uA).toLowerCase() === String(q.correctOption).toLowerCase() : uA === q.correctOption;
+                    if (isC) c++; else { i++; if (q.type !== 'TITA') iM++; }
+                }
+                t += attempt.timeTaken?.[sIdx]?.[qIdx] || 0;
+            });
+
+            totalUnattemptedForPenalty += u;
+            
+            let score;
+            if (markingScheme) {
+                const { marksForCorrect = 3, negativeMarksMCQ = 1, sectionsWithNoNegativeMarking = [] } = markingScheme;
+                score = c * marksForCorrect;
+                if (!sectionsWithNoNegativeMarking.includes(sec.name)) {
+                    score -= iM * negativeMarksMCQ;
+                }
+            } else {
+                score = (c * 3) - (iM * 1); // Default logic
+            }
+
+            return { name: sec.name, score, correct: c, incorrect: i, unattempted: u, time: t, totalQuestions: sec.questions.length };
+        });
+
+        let finalTotalScore = sWR.reduce((acc, sec) => {
+            // Exclude sections from final total if specified in the scheme
+            if (markingScheme?.sectionsExcludedFromTotal?.includes(sec.name)) {
+                return acc;
+            }
+            return acc + sec.score;
+        }, 0);
+
+        // Apply skip penalty if applicable
+        if (markingScheme?.hasSkipPenalty && totalUnattemptedForPenalty > markingScheme.skipPenaltyAfter) {
+            const questionsToPenalize = totalUnattemptedForPenalty - markingScheme.skipPenaltyAfter;
+            const penalty = questionsToPenalize * (markingScheme.skipPenaltyMarks || 0);
+            finalTotalScore -= penalty;
+        }
+        
+        const tS = finalTotalScore;
+        const tC = sWR.reduce((acc, sec) => acc + sec.correct, 0);
+        const tI = sWR.reduce((acc, sec) => acc + sec.incorrect, 0);
+        const tA = tC + tI;
+        const tQ = test.sections.reduce((acc, sec) => acc + sec.questions.length, 0);
+        const tAcc = tA > 0 ? (tC / tA) * 100 : 0;
+        const tT = sWR.reduce((acc, sec) => acc + sec.time, 0);
+        const sAA = allAttempts.map(a => a.id === attempt.id ? { ...a, totalScore: tS } : a);
+
+        return { sectionWiseResults: sWR, totalScore: tS, totalCorrect: tC, totalIncorrect: tI, totalAttempted: tA, totalQuestions: tQ, totalAccuracy: tAcc, totalTime: tT, synchronizedAllAttempts: sAA };
+    }, [attempt, test, allAttempts]);
+    
     useEffect(() => { const backfill = async () => { if (attempt && !attempt.hasOwnProperty('totalScore') && attemptId) { try { await updateDoc(doc(db, 'attempts', attemptId), { totalScore: analysisData.totalScore }); } catch (error) { console.error(error); } } }; backfill(); }, [attempt, attemptId, analysisData.totalScore]);
     const handleCloseToDashboard = () => { if (document.fullscreenElement) document.exitFullscreen(); if (navigate) navigate('home'); };
     if (loading) return <div className="text-center text-slate-400 p-8">Loading Analysis...</div>;

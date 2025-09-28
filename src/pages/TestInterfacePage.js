@@ -489,82 +489,74 @@ const TestInterfacePage = ({ navigate, testId }) => {
         }
     }, [isOnline, syncToFirestore]);
     
+    
+    
     const submitTest = useCallback(async () => {
         if (submittingTestRef.current) return;
         submittingTestRef.current = true;
         setIsSubmitting(true);
-
-        // Record the final time spent on the last question.
         recordTimeSpentOnCurrentQuestion();
 
-        // --- Calculate total score upon submission ---
+        // --- DYNAMIC SCORE CALCULATION ---
         let calculatedTotalScore = 0;
+        const markingScheme = test?.markingScheme;
+
         if (test && test.sections) {
             test.sections.forEach((section, secIdx) => {
                 let correct = 0;
                 let incorrectMcq = 0;
+                
                 section.questions.forEach((q, qIdx) => {
                     const userAnswer = answers?.[secIdx]?.[qIdx];
                     const isAttempted = userAnswer !== undefined && userAnswer !== null && userAnswer !== '';
-
                     if (isAttempted) {
                         const isCorrect = q.type === 'TITA'
                             ? String(userAnswer).toLowerCase() === String(q.correctOption).toLowerCase()
                             : userAnswer === q.correctOption;
-
-                        if (isCorrect) {
-                            correct++;
-                        } else {
-                            if (q.type !== 'TITA') {
-                                incorrectMcq++;
-                            }
-                        }
+                        if (isCorrect) correct++;
+                        else if (q.type !== 'TITA') incorrectMcq++;
                     }
                 });
-                const sectionScore = (correct * 3) - (incorrectMcq * 1);
-                calculatedTotalScore += sectionScore;
+
+                // Apply the correct marking scheme
+                if (markingScheme) {
+                    const { marksForCorrect, negativeMarksMCQ, sectionsWithNoNegativeMarking } = markingScheme;
+                    let sectionScore = correct * (marksForCorrect || 0);
+                    if (!sectionsWithNoNegativeMarking?.includes(section.name)) {
+                        sectionScore -= incorrectMcq * (negativeMarksMCQ || 0);
+                    }
+                    calculatedTotalScore += sectionScore;
+                } else {
+                    // Default fallback logic
+                    calculatedTotalScore += (correct * 3) - (incorrectMcq * 1);
+                }
             });
         }
         
-        // --- Prepare the final data with the calculated score included ---
         const finalAttemptData = {
             status: 'completed',
             answers,
             timeTaken,
             questionStatuses,
             completedAt: Timestamp.fromDate(new Date()),
-            totalScore: calculatedTotalScore, // FIX: Added total score to the data object
+            totalScore: calculatedTotalScore,
         };
 
         const key = getLocalStorageKey();
-        if (key) {
-             // This now correctly saves the totalScore for offline scenarios as well
-             localStorage.setItem(key, JSON.stringify(finalAttemptData));
-        }
-        
+        if (key) localStorage.setItem(key, JSON.stringify(finalAttemptData));
         if (!isOnline) {
             alert("You are offline. Your final result has been saved and will be submitted when you reconnect.");
             setIsSubmitting(false);
             submittingTestRef.current = false;
             return;
         }
-
+        
         try {
-            // Update the document in Firestore with the complete data
-            if (attemptDocId) {
-                await updateDoc(doc(db, "attempts", attemptDocId), finalAttemptData);
-            }
-            
+            if (attemptDocId) await updateDoc(doc(db, "attempts", attemptDocId), finalAttemptData);
             if (key) localStorage.removeItem(key);
-            
             navigateOnExitRef.current = false;
-            
-            if (document.fullscreenElement) {
-                 await document.exitFullscreen();
-            }
-
+            if (document.fullscreenElement) await document.exitFullscreen();
             navigate('results', { attemptId: attemptDocId });
-
         } catch (error) {
             console.error("Error submitting test:", error);
             alert("A connection error occurred while submitting. Your progress is saved locally. Please try again.");
@@ -574,8 +566,8 @@ const TestInterfacePage = ({ navigate, testId }) => {
     }, [answers, timeTaken, questionStatuses, getLocalStorageKey, isOnline, attemptDocId, navigate, recordTimeSpentOnCurrentQuestion, test]);
 
     const handleSubmitClick = useCallback(() => {
-        submitTest();
-    }, [submitTest]);
+        setIsConfirmOpen(true);
+    }, []);
 
     const handleSectionSubmit = useCallback(() => {
         recordTimeSpentOnCurrentQuestion();
@@ -583,7 +575,7 @@ const TestInterfacePage = ({ navigate, testId }) => {
         if (currentSectionIndex < test.sections.length - 1) {
             const nextSectionIndex = currentSectionIndex + 1;
             setSectionTransitionMessage(`Submitting ${test.sections[currentSectionIndex].name} section... Loading next section: ${test.sections[nextSectionIndex].name}`);
-            setCurrentSectionIndex(nextSectionIndex);
+            setCurrentSectionIndex(nextSectionIndex); 
             setCurrentQuestionIndex(0); 
             resetQuestionTimerForNewQuestion();
             setTimeout(() => { setSectionTransitionMessage(''); }, 1500); 
@@ -617,6 +609,10 @@ const TestInterfacePage = ({ navigate, testId }) => {
              document.exitFullscreen();
         }
     }, [answers, timeTaken, questionStatuses, sectionTimers, currentSectionIndex, currentQuestionIndex, getLocalStorageKey, syncToFirestore, navigate, recordTimeSpentOnCurrentQuestion]);
+    
+    const handleBackToDashboardClick = useCallback(() => {
+        setIsExitConfirmOpen(true);
+    }, []);
 
     useEffect(() => {
         const fetchAndPrepareTest = async () => {
@@ -844,9 +840,6 @@ const TestInterfacePage = ({ navigate, testId }) => {
         setIsMoreMenuOpen(false);
     };
 
-    const handleBackToDashboardClick = useCallback(() => {
-        saveProgressAndExit();
-    }, [saveProgressAndExit]);
 
     const handleConfirmResume = useCallback(() => {
         isResumeConfirmedRef.current = true;
