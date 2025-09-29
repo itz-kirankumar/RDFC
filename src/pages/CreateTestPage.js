@@ -6,15 +6,17 @@ import { TrashIcon, EyeIcon, EyeSlashIcon, PencilSquareIcon, DocumentTextIcon, L
 import Papa from 'papaparse';
 
 // --- Reusable Form Input Components ---
+// No changes needed in FormInput, FormTextarea, MultiImageUrlManager, etc.
 const FormInput = ({ label, type = 'text', value, onChange, required = false, placeholder = '' }) => (
     <div>
-        <label className="block text-sm font-medium text-gray-300">{label}</label>
+        {/* MODIFICATION: Hide label if it's meant for an option for a cleaner look in a flex layout */}
+        <label className={`block text-sm font-medium text-gray-300 ${label.startsWith('Option') ? 'sr-only' : ''}`}>{label}</label>
         <input
             type={type}
             value={value}
             onChange={onChange}
             required={required}
-            placeholder={placeholder}
+            placeholder={label.startsWith('Option') ? label : placeholder} // Use label as placeholder for options
             className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-white focus:ring focus:ring-gray-500 focus:ring-opacity-50"
         />
     </div>
@@ -87,7 +89,6 @@ const MultiImageUrlManager = ({ label, urls, onChange }) => {
         </div>
     );
 };
-
 const SectionNameManagerModal = ({ isOpen, onClose, customSectionNames, onAdd, onDelete }) => {
     const [newSectionName, setNewSectionName] = useState('');
 
@@ -237,6 +238,7 @@ const MarkingSchemeManagerModal = ({ isOpen, onClose, schemes, onSave, onDelete,
 
 
 const CreateTestPage = ({ navigate, testToEdit }) => {
+    // No changes to CORE_SECTIONS or BLANK_QUESTION are needed. The default of 4 options is fine.
     const CORE_SECTIONS = ['VARC', 'DILR', 'QA'];
     const BLANK_QUESTION = { type: 'MCQ', passage: '', passageImageUrls: [], questionText: '', options: ['', '', '', ''], correctOption: '', solution: '', questionImageUrls: [], solutionImageUrls: [] };
 
@@ -296,6 +298,7 @@ const CreateTestPage = ({ navigate, testToEdit }) => {
         fetchTabs();
     }, [testToEdit]);
     
+    // REPLACE your entire handleCsvUpload function with this one
     const handleCsvUpload = (event) => {
         const file = event.target.files[0];
         if (!file) return;
@@ -326,12 +329,12 @@ const CreateTestPage = ({ navigate, testToEdit }) => {
                             if (questionData.sectionDuration) currentSectionDetails.duration = parseInt(questionData.sectionDuration, 10) || 40;
                             const { questionText, questionType, correctAnswer, solutionText } = questionData;
                             if (!currentSectionDetails.name || !questionText || !questionType || !correctAnswer || !solutionText) {
-                                console.warn(`Skipping row #${index + 2} due to missing data.`); return;
+                                console.warn(`Skipping row #${index + 2} due to missing core data.`); return;
                             }
                             if (!newSectionsMap.has(currentSectionDetails.name)) {
                                 newSectionsMap.set(currentSectionDetails.name, { name: currentSectionDetails.name, duration: currentSectionDetails.duration, questions: [] });
                             }
-                            const newQuestion = { ...BLANK_QUESTION };
+                            const newQuestion = { ...BLANK_QUESTION }; // Start with blank to ensure all fields are present
                             newQuestion.passage = questionData.passageText ? questionData.passageText.replace(/\\n/g, '\n') : '';
                             newQuestion.passageImageUrls = questionData.passageImageUrls ? questionData.passageImageUrls.split(';').map(url => url.trim()) : [];
                             newQuestion.questionText = questionText.replace(/\\n/g, '\n');
@@ -339,11 +342,23 @@ const CreateTestPage = ({ navigate, testToEdit }) => {
                             newQuestion.type = questionType.toUpperCase() === 'TITA' ? 'TITA' : 'MCQ';
                             newQuestion.solution = solutionText.replace(/\\n/g, '\n');
                             newQuestion.solutionImageUrls = questionData.solutionImageUrls ? questionData.solutionImageUrls.split(';').map(url => url.trim()) : [];
+                            
                             if (newQuestion.type === 'MCQ') {
-                                newQuestion.options = [questionData.option1, questionData.option2, questionData.option3, questionData.option4];
+                                // DYNAMICALLY find all 'optionX' columns and build the options array
+                                const options = Object.keys(questionData)
+                                      .filter(key => key.startsWith('option') && questionData[key])
+                                      .sort((a, b) => parseInt(a.replace('option', '')) - parseInt(b.replace('option', '')))
+                                      .map(key => questionData[key]);
+
+                                if (options.length < 2) {
+                                    console.warn(`Skipping MCQ in row #${index + 2} due to having fewer than 2 options.`);
+                                    return;
+                                }
+                                newQuestion.options = options;
+                                
                                 const correctOptionIndex = parseInt(correctAnswer, 10) - 1;
-                                if (isNaN(correctOptionIndex) || correctOptionIndex < 0 || correctOptionIndex > 3) {
-                                     console.warn(`Skipping MCQ in row #${index + 2} due to invalid correctAnswer '${correctAnswer}'.`); return;
+                                if (isNaN(correctOptionIndex) || correctOptionIndex < 0 || correctOptionIndex >= options.length) {
+                                     console.warn(`Skipping MCQ in row #${index + 2} due to invalid correctAnswer '${correctAnswer}' for ${options.length} options.`); return;
                                 }
                                 newQuestion.correctOption = correctOptionIndex;
                             } else { 
@@ -351,7 +366,7 @@ const CreateTestPage = ({ navigate, testToEdit }) => {
                                     console.warn(`Skipping TITA in row #${index + 2} due to non-numerical correctAnswer '${correctAnswer}'.`); return;
                                 }
                                 newQuestion.correctOption = correctAnswer;
-                                newQuestion.options = ['', '', '', ''];
+                                newQuestion.options = []; // Clear options for TITA
                             }
                             newSectionsMap.get(currentSectionDetails.name).questions.push(newQuestion);
                         });
@@ -370,40 +385,70 @@ const CreateTestPage = ({ navigate, testToEdit }) => {
         event.target.value = null;
     };
     
+    // REPLACE your downloadCsvTemplate function with this one
     const downloadCsvTemplate = () => {
-        const header = "testTitle,testDescription,mainType,subType,sectionName,sectionDuration,passageText,passageImageUrls,questionText,questionImageUrls,questionType,option1,option2,option3,option4,correctAnswer,solutionText,solutionImageUrls\n";
-        const exampleRow = "\"Sample Mock\",\"Full-length test.\",\"Mocks\",\"Mock 1\",\"VARC\",40,\"Passage...\",\"\",\"Question...\",\"\",MCQ,\"A\",\"B\",\"C\",\"D\",1,\"Solution...\",\"\"\n";
+        // Add more option columns to the template header to suggest the new capability
+        const header = "testTitle,testDescription,mainType,subType,sectionName,sectionDuration,passageText,passageImageUrls,questionText,questionImageUrls,questionType,option1,option2,option3,option4,option5,option6,correctAnswer,solutionText,solutionImageUrls\n";
+        const exampleRow = "\"Sample Mock\",\"Full-length test.\",\"Mocks\",\"Mock 1\",\"VARC\",40,\"Passage...\",\"\",\"Question...\",\"\",MCQ,\"A\",\"B\",\"C\",\"D\",\"\",\"\",1,\"Solution...\",\"\"\n";
         const blob = new Blob([header + exampleRow], { type: 'text/csv;charset=utf-8;' });
         const link = document.createElement("a");
         link.href = URL.createObjectURL(blob);
-        link.download = "test_template_new.csv";
+        link.download = "test_template_dynamic_options.csv";
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
     };
 
+    // REPLACE your handleDownloadCsv function with this one
     const handleDownloadCsv = () => {
         if (!testToEdit) return;
         const [mainType, subType] = testCategory.split('/');
+        
         const csvDataRows = sections.flatMap(section => 
-            section.questions.map(q => ({
-                testTitle: title, description, mainType, subType: subType || '',
-                sectionName: section.name, sectionDuration: section.duration,
-                passageText: q.passage ? q.passage.replace(/\n/g, '\\n') : '',
-                passageImageUrls: (q.passageImageUrls || []).join(';'),
-                questionText: q.questionText ? q.questionText.replace(/\n/g, '\\n') : '',
-                questionImageUrls: (q.questionImageUrls || []).join(';'),
-                questionType: q.type,
-                option1: q.options[0] || '', option2: q.options[1] || '',
-                option3: q.options[2] || '', option4: q.options[3] || '',
-                correctAnswer: q.type === 'MCQ' ? (q.correctOption !== '' ? parseInt(q.correctOption, 10) + 1 : '') : q.correctOption,
-                solutionText: q.solution ? q.solution.replace(/\n/g, '\\n') : '',
-                solutionImageUrls: (q.solutionImageUrls || []).join(';')
-            }))
+            section.questions.map(q => {
+                // Base data for every row
+                const row = {
+                    testTitle: title,
+                    description,
+                    mainType,
+                    subType: subType || '',
+                    sectionName: section.name,
+                    sectionDuration: section.duration,
+                    passageText: q.passage ? q.passage.replace(/\n/g, '\\n') : '',
+                    passageImageUrls: (q.passageImageUrls || []).join(';'),
+                    questionText: q.questionText ? q.questionText.replace(/\n/g, '\\n') : '',
+                    questionImageUrls: (q.questionImageUrls || []).join(';'),
+                    questionType: q.type,
+                    correctAnswer: q.type === 'MCQ' ? (q.correctOption !== '' ? parseInt(q.correctOption, 10) + 1 : '') : q.correctOption,
+                    solutionText: q.solution ? q.solution.replace(/\n/g, '\\n') : '',
+                    solutionImageUrls: (q.solutionImageUrls || []).join(';')
+                };
+
+                // DYNAMICALLY add option columns for MCQs
+                if (q.type === 'MCQ') {
+                    q.options.forEach((opt, index) => {
+                        row[`option${index + 1}`] = opt || '';
+                    });
+                }
+
+                return row;
+            })
         );
+        
         if (csvDataRows.length === 0) return alert("This test has no questions to export.");
-        const csv = Papa.unparse(csvDataRows);
-        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+
+        // Dynamically create the header based on the maximum number of options present in the test
+        const allKeys = new Set();
+        csvDataRows.forEach(row => Object.keys(row).forEach(key => allKeys.add(key)));
+        
+        const preferredOrder = [ "testTitle", "testDescription", "mainType", "subType", "sectionName", "sectionDuration", "passageText", "passageImageUrls", "questionText", "questionImageUrls", "questionType" ];
+        const optionKeys = [...allKeys].filter(key => key.startsWith('option')).sort((a, b) => parseInt(a.replace('option', '')) - parseInt(b.replace('option', '')));
+        const remainingKeys = [ "correctAnswer", "solutionText", "solutionImageUrls" ];
+        const finalHeader = [...preferredOrder, ...optionKeys, ...remainingKeys];
+
+        const csv = Papa.unparse(csvDataRows, { columns: finalHeader });
+
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-t8;' });
         const link = document.createElement("a");
         link.href = URL.createObjectURL(blob);
         link.download = `${title.replace(/[^a-z0-9]/gi, '_').toLowerCase() || 'test'}.csv`;
@@ -438,7 +483,12 @@ const CreateTestPage = ({ navigate, testToEdit }) => {
     const handleQuestionChange = (secIndex, qIndex, field, value) => {
         const newSections = [...sections];
         newSections[secIndex].questions[qIndex][field] = value;
-        if (field === 'type') newSections[secIndex].questions[qIndex].correctOption = '';
+        if (field === 'type') {
+            newSections[secIndex].questions[qIndex].correctOption = '';
+            if (value === 'MCQ' && newSections[secIndex].questions[qIndex].options.length === 0) {
+                 newSections[secIndex].questions[qIndex].options = ['', '', '', '']; // Reset to default if switching to MCQ
+            }
+        }
         setSections(newSections);
     };
     const handleOptionChange = (secIndex, qIndex, optIndex, value) => {
@@ -446,6 +496,36 @@ const CreateTestPage = ({ navigate, testToEdit }) => {
         newSections[secIndex].questions[qIndex].options[optIndex] = value;
         setSections(newSections);
     };
+    
+    // --- ADD these 2 new functions for managing options ---
+    const addOption = (secIndex, qIndex) => {
+        const newSections = [...sections];
+        newSections[secIndex].questions[qIndex].options.push('');
+        setSections(newSections);
+    };
+
+    const removeOption = (secIndex, qIndex, optIndex) => {
+        const newSections = [...sections];
+        const question = newSections[secIndex].questions[qIndex];
+        
+        if (question.options.length <= 2) {
+            alert("An MCQ must have at least 2 options.");
+            return;
+        }
+
+        question.options.splice(optIndex, 1);
+
+        // If the removed option was the correct one, reset correctOption
+        if (question.correctOption === optIndex) {
+            question.correctOption = '';
+        } else if (question.correctOption > optIndex) {
+            // Adjust the correct option index if it came after the removed one
+            question.correctOption -= 1;
+        }
+
+        setSections(newSections);
+    };
+    
     const addQuestion = (secIndex) => {
         const newSections = [...sections];
         newSections[secIndex].questions.push({ ...BLANK_QUESTION });
@@ -476,7 +556,7 @@ const CreateTestPage = ({ navigate, testToEdit }) => {
                 const q = sections[i].questions[j];
                 const qNum = `S${i + 1}, Q${j + 1}`;
                 if (!q.questionText.trim()) { alert(`${qNum}: Question Text required.`); return false; }
-                if (q.type === 'MCQ' && (q.options.some(opt => !opt.trim()) || q.correctOption === '')) { alert(`${qNum}: All options and correct answer required for MCQ.`); return false; }
+                if (q.type === 'MCQ' && (q.options.some(opt => !opt.trim()) || q.correctOption === '')) { alert(`${qNum}: All options and a correct answer selection are required for MCQ.`); return false; }
                 if (q.type === 'TITA' && `${q.correctOption}`.trim() === '') { alert(`${qNum}: Correct answer required for TITA.`); return false; }
                 if (!q.solution.trim()) { alert(`${qNum}: Solution required.`); return false; }
             }
@@ -581,7 +661,84 @@ const CreateTestPage = ({ navigate, testToEdit }) => {
                 </div>
                 <div className="mt-6 border-t border-gray-700 pt-6 flex flex-col sm:flex-row gap-4">
                     {showPassage && (<div className={`${mobileView === 'passage' ? 'block' : 'hidden'} sm:block sm:w-1/3 w-full`}><h3 className="text-lg font-semibold text-white mb-2">Passage / Set Info</h3><div className="space-y-4"><FormTextarea label="Passage Text (Optional)" value={activeQ?.passage || ''} onChange={e => handleQuestionChange(activeQuestion.sec, activeQuestion.q, 'passage', e.target.value)} rows={25} /><MultiImageUrlManager label="Passage Images (Optional)" urls={activeQ?.passageImageUrls || []} onChange={urls => handleQuestionChange(activeQuestion.sec, activeQuestion.q, 'passageImageUrls', urls)} /></div></div>)}
-                    <div className={`${mobileView === 'question' ? 'block' : 'hidden'} sm:block sm:flex-1 w-full`}><h3 className="text-lg font-semibold text-white mb-2">Question Editor</h3>{activeQ ? (<div className="border border-gray-700 p-3 rounded space-y-4 bg-gray-900/50"><div className="flex justify-between items-center"><h4 className="font-semibold text-gray-300">Section {activeQuestion.sec + 1}, Question {activeQuestion.q + 1}</h4><div className="flex items-center gap-4"><label className="text-sm font-medium text-gray-300">Type:<select value={activeQ.type || 'MCQ'} onChange={e => handleQuestionChange(activeQuestion.sec, activeQuestion.q, 'type', e.target.value)} className="ml-2 rounded-md bg-gray-700 border-gray-600 text-white text-sm"><option value="MCQ">MCQ</option><option value="TITA">TITA</option></select></label><button type="button" onClick={() => removeQuestion(activeQuestion.sec, activeQuestion.q)} disabled={activeSec.questions.length <= 1} className="p-1.5 text-red-400 hover:text-red-300 disabled:text-gray-500 disabled:cursor-not-allowed"><TrashIcon className="h-5 w-5" /></button></div></div><FormTextarea label="Question Text" value={activeQ.questionText} onChange={e => handleQuestionChange(activeQuestion.sec, activeQuestion.q, 'questionText', e.target.value)} required rows={4} /><MultiImageUrlManager label="Question Images (Optional)" urls={activeQ?.questionImageUrls || []} onChange={urls => handleQuestionChange(activeQuestion.sec, activeQuestion.q, 'questionImageUrls', urls)} />{activeQ.type === 'TITA' ? <FormInput label="Correct Answer (TITA)" value={activeQ.correctOption || ''} onChange={e => handleQuestionChange(activeQuestion.sec, activeQuestion.q, 'correctOption', e.target.value)} required />: <> <div className="grid grid-cols-1 md:grid-cols-2 gap-4">{activeQ.options.map((opt, optIndex) => <FormInput key={optIndex} label={`Option ${optIndex + 1}`} value={opt} onChange={e => handleOptionChange(activeQuestion.sec, activeQuestion.q, optIndex, e.target.value)} required />)}</div><div><label className="block text-sm font-medium text-gray-300">Correct Option</label><select value={activeQ.correctOption} onChange={e => handleQuestionChange(activeQuestion.sec, activeQuestion.q, 'correctOption', parseInt(e.target.value, 10))} className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white"><option value="" disabled>-- Select --</option>{[...Array(4)].map((_, i) => <option key={i} value={i}>Option {i + 1}</option>)}</select></div></>}<FormTextarea label="Detailed Solution" value={activeQ.solution} onChange={e => handleQuestionChange(activeQuestion.sec, activeQuestion.q, 'solution', e.target.value)} required rows={4} /><MultiImageUrlManager label="Solution Images (Optional)" urls={activeQ?.solutionImageUrls || []} onChange={urls => handleQuestionChange(activeQuestion.sec, activeQuestion.q, 'solutionImageUrls', urls)} /></div>) : <div className="text-center py-10 border border-dashed border-gray-600 rounded-lg text-gray-400"><p>No question selected.</p></div>}</div>
+                    <div className={`${mobileView === 'question' ? 'block' : 'hidden'} sm:block sm:flex-1 w-full`}>
+                        <h3 className="text-lg font-semibold text-white mb-2">Question Editor</h3>
+                        {activeQ ? (
+                            <div className="border border-gray-700 p-3 rounded space-y-4 bg-gray-900/50">
+                                <div className="flex justify-between items-center">
+                                    <h4 className="font-semibold text-gray-300">Section {activeQuestion.sec + 1}, Question {activeQuestion.q + 1}</h4>
+                                    <div className="flex items-center gap-4">
+                                        <label className="text-sm font-medium text-gray-300">Type:
+                                            <select value={activeQ.type || 'MCQ'} onChange={e => handleQuestionChange(activeQuestion.sec, activeQuestion.q, 'type', e.target.value)} className="ml-2 rounded-md bg-gray-700 border-gray-600 text-white text-sm">
+                                                <option value="MCQ">MCQ</option><option value="TITA">TITA</option>
+                                            </select>
+                                        </label>
+                                        <button type="button" onClick={() => removeQuestion(activeQuestion.sec, activeQuestion.q)} disabled={activeSec.questions.length <= 1} className="p-1.5 text-red-400 hover:text-red-300 disabled:text-gray-500 disabled:cursor-not-allowed"><TrashIcon className="h-5 w-5" /></button>
+                                    </div>
+                                </div>
+                                <FormTextarea label="Question Text" value={activeQ.questionText} onChange={e => handleQuestionChange(activeQuestion.sec, activeQuestion.q, 'questionText', e.target.value)} required rows={4} />
+                                <MultiImageUrlManager label="Question Images (Optional)" urls={activeQ?.questionImageUrls || []} onChange={urls => handleQuestionChange(activeQuestion.sec, activeQuestion.q, 'questionImageUrls', urls)} />
+
+                                {/* --- REPLACEMENT START: DYNAMIC OPTIONS UI --- */}
+                                {activeQ.type === 'TITA' ? 
+                                    <FormInput label="Correct Answer (TITA)" value={activeQ.correctOption || ''} onChange={e => handleQuestionChange(activeQuestion.sec, activeQuestion.q, 'correctOption', e.target.value)} required />
+                                    : <> 
+                                        {/* Dynamic Options */}
+                                        <div className="space-y-4">
+                                            <label className="block text-sm font-medium text-gray-300">Options</label>
+                                            <div className="space-y-3">
+                                                {activeQ.options.map((opt, optIndex) => (
+                                                    <div key={optIndex} className="flex items-center gap-2">
+                                                        <div className="flex-grow">
+                                                          <FormInput 
+                                                              label={`Option ${optIndex + 1}`} 
+                                                              value={opt} 
+                                                              onChange={e => handleOptionChange(activeQuestion.sec, activeQuestion.q, optIndex, e.target.value)} 
+                                                              required 
+                                                          />
+                                                        </div>
+                                                        <button 
+                                                            type="button" 
+                                                            onClick={() => removeOption(activeQuestion.sec, activeQuestion.q, optIndex)} 
+                                                            disabled={activeQ.options.length <= 2}
+                                                            className="p-2 text-red-400 hover:text-red-300 disabled:text-gray-600 disabled:cursor-not-allowed mt-1"
+                                                            title="Remove Option"
+                                                        >
+                                                            <TrashIcon className="h-5 w-5" />
+                                                        </button>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                            <button 
+                                                type="button" 
+                                                onClick={() => addOption(activeQuestion.sec, activeQuestion.q)}
+                                                className="text-sm text-gray-300 hover:text-white bg-gray-700/50 px-3 py-1.5 rounded-md hover:bg-gray-700"
+                                            >
+                                                + Add Option
+                                            </button>
+                                        </div>
+
+                                        {/* Dynamic Correct Option Select */}
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-300">Correct Option</label>
+                                            <select 
+                                                value={activeQ.correctOption} 
+                                                onChange={e => handleQuestionChange(activeQuestion.sec, activeQuestion.q, 'correctOption', e.target.value === '' ? '' : parseInt(e.target.value, 10))} 
+                                                className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white"
+                                            >
+                                                <option value="" disabled>-- Select --</option>
+                                                {activeQ.options.map((opt, i) => <option key={i} value={i}>Option {i + 1}{opt ? `: ${opt.substring(0,20)}...` : ''}</option>)}
+                                            </select>
+                                        </div>
+                                    </>
+                                }
+                                {/* --- REPLACEMENT END --- */}
+                                
+                                <FormTextarea label="Detailed Solution" value={activeQ.solution} onChange={e => handleQuestionChange(activeQuestion.sec, activeQuestion.q, 'solution', e.target.value)} required rows={4} />
+                                <MultiImageUrlManager label="Solution Images (Optional)" urls={activeQ?.solutionImageUrls || []} onChange={urls => handleQuestionChange(activeQuestion.sec, activeQuestion.q, 'solutionImageUrls', urls)} />
+                            </div>
+                        ) : <div className="text-center py-10 border border-dashed border-gray-600 rounded-lg text-gray-400"><p>No question selected.</p></div>}
+                    </div>
                     {showNavigator && (<div className={`${mobileView === 'navigator' ? 'block' : 'hidden'} sm:block sm:w-56 sm:flex-shrink-0 w-full`}><h3 className="text-lg font-semibold text-white mb-2">Navigator</h3><div className="space-y-4 max-h-[70vh] overflow-y-auto pr-2">{sections.map((section, secIndex) => (<div key={secIndex} className="bg-gray-900/50 p-2 rounded"><div className="space-y-2"><div className="flex justify-between items-center"><label className="text-sm font-medium text-gray-300">Section {secIndex + 1}</label><button type="button" onClick={() => removeSection(secIndex)} disabled={sections.length <= 1} className="p-1 text-red-500 hover:text-red-400 disabled:text-gray-600"><TrashIcon className="h-4 w-4" /></button></div><select value={section.name} onChange={e => handleSectionChange(secIndex, 'name', e.target.value)} className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white text-sm">{allAvailableSections.map(s => <option key={s} value={s}>{s}</option>)}</select><FormInput label="Duration (mins)" type="number" value={section.duration} onChange={e => handleSectionChange(secIndex, 'duration', e.target.value)} required /></div><div className="grid grid-cols-5 gap-1.5 mt-2">{section.questions.map((_, qIndex) => (<button type="button" key={qIndex} onClick={() => setActiveQuestion({ sec: secIndex, q: qIndex })} className={`h-8 w-8 flex items-center justify-center rounded text-xs font-semibold ${activeQuestion.sec === secIndex && activeQuestion.q === qIndex ? 'bg-white text-gray-900 ring-2 ring-white' : 'bg-gray-700 text-white hover:bg-gray-600'}`}>{qIndex + 1}</button>))}</div><button type="button" onClick={() => addQuestion(secIndex)} className="w-full mt-2 bg-gray-700 text-white px-2 py-1 text-xs rounded-md hover:bg-gray-600">+ Add Question</button></div>))}{<button type="button" onClick={addSection} className="w-full mt-4 bg-gray-700 text-white px-2 py-1 text-sm rounded-md hover:bg-gray-600">+ Add Section</button>}<button type="button" onClick={() => setIsSectionManagerOpen(true)} className="w-full mt-2 bg-gray-600 text-white px-2 py-1 text-xs rounded-md hover:bg-gray-500">Manage Custom Sections</button></div></div>)}
                 </div>
                 <div className="flex justify-end space-x-4 pt-6 border-t border-gray-700 mt-6">
