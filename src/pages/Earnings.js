@@ -36,7 +36,7 @@ const FormCheckbox = ({ label, checked, onChange }) => (
     <label className="flex items-center space-x-3 cursor-pointer"><input type="checkbox" checked={checked} onChange={onChange} className="h-4 w-4 rounded bg-gray-600 border-gray-500 text-blue-500 focus:ring-blue-500 focus:ring-offset-gray-800" /><span className="text-gray-300 text-sm font-medium">{label}</span></label>
 );
 
-const SettingsModal = ({ isOpen, setIsOpen, plansToShow, myPlanShares, setMyPlanShares, charges, setCharges, onSave, isMasterAdmin, masterConfig, setMasterConfig }) => {
+const SettingsModal = ({ isOpen, setIsOpen, plansToShow, myPlanShares, setMyPlanShares, charges, setCharges, onSave, isMasterAdmin, masterConfig, setMasterConfig, firebaseCharges, setFirebaseCharges }) => {
     return (
         <Transition appear show={isOpen} as={Fragment}>
             <Dialog as="div" className="relative z-50" onClose={() => setIsOpen(false)}>
@@ -62,6 +62,9 @@ const SettingsModal = ({ isOpen, setIsOpen, plansToShow, myPlanShares, setMyPlan
                             <div className="p-4 border border-gray-700 rounded-lg">
                                 <h4 className="font-semibold text-gray-200 mb-2">Platform Charges (%)</h4>
                                 <FormInput value={charges} onChange={e => setCharges(e.target.value)} placeholder="e.g., 2.5" />
+                                
+                                <h4 className="font-semibold text-gray-200 mt-4 mb-2">Firebase Charges (₹)</h4>
+                                <FormInput value={firebaseCharges} onChange={e => setFirebaseCharges(e.target.value)} placeholder="e.g., 500" />
                             </div>
                             <div className="p-4 border border-gray-700 rounded-lg">
                                 <h4 className="font-semibold text-gray-200 mb-2">My Plan Shares (%)</h4>
@@ -175,6 +178,7 @@ export default function Earnings() {
     const [usersMap, setUsersMap] = useState(new Map());
     const [myPlanShares, setMyPlanShares] = useState({});
     const [charges, setCharges] = useState(0);
+    const [firebaseCharges, setFirebaseCharges] = useState(0);
     const [activeTab, setActiveTab] = useState('unsettled');
     const [searchTerm, setSearchTerm] = useState('');
     const [sortConfig, setSortConfig] = useState({ key: 'createdAt', direction: 'descending' });
@@ -222,7 +226,13 @@ export default function Earnings() {
         
         const unsubSettledManual = onSnapshot(collection(db, 'adminSettings', userData.uid, 'settledUsers'), snap => { const sMap = new Map(); snap.forEach(d => sMap.set(d.id, d.data())); setSettledManualUsersMap(sMap); }, e => err(e, 'settled manual users'));
         const unsubPlans = onSnapshot(query(collection(db, 'subscriptionPlans'), orderBy('order')), snap => setAllPlans(snap.docs.map(d => ({ id: d.id, ...d.data() }))), e => err(e, 'plans'));
-        const unsubSettings = onSnapshot(doc(db, 'adminSettings', userData.uid), d => { if (d.exists()) { setMyPlanShares(d.data().planShares || {}); setCharges(d.data().charges || 0); }}, e => err(e, 'settings'));
+        const unsubSettings = onSnapshot(doc(db, 'adminSettings', userData.uid), d => { 
+            if (d.exists()) { 
+                setMyPlanShares(d.data().planShares || {}); 
+                setCharges(d.data().charges || 0);
+                setFirebaseCharges(d.data().firebaseCharges || 0);
+            }
+        }, e => err(e, 'settings'));
         
         let unsubMasterConfig;
         if (isMasterAdmin) {
@@ -279,19 +289,17 @@ export default function Earnings() {
     const handleToggleApproval = async (tx) => { if (!isMasterAdmin || tx.type !== 'transaction') return; await updateDoc(doc(db, 'transactions', tx.id), { isApproved: !tx.isApproved }); };
     const handleToggleHidden = async (tx) => { if (!isMasterAdmin || tx.type !== 'transaction') return; await updateDoc(doc(db, 'transactions', tx.id), { isHidden: !tx.isHidden }); };
     
-const handleSaveSettings = async () => {
+    const handleSaveSettings = async () => {
         if (!userData?.uid) return;
         setIsProcessing(true);
         try {
-            // Save the personal settings for any admin
             await setDoc(doc(db, 'adminSettings', userData.uid), { 
                 planShares: myPlanShares, 
-                charges: Number(charges) || 0 
+                charges: Number(charges) || 0,
+                firebaseCharges: Number(firebaseCharges) || 0
             }, { merge: true });
 
-            // If the user is the master admin, also save the masterConfig
             if (isMasterAdmin) {
-                // FIX: Ensure date objects are valid before converting to Timestamp
                 const startDate = masterConfig.automationStartDate ? new Date(masterConfig.automationStartDate) : null;
                 const endDate = masterConfig.automationEndDate ? new Date(masterConfig.automationEndDate) : null;
 
@@ -313,18 +321,37 @@ const handleSaveSettings = async () => {
     };
     
     const financialSummary = useMemo(() => {
-        const totalUnsettledGross = unsettledItems.reduce((acc, curr) => acc + (curr.amount || 0), 0);
-        const totalSettled = settledItems.reduce((acc, curr) => acc + (curr.amount || 0), 0);
-        const todayStr = new Date().toLocaleDateString('en-CA');
-        const salesToday = allItems.filter(item => safeToDate(item.createdAt)?.toLocaleDateString('en-CA') === todayStr).reduce((acc, curr) => acc + (curr.amount || 0), 0);
-        const totalUnsettledShares = unsettledItems.reduce((acc, item) => {
-            const netAfterCharges = (item.amount || 0) * (1 - (charges / 100));
-            const plan = allPlans.find(p => p.name === item.planName);
-            const sharePercentage = (plan && myPlanShares[plan.id]) ? myPlanShares[plan.id] : 0;
-            return acc + (netAfterCharges * (sharePercentage / 100));
-        }, 0);
-        return { totalUnsettledNet: totalUnsettledGross * (1 - (charges / 100)), totalSettled, totalSales: totalUnsettledGross + totalSettled, salesToday, totalUnsettledShares };
-    }, [unsettledItems, settledItems, allItems, charges, myPlanShares, allPlans]);
+    const totalUnsettledGross = unsettledItems.reduce((acc, curr) => acc + (curr.amount || 0), 0);
+    const totalSettled = settledItems.reduce((acc, curr) => acc + (curr.amount || 0), 0);
+    const todayStr = new Date().toLocaleDateString('en-CA');
+    const salesToday = allItems.filter(item => safeToDate(item.createdAt)?.toLocaleDateString('en-CA') === todayStr).reduce((acc, curr) => acc + (curr.amount || 0), 0);
+    
+    const netAfterPlatformCharges = totalUnsettledGross * (1 - (charges / 100));
+    const totalUnsettledNet = netAfterPlatformCharges - (Number(firebaseCharges) || 0);
+
+    // --- CORRECTED SHARE CALCULATION ---
+    const totalUnsettledShares = unsettledItems.reduce((acc, item) => {
+        // 1. Calculate revenue after the percentage platform charge
+        const netAfterPercentageCharge = (item.amount || 0) * (1 - (charges / 100));
+
+        // 2. Calculate this item's proportional share of the flat Firebase charge
+        const proportionalFirebaseCharge = (totalUnsettledGross > 0)
+            ? ((item.amount || 0) / totalUnsettledGross) * (Number(firebaseCharges) || 0)
+            : 0;
+
+        // 3. Determine the final "shareable" amount for this item by deducting its portion of fixed costs
+        const shareableAmount = netAfterPercentageCharge - proportionalFirebaseCharge;
+
+        // 4. Get the partner's share percentage for this item's plan
+        const plan = allPlans.find(p => p.name === item.planName);
+        const sharePercentage = (plan && myPlanShares[plan.id]) ? myPlanShares[plan.id] : 0;
+
+        // 5. Calculate the final share for this item from the true net amount
+        return acc + (shareableAmount * (sharePercentage / 100));
+    }, 0);
+    
+    return { totalUnsettledNet, totalSettled, totalSales: totalUnsettledGross + totalSettled, salesToday, totalUnsettledShares };
+}, [unsettledItems, settledItems, allItems, charges, firebaseCharges, myPlanShares, allPlans]);
     
     const analyticsSummary = useMemo(() => {
         const dateLimit = new Date(); dateLimit.setDate(dateLimit.getDate() - timeRange);
@@ -436,7 +463,7 @@ const handleSaveSettings = async () => {
                 .earnings-page .pagination-btn { display: flex; align-items: center; justify-content: center; width: 2.25rem; height: 2.25rem; border-radius: 0.375rem; background-color: #334155; color: #cbd5e1; }
             `}</style>
             <ConfirmationModal isOpen={confirmModalState.isOpen} setIsOpen={(val) => setConfirmModalState(s => ({...s, isOpen: val}))} title={confirmModalState.title} message={confirmModalState.message} onConfirm={confirmModalState.onConfirm} />
-            <SettingsModal isOpen={isSettingsModalOpen} setIsOpen={setIsSettingsModalOpen} plansToShow={allPlans} myPlanShares={myPlanShares} setMyPlanShares={setMyPlanShares} charges={charges} setCharges={setCharges} onSave={handleSaveSettings} isMasterAdmin={isMasterAdmin} masterConfig={masterConfig} setMasterConfig={setMasterConfig} />
+            <SettingsModal isOpen={isSettingsModalOpen} setIsOpen={setIsSettingsModalOpen} plansToShow={allPlans} myPlanShares={myPlanShares} setMyPlanShares={setMyPlanShares} charges={charges} setCharges={setCharges} firebaseCharges={firebaseCharges} setFirebaseCharges={setFirebaseCharges} onSave={handleSaveSettings} isMasterAdmin={isMasterAdmin} masterConfig={masterConfig} setMasterConfig={setMasterConfig} />
         </div>
     );
 }
