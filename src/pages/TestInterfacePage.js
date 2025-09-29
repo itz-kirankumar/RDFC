@@ -488,11 +488,20 @@ const TestInterfacePage = ({ navigate, testId }) => {
     
     
     
+    // REPLACE your old submitTest function with this one
     const submitTest = useCallback(async () => {
         if (submittingTestRef.current) return;
         submittingTestRef.current = true;
         setIsSubmitting(true);
-        recordTimeSpentOnCurrentQuestion();
+
+        // Manually calculate the final time spent on the current question to avoid stale state
+        let finalTimeTaken = { ...timeTaken };
+        if (questionEnterTimestampRef.current && currentSectionIndex !== null && currentQuestionIndex !== null) {
+            const timeSpentOnLastQuestion = (Date.now() - questionEnterTimestampRef.current) / 1000;
+            const secTime = finalTimeTaken[currentSectionIndex] ? { ...finalTimeTaken[currentSectionIndex] } : {};
+            secTime[currentQuestionIndex] = (secTime[currentQuestionIndex] || 0) + timeSpentOnLastQuestion;
+            finalTimeTaken[currentSectionIndex] = secTime;
+        }
 
         // --- DYNAMIC SCORE CALCULATION ---
         let calculatedTotalScore = 0;
@@ -515,7 +524,6 @@ const TestInterfacePage = ({ navigate, testId }) => {
                     }
                 });
 
-                // Apply the correct marking scheme
                 if (markingScheme) {
                     const { marksForCorrect, negativeMarksMCQ, sectionsWithNoNegativeMarking } = markingScheme;
                     let sectionScore = correct * (marksForCorrect || 0);
@@ -524,7 +532,6 @@ const TestInterfacePage = ({ navigate, testId }) => {
                     }
                     calculatedTotalScore += sectionScore;
                 } else {
-                    // Default fallback logic
                     calculatedTotalScore += (correct * 3) - (incorrectMcq * 1);
                 }
             });
@@ -533,7 +540,7 @@ const TestInterfacePage = ({ navigate, testId }) => {
         const finalAttemptData = {
             status: 'completed',
             answers,
-            timeTaken,
+            timeTaken: finalTimeTaken, // Use the up-to-date timeTaken object
             questionStatuses,
             completedAt: Timestamp.fromDate(new Date()),
             totalScore: calculatedTotalScore,
@@ -541,6 +548,7 @@ const TestInterfacePage = ({ navigate, testId }) => {
 
         const key = getLocalStorageKey();
         if (key) localStorage.setItem(key, JSON.stringify(finalAttemptData));
+
         if (!isOnline) {
             alert("You are offline. Your final result has been saved and will be submitted when you reconnect.");
             setIsSubmitting(false);
@@ -560,7 +568,7 @@ const TestInterfacePage = ({ navigate, testId }) => {
             setIsSubmitting(false);
             submittingTestRef.current = false;
         }
-    }, [answers, timeTaken, questionStatuses, getLocalStorageKey, isOnline, attemptDocId, navigate, recordTimeSpentOnCurrentQuestion, test]);
+    }, [answers, timeTaken, questionStatuses, getLocalStorageKey, isOnline, attemptDocId, navigate, test, currentSectionIndex, currentQuestionIndex]);
 
     const handleSubmitClick = useCallback(() => {
         submitTest();
@@ -581,12 +589,21 @@ const TestInterfacePage = ({ navigate, testId }) => {
         }
     }, [currentSectionIndex, test, recordTimeSpentOnCurrentQuestion, resetQuestionTimerForNewQuestion, handleSubmitClick, currentSection]);
     
+    // REPLACE your old saveProgressAndExit function with this one
     const saveProgressAndExit = useCallback(async () => {
-        recordTimeSpentOnCurrentQuestion();
+        // Manually calculate the current time to avoid stale state before saving
+        let finalTimeTaken = { ...timeTaken };
+        if (questionEnterTimestampRef.current && currentSectionIndex !== null && currentQuestionIndex !== null) {
+            const timeSpent = (Date.now() - questionEnterTimestampRef.current) / 1000;
+            const secTime = finalTimeTaken[currentSectionIndex] ? { ...finalTimeTaken[currentSectionIndex] } : {};
+            secTime[currentQuestionIndex] = (secTime[currentQuestionIndex] || 0) + timeSpent;
+            finalTimeTaken[currentSectionIndex] = secTime;
+        }
+
         const progressData = {
             status: 'in-progress',
             answers,
-            timeTaken,
+            timeTaken: finalTimeTaken, // Use the up-to-date timeTaken object
             questionStatuses,
             sectionTimers,
             currentSectionIndex,
@@ -605,7 +622,7 @@ const TestInterfacePage = ({ navigate, testId }) => {
         } else {
              document.exitFullscreen();
         }
-    }, [answers, timeTaken, questionStatuses, sectionTimers, currentSectionIndex, currentQuestionIndex, getLocalStorageKey, syncToFirestore, navigate, recordTimeSpentOnCurrentQuestion]);
+    }, [answers, timeTaken, questionStatuses, sectionTimers, currentSectionIndex, currentQuestionIndex, getLocalStorageKey, syncToFirestore, navigate]);
     
 
 
