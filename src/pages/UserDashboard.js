@@ -1286,29 +1286,8 @@ const UserDashboard = ({ navigate }) => {
     const recentContent = [...allCategorizedContent].sort((a,b) => (b.createdAt?.toDate() || 0) - (a.createdAt?.toDate() || 0)).slice(0,3);
 
     return (
-        <div className="max-w-7xl mx-auto px-4">
-            {/* --- IMPORTANT NOTICE --- */}
-<div className="my-3 max-w-full mx-auto p-3 bg-red-900/50 border-1 border-red-500 rounded-lg text-left">
-    {/* <p className="text-lg text-red-300 font-bold text-center">
-        Important Notice: RDFC will be closed soon after this academic year.
-    </p> */}
-    <p className="mt-4 text-base text-zinc-200">
-        For any queries, please call the contacts below:
-        <br />
-        - <span className="font-bold">Roshan Singh (Founder & TG Community Owner):</span> <a href="tel:+919105116887" className="underline hover:text-white">+91 91051 16887</a>
-        <br />
-        - <span className="font-bold">Anurag (Co-founder):</span> <a href="tel:+919639232862" className="underline hover:text-white">+91 96392 32862</a>
-    </p>
-    {/* <p className="mt-4 text-sm text-yellow-400 font-semibold">
-        Please be aware: RDFC is a product designed to monetize as a motive and its content is completely AI-generated.
-    </p> */}
-    {/* <p className="mt-5 text-center text-zinc-200">
-        All the best for your exams.
-    </p>
-    <p className="mt-2 text-zinc-400 italic text-center">
-        Love from the developer
-    </p> */}
-</div>
+        <div className="max-w-7xl mx-auto px-4 pb-16 md:pb-12">
+           
                    <style jsx>{`
             .action-btn { 
                 @apply flex-1 text-sm px-4 py-2 rounded-lg flex items-center justify-center space-x-2 font-semibold 
@@ -1540,7 +1519,26 @@ const UserDashboard = ({ navigate }) => {
                 {userStatus?.isSubscribed && !userStatus.hasSubmittedFeedback && ( <AccordionSection title="Feedback" icon={FaCommentDots} sectionKey="feedback" tab={{ name: 'Feedback' }}>{showFeedbackThanks ? <p className="text-green-400 text-center">Thank you for your feedback!</p> : <FeedbackForm userStatus={userStatus} onSuccessfulSubmit={handleFeedbackSuccess} />}</AccordionSection> )}
                 <AccordionSection title="Support" icon={FaHeadset} sectionKey="support" tab={{ name: 'Support' }}><p className="text-gray-400 text-center mb-4">Need help? Visit our support center.</p><button onClick={() => navigate('support')} className="w-full bg-blue-600 text-white px-4 py-2 rounded-md font-semibold hover:bg-blue-700">Go to Support</button></AccordionSection>
             </div>
-        </div>
+
+            
+            {/* --- START: Pinned Contact Footer --- */}
+            <div className="fixed bottom-0 left-0 w-full bg-gray-950/80 backdrop-blur-sm border-t border-red-500/30 p-2 z-50 text-center">
+                <div className="max-w-7xl mx-auto px-4">
+                    <p className="text-xs sm:text-sm text-zinc-300">
+                        <span className="font-semibold text-white mr-2">For any queries, please call the contacts : </span>
+                        <span className="mr-1">Roshan Singh (Founder & TG Community Owner):</span>
+                        <a href="tel:+919105116887" className="underline hover:text-white mr-3">+91 91051 16887</a>
+                        <span className="text-zinc-600 mx-1 hidden sm:inline">|</span>
+                        <span className="mr-1">Anurag (Co-founder):</span>
+                        <a href="tel:+919639232862" className="underline hover:text-white">+91 96392 32862</a>
+                    </p>
+                </div>
+            </div>
+            {/* --- END: Pinned Contact Footer --- */}
+
+        </div> // This is the last closing div
+    
+       
     );
 };
 
