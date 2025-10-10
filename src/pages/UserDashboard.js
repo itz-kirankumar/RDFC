@@ -1525,12 +1525,12 @@ const UserDashboard = ({ navigate }) => {
             <div className="fixed bottom-0 left-0 w-full bg-gray-950/80 backdrop-blur-sm border-t border-red-500/30 p-2 z-50 text-center">
                 <div className="max-w-7xl mx-auto px-4">
                     <p className="text-xs sm:text-sm text-zinc-300">
-                        <span className="font-semibold text-white mr-2">For any queries, please call the contacts : </span>
-                        <span className="mr-1">Roshan Singh (Founder & TG Community Owner):</span>
+                        <span className="font-semibold text-white mr-2">For any queries, please contact through support </span>
+                        {/* <span className="mr-1">Roshan Singh (Founder & TG Community Owner):</span>
                         <a href="tel:+919105116887" className="underline hover:text-white mr-3">+91 91051 16887</a>
                         <span className="text-zinc-600 mx-1 hidden sm:inline">|</span>
                         <span className="mr-1">Anurag (Co-founder):</span>
-                        <a href="tel:+919639232862" className="underline hover:text-white">+91 96392 32862</a>
+                        <a href="tel:+919639232862" className="underline hover:text-white">+91 96392 32862</a> */}
                     </p>
                 </div>
             </div>
