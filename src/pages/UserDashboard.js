@@ -1420,7 +1420,7 @@ const UserDashboard = ({ navigate }) => {
                     {activeTab === 'dashboard' && (
                          <div className="space-y-12">
                             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                                <ExamCountdownWidget title="Countdown to CAT 2025" targetDate="2025-11-29T23:59:59" />
+                                <ExamCountdownWidget title="Countdown to SNAP 2025" targetDate="2025-12-05T23:59:59" />
                                 <ExamCountdownWidget title="Countdown to XAT 2026" targetDate="2026-01-03T23:59:59" />
                                 <VocabCardWidget />
                             </div>
