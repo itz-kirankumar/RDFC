@@ -1527,9 +1527,9 @@ const UserDashboard = ({ navigate }) => {
                     <p className="text-xs sm:text-sm text-zinc-300">
                         <span className="font-semibold text-white mr-2">For any queries, please contact through support </span>
                         {/* <span className="mr-1">Roshan Singh (Founder & TG Community Owner):</span>
-                        <a href="tel:+919105116887" className="underline hover:text-white mr-3">+91 91051 16887</a>
-                        <span className="text-zinc-600 mx-1 hidden sm:inline">|</span>
-                        <span className="mr-1">Anurag (Co-founder):</span>
+                        <a href="tel:+919105116887" className="underline hover:text-white mr-3">+91 91051 16887</a> */}
+                        {/* <span className="text-zinc-600 mx-1 hidden sm:inline">|</span> */}
+                        {/* <span className="mr-1">Anurag (Co-founder):</span>
                         <a href="tel:+919639232862" className="underline hover:text-white">+91 96392 32862</a> */}
                     </p>
                 </div>

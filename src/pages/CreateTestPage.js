@@ -6,17 +6,15 @@ import { TrashIcon, EyeIcon, EyeSlashIcon, PencilSquareIcon, DocumentTextIcon, L
 import Papa from 'papaparse';
 
 // --- Reusable Form Input Components ---
-// No changes needed in FormInput, FormTextarea, MultiImageUrlManager, etc.
 const FormInput = ({ label, type = 'text', value, onChange, required = false, placeholder = '' }) => (
     <div>
-        {/* MODIFICATION: Hide label if it's meant for an option for a cleaner look in a flex layout */}
         <label className={`block text-sm font-medium text-gray-300 ${label.startsWith('Option') ? 'sr-only' : ''}`}>{label}</label>
         <input
             type={type}
             value={value}
             onChange={onChange}
             required={required}
-            placeholder={label.startsWith('Option') ? label : placeholder} // Use label as placeholder for options
+            placeholder={label.startsWith('Option') ? label : placeholder}
             className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white shadow-sm focus:border-white focus:ring focus:ring-gray-500 focus:ring-opacity-50"
         />
     </div>
@@ -89,6 +87,7 @@ const MultiImageUrlManager = ({ label, urls, onChange }) => {
         </div>
     );
 };
+
 const SectionNameManagerModal = ({ isOpen, onClose, customSectionNames, onAdd, onDelete }) => {
     const [newSectionName, setNewSectionName] = useState('');
 
@@ -238,7 +237,6 @@ const MarkingSchemeManagerModal = ({ isOpen, onClose, schemes, onSave, onDelete,
 
 
 const CreateTestPage = ({ navigate, testToEdit }) => {
-    // No changes to CORE_SECTIONS or BLANK_QUESTION are needed. The default of 4 options is fine.
     const CORE_SECTIONS = ['VARC', 'DILR', 'QA'];
     const BLANK_QUESTION = { type: 'MCQ', passage: '', passageImageUrls: [], questionText: '', options: ['', '', '', ''], correctOption: '', solution: '', questionImageUrls: [], solutionImageUrls: [] };
 
@@ -247,6 +245,11 @@ const CreateTestPage = ({ navigate, testToEdit }) => {
     const [testCategory, setTestCategory] = useState('');
     const [managedTabs, setManagedTabs] = useState([]);
     const [isFree, setIsFree] = useState(false);
+    
+    // --- NEW: Timing State ---
+    const [timingType, setTimingType] = useState('sectional'); // 'sectional' | 'overall'
+    const [totalDuration, setTotalDuration] = useState(120); // Used if timingType is 'overall'
+
     const [sections, setSections] = useState([{ name: CORE_SECTIONS[0], duration: 40, questions: [BLANK_QUESTION] }]);
     const [loading, setLoading] = useState(false);
     const [activeQuestion, setActiveQuestion] = useState({ sec: 0, q: 0 });
@@ -298,7 +301,6 @@ const CreateTestPage = ({ navigate, testToEdit }) => {
         fetchTabs();
     }, [testToEdit]);
     
-    // REPLACE your entire handleCsvUpload function with this one
     const handleCsvUpload = (event) => {
         const file = event.target.files[0];
         if (!file) return;
@@ -320,6 +322,14 @@ const CreateTestPage = ({ navigate, testToEdit }) => {
                         const firstRow = dataRows[0];
                         setTitle(firstRow.testTitle || `Imported Test ${new Date().toLocaleDateString()}`);
                         setDescription(firstRow.testDescription || '');
+                        
+                        // Parse timing type from CSV if present, default to sectional
+                        const csvTimingType = firstRow.timingType && firstRow.timingType.toLowerCase() === 'overall' ? 'overall' : 'sectional';
+                        setTimingType(csvTimingType);
+                        if(csvTimingType === 'overall' && firstRow.totalDuration) {
+                            setTotalDuration(parseInt(firstRow.totalDuration, 10) || 120);
+                        }
+
                         if (firstRow.mainType) {
                             const category = firstRow.subType ? `${firstRow.mainType}/${firstRow.subType}` : firstRow.mainType;
                             setTestCategory(category);
@@ -334,7 +344,7 @@ const CreateTestPage = ({ navigate, testToEdit }) => {
                             if (!newSectionsMap.has(currentSectionDetails.name)) {
                                 newSectionsMap.set(currentSectionDetails.name, { name: currentSectionDetails.name, duration: currentSectionDetails.duration, questions: [] });
                             }
-                            const newQuestion = { ...BLANK_QUESTION }; // Start with blank to ensure all fields are present
+                            const newQuestion = { ...BLANK_QUESTION };
                             newQuestion.passage = questionData.passageText ? questionData.passageText.replace(/\\n/g, '\n') : '';
                             newQuestion.passageImageUrls = questionData.passageImageUrls ? questionData.passageImageUrls.split(';').map(url => url.trim()) : [];
                             newQuestion.questionText = questionText.replace(/\\n/g, '\n');
@@ -344,7 +354,6 @@ const CreateTestPage = ({ navigate, testToEdit }) => {
                             newQuestion.solutionImageUrls = questionData.solutionImageUrls ? questionData.solutionImageUrls.split(';').map(url => url.trim()) : [];
                             
                             if (newQuestion.type === 'MCQ') {
-                                // DYNAMICALLY find all 'optionX' columns and build the options array
                                 const options = Object.keys(questionData)
                                       .filter(key => key.startsWith('option') && questionData[key])
                                       .sort((a, b) => parseInt(a.replace('option', '')) - parseInt(b.replace('option', '')))
@@ -366,7 +375,7 @@ const CreateTestPage = ({ navigate, testToEdit }) => {
                                     console.warn(`Skipping TITA in row #${index + 2} due to non-numerical correctAnswer '${correctAnswer}'.`); return;
                                 }
                                 newQuestion.correctOption = correctAnswer;
-                                newQuestion.options = []; // Clear options for TITA
+                                newQuestion.options = [];
                             }
                             newSectionsMap.get(currentSectionDetails.name).questions.push(newQuestion);
                         });
@@ -385,31 +394,30 @@ const CreateTestPage = ({ navigate, testToEdit }) => {
         event.target.value = null;
     };
     
-    // REPLACE your downloadCsvTemplate function with this one
     const downloadCsvTemplate = () => {
-        // Add more option columns to the template header to suggest the new capability
-        const header = "testTitle,testDescription,mainType,subType,sectionName,sectionDuration,passageText,passageImageUrls,questionText,questionImageUrls,questionType,option1,option2,option3,option4,option5,option6,correctAnswer,solutionText,solutionImageUrls\n";
-        const exampleRow = "\"Sample Mock\",\"Full-length test.\",\"Mocks\",\"Mock 1\",\"VARC\",40,\"Passage...\",\"\",\"Question...\",\"\",MCQ,\"A\",\"B\",\"C\",\"D\",\"\",\"\",1,\"Solution...\",\"\"\n";
+        // Added timingType and totalDuration columns
+        const header = "testTitle,testDescription,timingType,totalDuration,mainType,subType,sectionName,sectionDuration,passageText,passageImageUrls,questionText,questionImageUrls,questionType,option1,option2,option3,option4,option5,option6,correctAnswer,solutionText,solutionImageUrls\n";
+        const exampleRow = "\"Sample Mock\",\"Full-length test.\",\"overall\",120,\"Mocks\",\"Mock 1\",\"VARC\",40,\"Passage...\",\"\",\"Question...\",\"\",MCQ,\"A\",\"B\",\"C\",\"D\",\"\",\"\",1,\"Solution...\",\"\"\n";
         const blob = new Blob([header + exampleRow], { type: 'text/csv;charset=utf-8;' });
         const link = document.createElement("a");
         link.href = URL.createObjectURL(blob);
-        link.download = "test_template_dynamic_options.csv";
+        link.download = "test_template_v2.csv";
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
     };
 
-    // REPLACE your handleDownloadCsv function with this one
     const handleDownloadCsv = () => {
         if (!testToEdit) return;
         const [mainType, subType] = testCategory.split('/');
         
         const csvDataRows = sections.flatMap(section => 
             section.questions.map(q => {
-                // Base data for every row
                 const row = {
                     testTitle: title,
                     description,
+                    timingType: timingType,
+                    totalDuration: timingType === 'overall' ? totalDuration : '',
                     mainType,
                     subType: subType || '',
                     sectionName: section.name,
@@ -424,7 +432,6 @@ const CreateTestPage = ({ navigate, testToEdit }) => {
                     solutionImageUrls: (q.solutionImageUrls || []).join(';')
                 };
 
-                // DYNAMICALLY add option columns for MCQs
                 if (q.type === 'MCQ') {
                     q.options.forEach((opt, index) => {
                         row[`option${index + 1}`] = opt || '';
@@ -437,11 +444,10 @@ const CreateTestPage = ({ navigate, testToEdit }) => {
         
         if (csvDataRows.length === 0) return alert("This test has no questions to export.");
 
-        // Dynamically create the header based on the maximum number of options present in the test
         const allKeys = new Set();
         csvDataRows.forEach(row => Object.keys(row).forEach(key => allKeys.add(key)));
         
-        const preferredOrder = [ "testTitle", "testDescription", "mainType", "subType", "sectionName", "sectionDuration", "passageText", "passageImageUrls", "questionText", "questionImageUrls", "questionType" ];
+        const preferredOrder = [ "testTitle", "testDescription", "timingType", "totalDuration", "mainType", "subType", "sectionName", "sectionDuration", "passageText", "passageImageUrls", "questionText", "questionImageUrls", "questionType" ];
         const optionKeys = [...allKeys].filter(key => key.startsWith('option')).sort((a, b) => parseInt(a.replace('option', '')) - parseInt(b.replace('option', '')));
         const remainingKeys = [ "correctAnswer", "solutionText", "solutionImageUrls" ];
         const finalHeader = [...preferredOrder, ...optionKeys, ...remainingKeys];
@@ -467,6 +473,10 @@ const CreateTestPage = ({ navigate, testToEdit }) => {
             const sanitizedSections = testToEdit.sections.map(s => ({ ...s, questions: s.questions.map(q => ({ ...BLANK_QUESTION, ...q })) }));
             setSections(sanitizedSections);
             setSelectedSchemeId(testToEdit.markingScheme?.id || 'default');
+            
+            // --- Set Timing Config ---
+            setTimingType(testToEdit.timingType || 'sectional');
+            setTotalDuration(testToEdit.totalDuration || 120);
         }
     }, [testToEdit, managedTabs]);
 
@@ -486,7 +496,7 @@ const CreateTestPage = ({ navigate, testToEdit }) => {
         if (field === 'type') {
             newSections[secIndex].questions[qIndex].correctOption = '';
             if (value === 'MCQ' && newSections[secIndex].questions[qIndex].options.length === 0) {
-                 newSections[secIndex].questions[qIndex].options = ['', '', '', '']; // Reset to default if switching to MCQ
+                 newSections[secIndex].questions[qIndex].options = ['', '', '', ''];
             }
         }
         setSections(newSections);
@@ -497,7 +507,6 @@ const CreateTestPage = ({ navigate, testToEdit }) => {
         setSections(newSections);
     };
     
-    // --- ADD these 2 new functions for managing options ---
     const addOption = (secIndex, qIndex) => {
         const newSections = [...sections];
         newSections[secIndex].questions[qIndex].options.push('');
@@ -515,11 +524,9 @@ const CreateTestPage = ({ navigate, testToEdit }) => {
 
         question.options.splice(optIndex, 1);
 
-        // If the removed option was the correct one, reset correctOption
         if (question.correctOption === optIndex) {
             question.correctOption = '';
         } else if (question.correctOption > optIndex) {
-            // Adjust the correct option index if it came after the removed one
             question.correctOption -= 1;
         }
 
@@ -551,6 +558,7 @@ const CreateTestPage = ({ navigate, testToEdit }) => {
 
     const validateTest = () => {
         if (!title.trim() || !testCategory) { alert('Test Title and Type are required.'); return false; }
+        if (timingType === 'overall' && (!totalDuration || totalDuration <= 0)) { alert('Total duration is required for overall timing.'); return false; }
         for (let i = 0; i < sections.length; i++) {
             for (let j = 0; j < sections[i].questions.length; j++) {
                 const q = sections[i].questions[j];
@@ -569,7 +577,21 @@ const CreateTestPage = ({ navigate, testToEdit }) => {
         if (!validateTest()) return;
         setLoading(true);
         const [mainType, subType] = testCategory.split('/');
-        const testData = { title, description, mainType, subType: subType || null, isFree, isPublished: testToEdit?.isPublished || false, sections, lastUpdated: serverTimestamp() };
+        
+        // --- NEW: Construct Test Data with Timing ---
+        const testData = { 
+            title, 
+            description, 
+            mainType, 
+            subType: subType || null, 
+            isFree, 
+            isPublished: testToEdit?.isPublished || false, 
+            sections, 
+            timingType, // 'sectional' or 'overall'
+            totalDuration: timingType === 'overall' ? parseInt(totalDuration) : null,
+            lastUpdated: serverTimestamp() 
+        };
+
         if (selectedSchemeId !== 'default') {
             const selectedSchemeObject = markingSchemes.find(s => s.id === selectedSchemeId);
             if (selectedSchemeObject) { testData.markingScheme = selectedSchemeObject; }
@@ -639,6 +661,21 @@ const CreateTestPage = ({ navigate, testToEdit }) => {
                                 {managedTabs.map(tab => !tab.subTabs || tab.subTabs.length === 0 ? <option key={tab.id} value={tab.name}>{tab.name}</option> : <optgroup key={tab.id} label={tab.name}>{tab.subTabs.map(subTab => <option key={`${tab.id}-${subTab.name}`} value={`${tab.name}/${subTab.name}`}>{subTab.name}</option>)}</optgroup>)}
                             </select>
                         </div>
+                        {/* --- NEW: Timing Strategy Selection --- */}
+                        <div>
+                            <label className="block text-sm font-medium text-gray-300">Timing Strategy</label>
+                            <select value={timingType} onChange={e => setTimingType(e.target.value)} className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white">
+                                <option value="sectional">Sectional Timers (CAT)</option>
+                                <option value="overall">Overall Timer (SNAP/XAT)</option>
+                            </select>
+                        </div>
+                        {/* --- NEW: Total Duration Input (Conditional) --- */}
+                        {timingType === 'overall' && (
+                            <div>
+                                <FormInput label="Total Duration (mins)" type="number" value={totalDuration} onChange={e => setTotalDuration(e.target.value)} required />
+                            </div>
+                        )}
+
                         <div>
                             <label className="block text-sm font-medium text-gray-300">Marking Scheme</label>
                             <div className="flex items-center gap-2">
@@ -679,11 +716,9 @@ const CreateTestPage = ({ navigate, testToEdit }) => {
                                 <FormTextarea label="Question Text" value={activeQ.questionText} onChange={e => handleQuestionChange(activeQuestion.sec, activeQuestion.q, 'questionText', e.target.value)} required rows={4} />
                                 <MultiImageUrlManager label="Question Images (Optional)" urls={activeQ?.questionImageUrls || []} onChange={urls => handleQuestionChange(activeQuestion.sec, activeQuestion.q, 'questionImageUrls', urls)} />
 
-                                {/* --- REPLACEMENT START: DYNAMIC OPTIONS UI --- */}
                                 {activeQ.type === 'TITA' ? 
                                     <FormInput label="Correct Answer (TITA)" value={activeQ.correctOption || ''} onChange={e => handleQuestionChange(activeQuestion.sec, activeQuestion.q, 'correctOption', e.target.value)} required />
                                     : <> 
-                                        {/* Dynamic Options */}
                                         <div className="space-y-4">
                                             <label className="block text-sm font-medium text-gray-300">Options</label>
                                             <div className="space-y-3">
@@ -718,7 +753,6 @@ const CreateTestPage = ({ navigate, testToEdit }) => {
                                             </button>
                                         </div>
 
-                                        {/* Dynamic Correct Option Select */}
                                         <div>
                                             <label className="block text-sm font-medium text-gray-300">Correct Option</label>
                                             <select 
@@ -732,14 +766,18 @@ const CreateTestPage = ({ navigate, testToEdit }) => {
                                         </div>
                                     </>
                                 }
-                                {/* --- REPLACEMENT END --- */}
                                 
                                 <FormTextarea label="Detailed Solution" value={activeQ.solution} onChange={e => handleQuestionChange(activeQuestion.sec, activeQuestion.q, 'solution', e.target.value)} required rows={4} />
                                 <MultiImageUrlManager label="Solution Images (Optional)" urls={activeQ?.solutionImageUrls || []} onChange={urls => handleQuestionChange(activeQuestion.sec, activeQuestion.q, 'solutionImageUrls', urls)} />
                             </div>
                         ) : <div className="text-center py-10 border border-dashed border-gray-600 rounded-lg text-gray-400"><p>No question selected.</p></div>}
                     </div>
-                    {showNavigator && (<div className={`${mobileView === 'navigator' ? 'block' : 'hidden'} sm:block sm:w-56 sm:flex-shrink-0 w-full`}><h3 className="text-lg font-semibold text-white mb-2">Navigator</h3><div className="space-y-4 max-h-[70vh] overflow-y-auto pr-2">{sections.map((section, secIndex) => (<div key={secIndex} className="bg-gray-900/50 p-2 rounded"><div className="space-y-2"><div className="flex justify-between items-center"><label className="text-sm font-medium text-gray-300">Section {secIndex + 1}</label><button type="button" onClick={() => removeSection(secIndex)} disabled={sections.length <= 1} className="p-1 text-red-500 hover:text-red-400 disabled:text-gray-600"><TrashIcon className="h-4 w-4" /></button></div><select value={section.name} onChange={e => handleSectionChange(secIndex, 'name', e.target.value)} className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white text-sm">{allAvailableSections.map(s => <option key={s} value={s}>{s}</option>)}</select><FormInput label="Duration (mins)" type="number" value={section.duration} onChange={e => handleSectionChange(secIndex, 'duration', e.target.value)} required /></div><div className="grid grid-cols-5 gap-1.5 mt-2">{section.questions.map((_, qIndex) => (<button type="button" key={qIndex} onClick={() => setActiveQuestion({ sec: secIndex, q: qIndex })} className={`h-8 w-8 flex items-center justify-center rounded text-xs font-semibold ${activeQuestion.sec === secIndex && activeQuestion.q === qIndex ? 'bg-white text-gray-900 ring-2 ring-white' : 'bg-gray-700 text-white hover:bg-gray-600'}`}>{qIndex + 1}</button>))}</div><button type="button" onClick={() => addQuestion(secIndex)} className="w-full mt-2 bg-gray-700 text-white px-2 py-1 text-xs rounded-md hover:bg-gray-600">+ Add Question</button></div>))}{<button type="button" onClick={addSection} className="w-full mt-4 bg-gray-700 text-white px-2 py-1 text-sm rounded-md hover:bg-gray-600">+ Add Section</button>}<button type="button" onClick={() => setIsSectionManagerOpen(true)} className="w-full mt-2 bg-gray-600 text-white px-2 py-1 text-xs rounded-md hover:bg-gray-500">Manage Custom Sections</button></div></div>)}
+                    {showNavigator && (<div className={`${mobileView === 'navigator' ? 'block' : 'hidden'} sm:block sm:w-56 sm:flex-shrink-0 w-full`}><h3 className="text-lg font-semibold text-white mb-2">Navigator</h3><div className="space-y-4 max-h-[70vh] overflow-y-auto pr-2">{sections.map((section, secIndex) => (<div key={secIndex} className="bg-gray-900/50 p-2 rounded"><div className="space-y-2"><div className="flex justify-between items-center"><label className="text-sm font-medium text-gray-300">Section {secIndex + 1}</label><button type="button" onClick={() => removeSection(secIndex)} disabled={sections.length <= 1} className="p-1 text-red-500 hover:text-red-400 disabled:text-gray-600"><TrashIcon className="h-4 w-4" /></button></div><select value={section.name} onChange={e => handleSectionChange(secIndex, 'name', e.target.value)} className="mt-1 block w-full rounded-md bg-gray-700 border-gray-600 text-white text-sm">{allAvailableSections.map(s => <option key={s} value={s}>{s}</option>)}</select>
+                    {/* --- Only show section duration if timing is sectional --- */}
+                    {timingType === 'sectional' && (
+                        <FormInput label="Duration (mins)" type="number" value={section.duration} onChange={e => handleSectionChange(secIndex, 'duration', e.target.value)} required />
+                    )}
+                    </div><div className="grid grid-cols-5 gap-1.5 mt-2">{section.questions.map((_, qIndex) => (<button type="button" key={qIndex} onClick={() => setActiveQuestion({ sec: secIndex, q: qIndex })} className={`h-8 w-8 flex items-center justify-center rounded text-xs font-semibold ${activeQuestion.sec === secIndex && activeQuestion.q === qIndex ? 'bg-white text-gray-900 ring-2 ring-white' : 'bg-gray-700 text-white hover:bg-gray-600'}`}>{qIndex + 1}</button>))}</div><button type="button" onClick={() => addQuestion(secIndex)} className="w-full mt-2 bg-gray-700 text-white px-2 py-1 text-xs rounded-md hover:bg-gray-600">+ Add Question</button></div>))}{<button type="button" onClick={addSection} className="w-full mt-4 bg-gray-700 text-white px-2 py-1 text-sm rounded-md hover:bg-gray-600">+ Add Section</button>}<button type="button" onClick={() => setIsSectionManagerOpen(true)} className="w-full mt-2 bg-gray-600 text-white px-2 py-1 text-xs rounded-md hover:bg-gray-500">Manage Custom Sections</button></div></div>)}
                 </div>
                 <div className="flex justify-end space-x-4 pt-6 border-t border-gray-700 mt-6">
                     <button type="button" onClick={() => navigate('manageTests')} className="bg-gray-600 py-2 px-4 rounded-md text-sm font-medium text-white hover:bg-gray-500">Cancel</button>

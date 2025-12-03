@@ -1,4 +1,3 @@
-// REPLACE your old imports with this entire block
 import React, { useState, useEffect, useCallback, useRef, Fragment } from 'react';
 import { doc, getDoc, updateDoc, addDoc, collection, serverTimestamp, query, where, getDocs, Timestamp } from 'firebase/firestore';
 import { db } from '../firebase/config';
@@ -39,7 +38,6 @@ const OfflineModal = () => (
     </div>
 );
 
-// --- Question Paper Modal Component ---
 const QuestionPaperModal = ({ isOpen, onClose, section }) => {
     if (!section) return null;
     return (
@@ -54,18 +52,22 @@ const QuestionPaperModal = ({ isOpen, onClose, section }) => {
                         <div className="p-6 overflow-y-auto">
                             {section.questions.map((q, index) => (
                                 <div key={index} className="mb-6 pb-6 border-b last:border-b-0">
-                                    {(q.passage || q.passageImageUrl) && (
+                                    {(q.passage || (q.passageImageUrls && q.passageImageUrls.length > 0)) && (
                                         <div className="mb-4 p-3 bg-gray-200 rounded">
                                             <h3 className="font-bold mb-2 text-gray-900">Directions for Question {index + 1}:</h3>
-                                            {/* FIX: Reordered to show text before image */}
                                             {q.passage && <div className="prose max-w-none text-gray-800 whitespace-pre-wrap">{q.passage}</div>}
-                                            {q.passageImageUrl && <img src={q.passageImageUrl} alt={`Passage for Q${index + 1}`} className="max-w-full h-auto mt-2 rounded"/>}
+                                            {/* MAP PASSAGE IMAGES */}
+                                            {q.passageImageUrls?.map((url, i) => (
+                                                <img key={i} src={url} alt={`Passage for Q${index + 1} - ${i}`} className="max-w-full h-auto mt-2 rounded"/>
+                                            ))}
                                         </div>
                                     )}
                                     <p className="font-semibold text-gray-900 mb-2">Question {index + 1}:</p>
-                                    {/* FIX: Reordered to show text before image */}
                                     <p className="text-gray-800 whitespace-pre-wrap mb-4">{q.questionText}</p>
-                                    {q.questionImageUrl && <img src={q.questionImageUrl} alt={`Question ${index + 1}`} className="max-w-full h-auto mt-4 rounded"/>}
+                                    {/* MAP QUESTION IMAGES */}
+                                    {q.questionImageUrls?.map((url, i) => (
+                                        <img key={i} src={url} alt={`Question ${index + 1} - ${i}`} className="max-w-full h-auto mt-4 rounded"/>
+                                    ))}
                                     {q.type !== 'TITA' && q.options && (<div className="space-y-2 text-sm mt-4">{q.options.map((option, optIndex) => (<p key={optIndex} className="text-gray-600 ml-4">{String.fromCharCode(97 + optIndex)}) {option}</p>))}</div>)}
                                 </div>
                             ))}
@@ -273,15 +275,26 @@ const InstructionsPage1 = ({ test, onNext, userData }) => (
             <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-md text-sm sm:text-base">
                 <h3 className="font-bold text-base sm:text-lg mb-2">Test Details:</h3>
                 <p><strong>Test Title:</strong> {test.title}</p>
-                <p><strong>Total Duration:</strong> {test.sections.reduce((acc, sec) => acc + sec.duration, 0)} minutes</p>
+                {test.timingType === 'overall' ? (
+                    <p><strong>Total Duration:</strong> {test.totalDuration} minutes</p>
+                ) : (
+                    <p><strong>Total Duration:</strong> {test.sections.reduce((acc, sec) => acc + sec.duration, 0)} minutes</p>
+                )}
                 <p><strong>Number of Sections:</strong> {test.sections.length}</p>
                 <p><strong>Total Questions:</strong> {test.sections.reduce((acc, sec) => acc + sec.questions.length, 0)}</p>
-                <p className="mt-2">This test consists of the following sections:</p>
-                <ul className="list-disc list-inside mt-1 space-y-1">
-                    {test.sections.map((section, index) => (
-                        <li key={index}>{section.name} ({section.duration} minutes)</li>
-                    ))}
-                </ul>
+                
+                {test.timingType === 'overall' ? (
+                    <p className="mt-2 text-green-700 font-semibold">Note: This test has a common timer. You can switch between sections freely.</p>
+                ) : (
+                    <>
+                        <p className="mt-2">This test consists of the following sections (Sectional Timing):</p>
+                        <ul className="list-disc list-inside mt-1 space-y-1">
+                            {test.sections.map((section, index) => (
+                                <li key={index}>{section.name} ({section.duration} minutes)</li>
+                            ))}
+                        </ul>
+                    </>
+                )}
             </div>
 
             <ol className="list-decimal list-inside space-y-3 text-sm sm:text-base">
@@ -353,7 +366,11 @@ const TestInterfacePage = ({ navigate, testId }) => {
     const [isFullScreenActive, setIsFullScreenActive] = useState(document.fullscreenElement !== null);
     const [currentSectionIndex, setCurrentSectionIndex] = useState(0);
     const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
+    
+    // --- Timers ---
     const [sectionTimers, setSectionTimers] = useState([]);
+    const [overallTimer, setOverallTimer] = useState(0);
+
     const [answers, setAnswers] = useState({});
     const [questionStatuses, setQuestionStatuses] = useState({}); 
     const [timeTaken, setTimeTaken] = useState({});
@@ -379,13 +396,13 @@ const TestInterfacePage = ({ navigate, testId }) => {
     
     const testContainerRef = useRef(null);
     const submittingTestRef = useRef(false);
-    const isResumeConfirmedRef = useRef(false);
     const navigateOnExitRef = useRef(false);
     
     const currentSection = test?.sections ? test.sections[currentSectionIndex] : null;
     const currentQuestion = currentSection ? currentSection.questions[currentQuestionIndex] : null;
-    const showPassagePanel = currentSection && currentQuestion && (currentQuestion.passage || currentQuestion.passageImageUrl) && currentSection.name !== 'QA';
-
+    const showPassagePanel = currentSection && currentQuestion && 
+        (currentQuestion.passage || (currentQuestion.passageImageUrls && currentQuestion.passageImageUrls.length > 0)) && 
+        currentSection.name !== 'QA';
     const getLocalStorageKey = useCallback(() => {
         if (!user || !testId) return null;
         return `test_progress_${user.uid}_${testId}`;
@@ -435,6 +452,7 @@ const TestInterfacePage = ({ navigate, testId }) => {
         }
     }, [currentSectionIndex, currentQuestionIndex, loading, test, isFullScreenActive, resetQuestionTimerForNewQuestion, instructionStep]);
 
+    // --- Periodic Local Save ---
     useInterval(() => {
         if (!loading && test && isFullScreenActive && instructionStep === 0) {
             const key = getLocalStorageKey();
@@ -452,6 +470,7 @@ const TestInterfacePage = ({ navigate, testId }) => {
                     timeTaken: tempTimeTaken,
                     questionStatuses,
                     sectionTimers,
+                    overallTimer, // Save overall timer
                     currentSectionIndex,
                     currentQuestionIndex,
                     lastUpdatedAt: Date.now(),
@@ -486,15 +505,11 @@ const TestInterfacePage = ({ navigate, testId }) => {
         }
     }, [isOnline, syncToFirestore]);
     
-    
-    
-    // REPLACE your old submitTest function with this one
     const submitTest = useCallback(async () => {
         if (submittingTestRef.current) return;
         submittingTestRef.current = true;
         setIsSubmitting(true);
 
-        // Manually calculate the final time spent on the current question to avoid stale state
         let finalTimeTaken = { ...timeTaken };
         if (questionEnterTimestampRef.current && currentSectionIndex !== null && currentQuestionIndex !== null) {
             const timeSpentOnLastQuestion = (Date.now() - questionEnterTimestampRef.current) / 1000;
@@ -503,7 +518,6 @@ const TestInterfacePage = ({ navigate, testId }) => {
             finalTimeTaken[currentSectionIndex] = secTime;
         }
 
-        // --- DYNAMIC SCORE CALCULATION ---
         let calculatedTotalScore = 0;
         const markingScheme = test?.markingScheme;
 
@@ -540,7 +554,7 @@ const TestInterfacePage = ({ navigate, testId }) => {
         const finalAttemptData = {
             status: 'completed',
             answers,
-            timeTaken: finalTimeTaken, // Use the up-to-date timeTaken object
+            timeTaken: finalTimeTaken,
             questionStatuses,
             completedAt: Timestamp.fromDate(new Date()),
             totalScore: calculatedTotalScore,
@@ -571,8 +585,8 @@ const TestInterfacePage = ({ navigate, testId }) => {
     }, [answers, timeTaken, questionStatuses, getLocalStorageKey, isOnline, attemptDocId, navigate, test, currentSectionIndex, currentQuestionIndex]);
 
     const handleSubmitClick = useCallback(() => {
-        submitTest();
-}, [submitTest]);
+        submitTest();
+    }, [submitTest]);
 
     const handleSectionSubmit = useCallback(() => {
         recordTimeSpentOnCurrentQuestion();
@@ -589,9 +603,7 @@ const TestInterfacePage = ({ navigate, testId }) => {
         }
     }, [currentSectionIndex, test, recordTimeSpentOnCurrentQuestion, resetQuestionTimerForNewQuestion, handleSubmitClick, currentSection]);
     
-    // REPLACE your old saveProgressAndExit function with this one
     const saveProgressAndExit = useCallback(async () => {
-        // Manually calculate the current time to avoid stale state before saving
         let finalTimeTaken = { ...timeTaken };
         if (questionEnterTimestampRef.current && currentSectionIndex !== null && currentQuestionIndex !== null) {
             const timeSpent = (Date.now() - questionEnterTimestampRef.current) / 1000;
@@ -603,9 +615,10 @@ const TestInterfacePage = ({ navigate, testId }) => {
         const progressData = {
             status: 'in-progress',
             answers,
-            timeTaken: finalTimeTaken, // Use the up-to-date timeTaken object
+            timeTaken: finalTimeTaken,
             questionStatuses,
             sectionTimers,
+            overallTimer, // Save overall timer
             currentSectionIndex,
             currentQuestionIndex,
             lastUpdatedAt: Date.now(),
@@ -622,10 +635,9 @@ const TestInterfacePage = ({ navigate, testId }) => {
         } else {
              document.exitFullscreen();
         }
-    }, [answers, timeTaken, questionStatuses, sectionTimers, currentSectionIndex, currentQuestionIndex, getLocalStorageKey, syncToFirestore, navigate]);
+    }, [answers, timeTaken, questionStatuses, sectionTimers, overallTimer, currentSectionIndex, currentQuestionIndex, getLocalStorageKey, syncToFirestore, navigate]);
     
-
-
+    // --- Initial Test Fetch ---
     useEffect(() => {
         const fetchAndPrepareTest = async () => {
             if (!testId || !user?.uid) { navigate('home'); return; }
@@ -639,6 +651,7 @@ const TestInterfacePage = ({ navigate, testId }) => {
                 setTimeTaken(localData.timeTaken || {});
                 setQuestionStatuses(localData.questionStatuses || {});
                 setSectionTimers(localData.sectionTimers || []);
+                setOverallTimer(localData.overallTimer || 0); // Load overall timer
                 setCurrentSectionIndex(localData.currentSectionIndex || 0);
                 setCurrentQuestionIndex(localData.currentQuestionIndex || 0);
             }
@@ -670,18 +683,39 @@ const TestInterfacePage = ({ navigate, testId }) => {
                         setTimeTaken(attemptData.timeTaken || {});
                         setQuestionStatuses(attemptData.questionStatuses || {});
                         setSectionTimers(attemptData.sectionTimers || testData.sections.map(s => s.duration * 60));
+                        setOverallTimer(attemptData.overallTimer || (testData.totalDuration ? testData.totalDuration * 60 : 0));
                         setCurrentSectionIndex(attemptData.currentSectionIndex || 0);
                         setCurrentQuestionIndex(attemptData.currentQuestionIndex || 0);
+                    } else if (localData) {
+                        // Keep using local data if it's fresher, just ensure timers are set if missing
+                        if (!localData.sectionTimers) setSectionTimers(testData.sections.map(s => s.duration * 60));
+                        if (localData.overallTimer === undefined && testData.totalDuration) setOverallTimer(testData.totalDuration * 60);
                     }
                     setIsResuming(true);
                     setInstructionStep(1);
                 } else {
                     const initialSectionTimers = testData.sections.map(s => s.duration * 60);
+                    const initialOverallTimer = testData.timingType === 'overall' ? (testData.totalDuration * 60) : 0;
                     const initialStatuses = {};
                     testData.sections.forEach((sec, secIdx) => { initialStatuses[secIdx] = {}; sec.questions.forEach((q, qIdx) => { initialStatuses[secIdx][qIdx] = 'not-visited'; }); });
+                    
                     setSectionTimers(initialSectionTimers);
+                    setOverallTimer(initialOverallTimer);
                     setQuestionStatuses(initialStatuses);
-                    const newAttemptData = { testId, testTitle: testData.title, userId: user.uid, startedAt: serverTimestamp(), status: 'in-progress', answers: {}, timeTaken: {}, sectionTimers: initialSectionTimers, questionStatuses: initialStatuses, lastAccessedAt: serverTimestamp() };
+                    
+                    const newAttemptData = { 
+                        testId, 
+                        testTitle: testData.title, 
+                        userId: user.uid, 
+                        startedAt: serverTimestamp(), 
+                        status: 'in-progress', 
+                        answers: {}, 
+                        timeTaken: {}, 
+                        sectionTimers: initialSectionTimers, 
+                        overallTimer: initialOverallTimer,
+                        questionStatuses: initialStatuses, 
+                        lastAccessedAt: serverTimestamp() 
+                    };
                     const newAttemptRef = await addDoc(collection(db, "attempts"), newAttemptData);
                     setAttemptDocId(newAttemptRef.id);
                     setInstructionStep(1);
@@ -726,36 +760,50 @@ const TestInterfacePage = ({ navigate, testId }) => {
         return () => document.removeEventListener('fullscreenchange', handleNativeFullscreenChange);
     }, [navigate]); 
 
+    // --- Main Timer Logic ---
     useEffect(() => {
         let timer = null; 
-        if (!loading && test && currentSection && sectionTimers.length > 0 && isFullScreenActive && instructionStep === 0) {
+        if (!loading && test && currentSection && isFullScreenActive && instructionStep === 0) {
             timer = setInterval(() => {
-                setSectionTimers(prevTimers => {
-                    const newTimers = [...prevTimers];
-                    if (currentSectionIndex < newTimers.length && newTimers[currentSectionIndex] > 0) {
-                        newTimers[currentSectionIndex] -= 1;
-                        return newTimers;
-                    } else {
-                        if (currentSectionIndex < test.sections.length - 1) {
-                            recordTimeSpentOnCurrentQuestion();
-                            const nextSectionIndex = currentSectionIndex + 1;
-                            setSectionTransitionMessage(`Time's up for ${test.sections[currentSectionIndex].name} section. Submitting... Loading next section: ${test.sections[nextSectionIndex].name}`);
-                            setCurrentSectionIndex(nextSectionIndex); 
-                            setCurrentQuestionIndex(0); 
-                            resetQuestionTimerForNewQuestion();
-                            setTimeout(() => { setSectionTransitionMessage(''); }, 1500); 
-                            return newTimers; 
+                // If using Overall Timing
+                if (test.timingType === 'overall') {
+                    setOverallTimer(prev => {
+                        if (prev > 0) return prev - 1;
+                        // Time's up
+                        if (document.fullscreenElement) document.exitFullscreen();
+                        submitTest();
+                        return 0;
+                    });
+                } 
+                // If using Sectional Timing
+                else {
+                    setSectionTimers(prevTimers => {
+                        const newTimers = [...prevTimers];
+                        if (currentSectionIndex < newTimers.length && newTimers[currentSectionIndex] > 0) {
+                            newTimers[currentSectionIndex] -= 1;
+                            return newTimers;
                         } else {
-                            if (document.fullscreenElement) document.exitFullscreen();
-                            submitTest();
-                            return newTimers; 
+                            if (currentSectionIndex < test.sections.length - 1) {
+                                recordTimeSpentOnCurrentQuestion();
+                                const nextSectionIndex = currentSectionIndex + 1;
+                                setSectionTransitionMessage(`Time's up for ${test.sections[currentSectionIndex].name} section. Submitting... Loading next section: ${test.sections[nextSectionIndex].name}`);
+                                setCurrentSectionIndex(nextSectionIndex); 
+                                setCurrentQuestionIndex(0); 
+                                resetQuestionTimerForNewQuestion();
+                                setTimeout(() => { setSectionTransitionMessage(''); }, 1500); 
+                                return newTimers; 
+                            } else {
+                                if (document.fullscreenElement) document.exitFullscreen();
+                                submitTest();
+                                return newTimers; 
+                            }
                         }
-                    }
-                });
+                    });
+                }
             }, 1000);
         }
         return () => { if (timer) clearInterval(timer); };
-    }, [loading, test, currentSectionIndex, submitTest, recordTimeSpentOnCurrentQuestion, resetQuestionTimerForNewQuestion, currentSection, sectionTimers, isFullScreenActive, instructionStep]);
+    }, [loading, test, currentSectionIndex, submitTest, recordTimeSpentOnCurrentQuestion, resetQuestionTimerForNewQuestion, currentSection, sectionTimers, overallTimer, isFullScreenActive, instructionStep]);
 
     useEffect(() => {
         const disableSelectionAndRightClick = (event) => event.preventDefault();
@@ -770,12 +818,21 @@ const TestInterfacePage = ({ navigate, testId }) => {
         recordTimeSpentOnCurrentQuestion();
         setCurrentQuestionIndex(newIndex);
         resetQuestionTimerForNewQuestion();
-        // This is the change: automatically switch back to the question view on mobile.
         if (isMobileDevice) {
             setMobileView('question');
         }
     };
     
+    // --- CHANGE: Handle Section Click (for Overall Timing) ---
+    const handleSectionClick = (index) => {
+        if (test.timingType === 'overall' && index !== currentSectionIndex) {
+            recordTimeSpentOnCurrentQuestion();
+            setCurrentSectionIndex(index);
+            setCurrentQuestionIndex(0); // Reset to first question of new section
+            resetQuestionTimerForNewQuestion();
+        }
+    };
+
     const updateQuestionStatus = useCallback((secIdx, qIdx, newStatus) => {
         setQuestionStatuses(prev => {
             const currentStatus = prev[secIdx]?.[qIdx];
@@ -816,15 +873,26 @@ const TestInterfacePage = ({ navigate, testId }) => {
     const handleSaveAndNext = () => {
         recordTimeSpentOnCurrentQuestion();
         if (!currentSection || !test) return; 
-        const isLastQuestionOfTest = currentQuestionIndex === currentSection.questions.length - 1 && currentSectionIndex === test.sections.length - 1;
-        if (isLastQuestionOfTest) {
-            handleSubmitClick();
-            return;
-        }
-        else if (currentQuestionIndex < currentSection.questions.length - 1) {
-            setCurrentQuestionIndex(prev => prev + 1);
+        
+        const isLastQuestionOfSection = currentQuestionIndex === currentSection.questions.length - 1;
+        const isLastSection = currentSectionIndex === test.sections.length - 1;
+
+        if (isLastQuestionOfSection) {
+            // Logic differs based on timing type
+            if (test.timingType === 'overall' && !isLastSection) {
+                // Move to next section
+                setCurrentSectionIndex(prev => prev + 1);
+                setCurrentQuestionIndex(0);
+            } else if (isLastSection) {
+                handleSubmitClick();
+                return;
+            } else {
+                // Sectional timing - must submit section
+                handleSectionSubmit();
+                return;
+            }
         } else {
-            handleSectionSubmit();
+            setCurrentQuestionIndex(prev => prev + 1);
         }
         resetQuestionTimerForNewQuestion();
     };
@@ -841,13 +909,9 @@ const TestInterfacePage = ({ navigate, testId }) => {
 
     const handleMarkForReview = () => {
         updateQuestionStatus(currentSectionIndex, currentQuestionIndex, 'marked');
-        
-        // FIX: Only navigate to the next question if it's not the last question of the section.
-        // This prevents accidental submission when "Mark for Review" is clicked on the last question.
         if (currentSection && currentQuestionIndex < currentSection.questions.length - 1) {
             handleSaveAndNext();
         }
-
         setIsMoreMenuOpen(false);
     };
 
@@ -865,8 +929,7 @@ const TestInterfacePage = ({ navigate, testId }) => {
                 <div className="bg-white p-8 rounded-lg shadow-md text-center max-w-lg">
                     <p className="text-gray-800">
                         Sectionals/Full-length tests are only available on laptop/desktop. If you are already using a laptop/desktop, 
-                        maximize the browser window or decrease the zoom level by pressing the Control/Command and 
-                        Minus buttons on the keyboard.
+                        maximize the browser window or decrease the zoom level.
                     </p>
                 </div>
             );
@@ -909,27 +972,34 @@ const TestInterfacePage = ({ navigate, testId }) => {
                 </div>
             );
         }
-        // INSERT THIS CODE
         if (!currentSection || !currentQuestion) {
-            // This handles brief moments during state transitions (like switching sections)
-            // where the question data might not be immediately available.
             return <div className="text-center text-gray-400 p-8">Loading question...</div>;
         }
 
-        const timerValue = sectionTimers[currentSectionIndex] || 0;
+        // --- Determine Timer Display ---
+        let timerValue = 0;
+        if (test.timingType === 'overall') {
+            timerValue = overallTimer;
+        } else {
+            timerValue = sectionTimers[currentSectionIndex] || 0;
+        }
+        
         const minutes = Math.floor(timerValue / 60);
         const seconds = timerValue % 60;
+        
         const watermarkSvg = `<svg xmlns='http://www.w3.org/2000/svg' width='300' height='300'><text x='50%' y='50%' dominant-baseline='middle' text-anchor='middle' fill='rgba(0, 0, 0, 0.08)' font-size='16' font-family='Arial' transform='rotate(-45 150 150)'>${userData.email}</text></svg>`;
         const watermarkStyle = { backgroundImage: `url("data:image/svg+xml,${encodeURIComponent(watermarkSvg)}")`, backgroundRepeat: 'repeat' };
+        
         const isLastQuestionOfCurrentSection = currentQuestionIndex === (currentSection.questions.length - 1);
         const isLastSectionOfTest = currentSectionIndex === (test.sections.length - 1);
-        const shouldDisableSaveAndNext = isLastQuestionOfCurrentSection && isLastSectionOfTest;
+        
+        // In Sectional timing, disable Save&Next at the absolute end of section to force "Submit Section"
+        // In Overall timing, Save&Next can act as "Next Section" unless it's the very last question of test
+        const shouldDisableSaveAndNext = (test.timingType === 'sectional' && isLastQuestionOfCurrentSection) || 
+                                         (test.timingType === 'overall' && isLastQuestionOfCurrentSection && isLastSectionOfTest);
 
         return (
             <>
-                
-                
-
                 {isSubmitting && (
                     <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
                         <div className="bg-white p-6 rounded-lg shadow-xl text-center text-lg font-semibold animate-bounce">
@@ -958,7 +1028,12 @@ const TestInterfacePage = ({ navigate, testId }) => {
                         <div className="flex overflow-x-auto">
                             <div className="flex">
                                 {test.sections.map((section, index) => (
-                                    <button key={section.name} disabled={true} className={`py-2 px-4 text-sm whitespace-nowrap ${index === currentSectionIndex ? 'bg-white border-b-2 border-blue-600 text-blue-600 font-semibold' : 'text-gray-500 bg-gray-200'}`}>
+                                    <button 
+                                        key={section.name} 
+                                        onClick={() => handleSectionClick(index)}
+                                        disabled={test.timingType === 'sectional'} // Enable click only if overall timing
+                                        className={`py-2 px-4 text-sm whitespace-nowrap ${index === currentSectionIndex ? 'bg-white border-b-2 border-blue-600 text-blue-600 font-semibold' : 'text-gray-500 bg-gray-200'} ${test.timingType === 'overall' ? 'hover:bg-gray-300 cursor-pointer' : 'cursor-default'}`}
+                                    >
                                         {section.name}
                                     </button>
                                 ))}
@@ -973,8 +1048,12 @@ const TestInterfacePage = ({ navigate, testId }) => {
                                 <span>Question Paper</span>
                             </button>
                             <div className="text-right flex-shrink-0">
-                                <div className="text-xs text-gray-500">Time Left</div>
-                                <div className="text-lg md:text-xl font-bold text-black">{String(minutes).padStart(2, '0')}:{String(seconds).padStart(2, '0')}</div>
+                                <div className="text-xs text-gray-500">
+                                    {test.timingType === 'overall' ? 'Total Time Left' : 'Section Time Left'}
+                                </div>
+                                <div className={`text-lg md:text-xl font-bold ${timerValue < 300 ? 'text-red-600 animate-pulse' : 'text-black'}`}>
+                                    {String(minutes).padStart(2, '0')}:{String(seconds).padStart(2, '0')}
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -986,9 +1065,11 @@ const TestInterfacePage = ({ navigate, testId }) => {
                             <div className="absolute inset-0 z-0" style={watermarkStyle}></div>
                             <div className="relative z-10">
                                 <h2 className="font-bold mb-2">Directions</h2>
-                                {/* FIX: Reordered to show text before image */}
-                                <div className="prose max-w-none text-gray-800 whitespace-pre-wrap">{currentQuestion.passage}</div>
-                                {currentQuestion.passageImageUrl && <img src={currentQuestion.passageImageUrl} alt="Passage" className="max-w-full h-auto mt-4 rounded"/>}
+                                {currentQuestion.passage && <div className="prose max-w-none text-gray-800 whitespace-pre-wrap">{currentQuestion.passage}</div>}
+                                {/* UPDATED: Map Passage Images */}
+                                {currentQuestion.passageImageUrls?.map((url, i) => (
+                                    <img key={i} src={url} alt={`Passage ${i}`} className="max-w-full h-auto mt-4 rounded"/>
+                                ))}
                             </div>
                         </div>
                     )}
@@ -997,9 +1078,11 @@ const TestInterfacePage = ({ navigate, testId }) => {
                         <div className="absolute inset-0 z-0" style={watermarkStyle}></div>
                         <div className="relative z-10">
                             <h2 className="font-bold mb-4">Question No. {currentQuestionIndex + 1}</h2>
-                            {/* FIX: Reordered to show text before image */}
                             <div className="prose max-w-none text-gray-800 mb-4 whitespace-pre-wrap">{currentQuestion.questionText}</div>
-                            {currentQuestion.questionImageUrl && <img src={currentQuestion.questionImageUrl} alt="Question" className="max-w-full h-auto mt-4 rounded"/>}
+                            {/* UPDATED: Map Question Images */}
+                            {currentQuestion.questionImageUrls?.map((url, i) => (
+                                <img key={i} src={url} alt={`Question ${i}`} className="max-w-full h-auto mt-4 rounded"/>
+                            ))}
                             
                             <div className="mt-6">
                                 {currentQuestion.type === 'TITA' ? (
@@ -1085,13 +1168,6 @@ const TestInterfacePage = ({ navigate, testId }) => {
                                  ); 
                             })}
                         </div>
-                        <div className="mt-4 border-t pt-4 text-xs text-gray-600 space-y-2">
-                            <div className="flex items-center"><div className="w-4 h-4 rounded-md bg-green-500 mr-2"></div> Answered</div>
-                            <div className="flex items-center"><div className="w-4 h-4 rounded-md bg-red-500 mr-2"></div> Not Answered</div>
-                            <div className="flex items-center"><div className="w-4 h-4 rounded-md bg-gray-300 mr-2"></div> Not Visited</div>
-                            <div className="flex items-center"><div className="w-4 h-4 rounded-md bg-purple-500 mr-2"></div> Marked for Review</div>
-                            <div className="flex items-center"><div className="w-4 h-4 rounded-md bg-purple-500 relative mr-2"><div className="absolute bottom-0.5 right-0.5 w-1.5 h-1.5 bg-green-400 rounded-full"></div></div> Answered & Marked</div>
-                        </div>
                     </div>
                 </div>
 
@@ -1114,12 +1190,16 @@ const TestInterfacePage = ({ navigate, testId }) => {
                         
                         <div className="flex space-x-2">
                             {isLastQuestionOfCurrentSection && !isLastSectionOfTest ? (
-                                <button onClick={handleSectionSubmit} className="font-bold px-4 md:px-6 py-2 rounded-md bg-blue-600 text-white hover:bg-blue-700 text-sm md:text-base">SUBMIT SECTION</button>
+                                test.timingType === 'overall' ? (
+                                    <button onClick={handleSaveAndNext} className="font-bold px-4 md:px-6 py-2 rounded-md bg-blue-600 text-white hover:bg-blue-700 text-sm md:text-base">NEXT SECTION</button>
+                                ) : (
+                                    <button onClick={handleSectionSubmit} className="font-bold px-4 md:px-6 py-2 rounded-md bg-blue-600 text-white hover:bg-blue-700 text-sm md:text-base">SUBMIT SECTION</button>
+                                )
                             ) : (
                                 <button onClick={handleSaveAndNext} disabled={shouldDisableSaveAndNext} className={`font-bold px-4 md:px-6 py-2 rounded-md text-sm md:text-base ${shouldDisableSaveAndNext ? 'bg-gray-400 text-gray-700 cursor-not-allowed' : 'bg-blue-600 text-white hover:bg-blue-700'}`}>SAVE & NEXT</button>
                             )}
                             {currentSectionIndex === test.sections.length - 1 && 
-                                <button onClick={handleSubmitClick} className="font-bold px-4 md:px-6 py-2 rounded-md bg-green-600 text-white hover:bg-green-700 text-sm md:text-base">SUBMIT</button>
+                                <button onClick={handleSubmitClick} className="font-bold px-4 md:px-6 py-2 rounded-md bg-green-600 text-white hover:bg-green-700 text-sm md:text-base">SUBMIT TEST</button>
                             }
                         </div>
                     </div>
