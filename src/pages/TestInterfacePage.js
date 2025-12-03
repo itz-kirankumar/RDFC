@@ -995,8 +995,7 @@ const TestInterfacePage = ({ navigate, testId }) => {
         
         // In Sectional timing, disable Save&Next at the absolute end of section to force "Submit Section"
         // In Overall timing, Save&Next can act as "Next Section" unless it's the very last question of test
-        const shouldDisableSaveAndNext = (test.timingType === 'sectional' && isLastQuestionOfCurrentSection) || 
-                                         (test.timingType === 'overall' && isLastQuestionOfCurrentSection && isLastSectionOfTest);
+        const shouldDisableSaveAndNext = isLastQuestionOfCurrentSection;
 
         return (
             <>
