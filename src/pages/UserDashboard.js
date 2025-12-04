@@ -1466,7 +1466,7 @@ const UserDashboard = ({ navigate }) => {
             {/* --- MOBILE UI: ACCORDION --- */}
             <div className="md:hidden space-y-2">
                 <div className="mb-8 grid grid-cols-1 gap-4">
-                    <ExamCountdownWidget title="CAT 2025" targetDate="2025-11-29T23:59:59" />
+                    <ExamCountdownWidget title="SNAP 2025" targetDate="2025-12-05T23:59:59" />
                     <VocabCardWidget />
                 </div>
                 <AccordionSection title="Performance" icon={FaChartLine} sectionKey="performance" tab={{ name: 'Performance' }}>
