@@ -1420,7 +1420,7 @@ const UserDashboard = ({ navigate }) => {
                     {activeTab === 'dashboard' && (
                          <div className="space-y-12">
                             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                                <ExamCountdownWidget title="Countdown to SNAP 2025" targetDate="2025-12-13T23:59:59" />
+                                <ExamCountdownWidget title="Countdown to CAT 2026" targetDate="2026-11-26T23:59:59" />
                                 <ExamCountdownWidget title="Countdown to XAT 2026" targetDate="2026-01-03T23:59:59" />
                                 <VocabCardWidget />
                             </div>
@@ -1466,7 +1466,7 @@ const UserDashboard = ({ navigate }) => {
             {/* --- MOBILE UI: ACCORDION --- */}
             <div className="md:hidden space-y-2">
                 <div className="mb-8 grid grid-cols-1 gap-4">
-                    <ExamCountdownWidget title="SNAP 2025" targetDate="2025-12-13T23:59:59" />
+                    <ExamCountdownWidget title="CAT 2026" targetDate="2026-11-26T23:59:59" />
                     <VocabCardWidget />
                 </div>
                 <AccordionSection title="Performance" icon={FaChartLine} sectionKey="performance" tab={{ name: 'Performance' }}>
