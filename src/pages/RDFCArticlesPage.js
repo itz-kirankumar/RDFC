@@ -103,13 +103,14 @@ const RDFCArticlesPage = ({ navigate }) => {
         
         setIsSubmitting(true);
         const materialData = { name, description, url, mainType: selectedTab, subType: selectedSubTab || null, linkedTestId: isLinkToTest ? selectedTestId : null, isFree };
+        const materialDataWithPublished = { ...materialData, isPublished: true };
 
         try {
             if (currentMaterialId) {
-                await updateDoc(doc(db, 'materials', currentMaterialId), { ...materialData, updatedAt: serverTimestamp() });
+                await updateDoc(doc(db, 'materials', currentMaterialId), { ...materialDataWithPublished, updatedAt: serverTimestamp() });
                 alert('Material updated successfully!');
             } else {
-                await addDoc(collection(db, 'materials'), { ...materialData, createdAt: serverTimestamp() });
+                await addDoc(collection(db, 'materials'), { ...materialDataWithPublished, createdAt: serverTimestamp() });
                 alert('Material created successfully!');
             }
             resetForm();
@@ -130,6 +131,10 @@ const RDFCArticlesPage = ({ navigate }) => {
                 console.error("Error deleting material:", error);
             }
         }
+    };
+
+    const handleTogglePublish = async (material) => {
+        await updateDoc(doc(db, 'materials', material.id), { isPublished: !material.isPublished });
     };
 
     // --- Memoized Data for Display ---
@@ -285,7 +290,7 @@ const RDFCArticlesPage = ({ navigate }) => {
                                {paginatedMaterials.length > 0 ? (
                                     <table className="min-w-full divide-y divide-gray-700">
                                         <thead><tr>
-                                            <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-300">Material</th><th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-300">Category</th><th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-300">Status</th><th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-300">Linked To</th><th scope="col" className="relative py-3.5 pl-3 pr-4 sm:pr-6"><span className="sr-only">Actions</span></th>
+                                            <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-300">Material</th><th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-300">Category</th><th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-300">Status</th><th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-300">Published</th><th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-gray-300">Linked To</th><th scope="col" className="relative py-3.5 pl-3 pr-4 sm:pr-6"><span className="sr-only">Actions</span></th>
                                         </tr></thead>
                                         <tbody className="divide-y divide-gray-700/50">
                                             {paginatedMaterials.map(mat => (
@@ -293,6 +298,7 @@ const RDFCArticlesPage = ({ navigate }) => {
                                                     <td className="whitespace-nowrap px-3 py-4 text-sm text-white font-medium">{mat.name}</td>
                                                     <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-400"><div className="flex items-center space-x-2"><TagIcon className="h-4 w-4 text-gray-500"/><span>{mat.subType ? `${mat.mainType} / ${mat.subType}` : mat.mainType}</span></div></td>
                                                     <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-400">{mat.isFree ? <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-500/10 text-green-300">Free</span> : <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-500/10 text-yellow-300">Paid</span>}</td>
+                                                    <td className="whitespace-nowrap px-3 py-4 whitespace-nowrap"><Switch checked={!!mat.isPublished} onChange={() => handleTogglePublish(mat)} className={`${mat.isPublished ? 'bg-green-600' : 'bg-gray-600'} relative inline-flex items-center h-6 rounded-full w-11`}><span className={`${mat.isPublished ? 'translate-x-6' : 'translate-x-1'} inline-block w-4 h-4 transform bg-white rounded-full`}/></Switch></td>
                                                     <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-400"><div className="flex items-center space-x-2">{mat.linkedTestId ? <><LinkIcon className="h-4 w-4 text-indigo-400"/><span>{mat.testTitle}</span></> : <span className="text-gray-500">Standalone</span>}</div></td>
                                                     <td className="whitespace-nowrap px-3 py-4 text-sm text-right space-x-4">
                                                         <button onClick={() => handleEditClick(mat)} className="font-medium text-indigo-400 hover:text-indigo-300">Edit</button>

@@ -261,7 +261,7 @@ const LoginPage = ({ navigate }) => {
         const fetchFreeTests = async () => {
             setLoading(true);
             try {
-                const q = query(collection(db, 'tests'), where("isFree", "==", true), where("isPublished", "==", true), orderBy("createdAt", "asc"));
+                const q = query(collection(db, 'tests'), where("isFree", "==", true), where("isPublished", "==", true),where("showOnLogin", "==", true), orderBy("createdAt", "asc"));
                 const snapshot = await getDocs(q);
                 setFreeTests(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
             } catch (error) {

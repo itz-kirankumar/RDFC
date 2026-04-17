@@ -199,7 +199,8 @@ const useMasterData = () => {
             try {
                 // Fetch all published tests and materials
                 const testsQuery = query(collection(db, 'tests'), where("isPublished", "==", true));
-                const materialsQuery = query(collection(db, 'materials'));
+                const materialsQuery = query(collection(db, 'materials'), where("isPublished", "==", true)
+);
 
                 const [testsSnapshot, materialsSnapshot] = await Promise.all([
                     getDocs(testsQuery),
