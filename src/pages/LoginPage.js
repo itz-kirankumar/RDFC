@@ -134,14 +134,13 @@ const CheckoutModal = ({ isOpen, setIsOpen, checkoutDetails, navigate }) => {
             return;
         }
 
-        // Final check: Does the user already have this plan?
         const userDocRef = doc(db, 'users', userToPay.uid);
         const userDocSnap = await getDoc(userDocRef);
         const liveUserData = userDocSnap.data();
 
         if (liveUserData?.planId === plan.id) {
              alert("It looks like you are already subscribed to this plan. You will be redirected to your dashboard.");
-             navigate('home'); // Redirect to dashboard
+             navigate('home');
              return;
         }
         
@@ -186,7 +185,6 @@ const CheckoutModal = ({ isOpen, setIsOpen, checkoutDetails, navigate }) => {
                     tierId: checkoutDetails.selectedTier.id,
                 }));
                 await signInWithGoogle();
-                // The main App component will handle the post-login flow.
             } catch (err) {
                 console.error("Google Sign-In failed during checkout:", err);
                 setError("Google Sign-In failed. Please try again.");
@@ -342,6 +340,17 @@ const LoginPage = ({ navigate }) => {
 
     return (
         <div className="bg-zinc-950 text-white min-h-screen font-sans antialiased">
+
+            {/* Google Analytics - Added exactly as you provided */}
+            {/* Google tag (gtag.js) --> */}
+            <script async src="https://www.googletagmanager.com/gtag/js?id=G-J9J4NPL6Z4"></script>
+            <script>
+                {`window.dataLayer = window.dataLayer || [];
+                function gtag(){dataLayer.push(arguments);}
+                gtag('js', new Date());
+                gtag('config', 'G-J9J4NPL6Z4');`}
+            </script>
+
             <style>{`
                 .marquee-container {
                     overflow: hidden;
@@ -416,27 +425,6 @@ const LoginPage = ({ navigate }) => {
                             <p className="mt-6 text-lg sm:text-xl text-zinc-300 max-w-3xl mx-auto animate-fade-in-up delay-200">
                                 Elevate your reading comprehension and analytical skills with a dynamic platform that provides a daily regimen of fresh RDFC articles paired with article-specific RC tests, ensuring disciplined and effective practice.
                             </p>
-                            {/* <div className="mt-6 max-w-3xl mx-auto p-4 bg-red-900/50 border-2 border-red-500 rounded-lg animate-fade-in-up delay-200 text-left">
-    <p className="text-lg text-red-300 font-bold text-center">
-        Important Notice: RDFC is under core conflicts between the management team and will be closed soon.
-    </p>
-    <p className="mt-4 text-base text-zinc-200">
-        For any queries, please reach out to:
-        <br />
-        - <span className="font-bold">Roshan Singh (Founder):</span> <a href="tel:+919105116887" className="underline hover:text-white">+91 91051 16887</a>
-        <br />
-        - <span className="font-bold">Anurag (Co-founder):</span> <a href="tel:+919639232862" className="underline hover:text-white">+91 96392 32862</a>
-    </p>
-    <p className="mt-4 text-sm text-yellow-400 font-semibold">
-        Please be aware: RDFC is a product designed to monetize as a motive and its content is completely AI-generated.
-    </p>
-    <p className="mt-5 text-center text-zinc-200">
-        All the best for your exams.
-    </p>
-    <p className="mt-2 text-zinc-400 italic text-center">
-        Love from the developer
-    </p>
-</div> */}
                             <button onClick={signInWithGoogle} className="mt-8 sm:mt-12 mx-auto flex items-center justify-center bg-white text-zinc-900 px-6 py-3 text-base sm:px-8 sm:py-4 sm:text-lg rounded-full shadow-md hover:shadow-xl hover:bg-zinc-200 transition-all transform hover:scale-105 group font-bold animate-fade-in-up delay-400">
                                 <svg className="w-6 h-6 mr-3" viewBox="0 0 48 48"><path fill="#4285F4" d="M43.611 20.083H42V20H24v8h11.303c-1.649 4.657-6.08 8-11.303 8c-6.627 0-12-5.373-12-12s5.373-12 12-12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4C12.955 4 4 12.955 4 24s8.955 20 20 20s20-8.955 20-20c0-1.341-.138-2.65-.389-3.917z"></path><path fill="#34A853" d="M43.611 20.083H24v8h11.303c-1.649 4.657-6.08 8-11.303 8V44c5.268 0 10.046-1.947 13.611-5.657c3.565-3.71 5.789-8.604 5.789-14.343c0-1.341-.138-2.65-.389-3.917z"></path><path fill="#FBBC05" d="M9.961 14.961C11.846 12.154 15.059 10 18 10c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C28.046 2.053 23.268 0 18 0C12.955 0 8 4.955 8 10c0 1.341.138 2.65.389 3.917l1.572 1.044z"></path><path fill="#EA4335" d="M24 44c5.166 0 9.86-1.977 13.409-5.192l-6.19-4.891c-1.543 1.037-3.481 1.663-5.219 1.663c-3.454 0-6.556-1.983-8.163-4.891L4.389 35.083C7.023 40.523 12.866 44 24 44z"></path><path fill="none" d="M0 0h48v48H0z"></path></svg>
                                 Join with Google
@@ -558,7 +546,6 @@ const LoginPage = ({ navigate }) => {
                             <ul className="space-y-3">
                                 <li><button onClick={() => navigate('legal', { section: 'terms' })} className="text-zinc-400 hover:text-yellow-400 transition-colors text-sm text-left">Terms & Conditions</button></li>
                                 <li><button onClick={() => navigate('legal', { section: 'privacy' })} className="text-zinc-400 hover:text-yellow-400 transition-colors text-sm text-left">Privacy Policy</button></li>
-                                {/* ++ NEW: Add links to the new legal sections ++ */}
                                 <li><button onClick={() => navigate('legal', { section: 'cancellation' })} className="text-zinc-400 hover:text-yellow-400 transition-colors text-sm text-left">Cancellation & Refund</button></li>
                                 <li><button onClick={() => navigate('legal', { section: 'shipping' })} className="text-zinc-400 hover:text-yellow-400 transition-colors text-sm text-left">Shipping & Delivery</button></li>
                             </ul>
@@ -592,4 +579,3 @@ const LoginPage = ({ navigate }) => {
 };
 
 export default LoginPage;
-
