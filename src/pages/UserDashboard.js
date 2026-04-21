@@ -1422,7 +1422,7 @@ const UserDashboard = ({ navigate }) => {
                          <div className="space-y-12">
                             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                                 <ExamCountdownWidget title="Countdown to CAT 2026" targetDate="2026-11-26T23:59:59" />
-                                <ExamCountdownWidget title="Countdown to XAT 2026" targetDate="2026-01-03T23:59:59" />
+                                <ExamCountdownWidget title="Countdown to XAT 2027" targetDate="2027-01-02T23:59:59" />
                                 <VocabCardWidget />
                             </div>
                             <div>
