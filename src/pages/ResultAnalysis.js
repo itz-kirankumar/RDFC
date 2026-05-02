@@ -4,54 +4,35 @@ import { db } from '../firebase/config';
 import { useAuth } from '../contexts/AuthContext';
 import { 
     FaCheck, FaTimes, FaArrowLeft, FaChevronLeft, FaChevronRight, 
-    FaChartPie, FaListOl, FaTrophy, FaEye, FaTh, FaFilter, FaClock, FaChevronDown,
-    FaBookOpen, FaQuestionCircle, FaExpand, FaCompress, FaChartBar, FaStar, FaLightbulb, 
-    FaInfoCircle, FaStopwatch, FaCheckCircle
+    FaChartPie, FaListOl, FaTrophy, FaEye, FaTh, FaClock, FaChevronDown,
+    FaBookOpen, FaQuestionCircle, FaExpand, FaCompress, FaChartBar, FaStar, 
+    FaInfoCircle, FaStopwatch, FaCheckCircle, FaFilter 
 } from 'react-icons/fa';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip, Legend } from 'recharts';
 import { motion, AnimatePresence } from 'framer-motion';
 
+
 // --- 1. UI Helper Components ---
 
 const Button = ({ children, className = '', ...props }) => (
-    <button {...props} className={`px-4 py-2 rounded-md font-semibold transition-all text-sm flex items-center justify-center gap-2 ${className}`}>
+    <button {...props} className={`px-4 py-2 rounded-xl font-semibold transition-all text-sm flex items-center justify-center gap-2 outline-none focus:ring-2 focus:ring-offset-1 focus:ring-blue-500 active:scale-95 ${className}`}>
         {children}
     </button>
 );
 
-const PerformanceMetric = ({ label, value, color, subValue, icon: Icon }) => (
-    <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-100 flex flex-col items-center justify-center text-center transition-transform hover:scale-105">
-        {Icon && <Icon className={`text-3xl mb-2 ${color}`} />}
-        <span className={`text-2xl md:text-3xl font-bold ${color}`}>{value}</span>
-        <span className="text-sm text-slate-500 font-medium uppercase tracking-wider mt-1">{label}</span>
-        {subValue && <span className="text-xs text-slate-400 mt-1">{subValue}</span>}
+const PerformanceMetric = ({ label, value, colorClass, iconBgClass, icon: Icon }) => (
+    <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200/60 flex flex-col items-center justify-center text-center transition-all hover:shadow-md hover:-translate-y-1">
+        {Icon && (
+            <div className={`p-3 rounded-xl mb-3 ${iconBgClass}`}>
+                <Icon className={`text-2xl ${colorClass}`} />
+            </div>
+        )}
+        <span className="text-3xl font-extrabold text-slate-800">{value}</span>
+        <span className="text-xs text-slate-500 font-bold uppercase tracking-wider mt-1">{label}</span>
     </div>
 );
 
 // --- 2. Advanced Stats Components ---
-
-const KeyInsightsCard = ({ insights }) => {
-    if (!insights) return null;
-    const { message, color } = insights;
-    
-    const colorStyles = {
-        green: 'bg-emerald-50 text-emerald-800 border-emerald-200',
-        red: 'bg-rose-50 text-rose-800 border-rose-200',
-        yellow: 'bg-amber-50 text-amber-800 border-amber-200',
-        gray: 'bg-slate-50 text-slate-800 border-slate-200'
-    };
-    
-    const activeStyle = colorStyles[color] || colorStyles.gray;
-
-    return (
-        <div className={`p-4 rounded-lg border-l-4 ${activeStyle} mb-6`}>
-            <p className="font-bold flex items-center mb-1 text-sm uppercase tracking-wide">
-                <FaLightbulb className="mr-2"/> Key Insight
-            </p>
-            <p className="text-sm md:text-base leading-relaxed">{message}</p>
-        </div>
-    );
-};
 
 const QuestionStatsPanel = ({ metrics }) => {
     if (!metrics) return null;
@@ -108,7 +89,7 @@ const QuestionStatsPanel = ({ metrics }) => {
     );
 };
 
-// --- 3. Leaderboard Component (Updated to Fetch Names) ---
+// --- 3. Leaderboard Component ---
 const LeaderboardView = ({ leaderboardData, currentUserId }) => {
     const [displayData, setDisplayData] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -121,39 +102,21 @@ const LeaderboardView = ({ leaderboardData, currentUserId }) => {
                 return;
             }
 
-            // 1. Sort & Rank (Locally first)
             const sorted = [...leaderboardData].sort((a, b) => (b.totalScore || 0) - (a.totalScore || 0));
-            
-            // Basic Ranking Logic
-            const ranked = sorted.map((item, index) => {
-                // If needed, handle ties here. For now, using simple index-based rank.
-                return { ...item, rank: index + 1 };
-            });
+            const ranked = sorted.map((item, index) => ({ ...item, rank: index + 1 }));
 
-            // 2. Find Current User Rank (from the full list)
             const userEntry = ranked.find(u => u.userId === currentUserId);
             setMyRank(userEntry ? userEntry.rank : null);
 
-            // 3. Prepare Display List (Top 10 + You)
-            let itemsToShow = ranked.slice(0, 10); // Limit to Top 10
+            let itemsToShow = ranked.slice(0, 10);
             
-            // If current user exists and is NOT in the top 10, add them to the end
             if (myRank && myRank > 10) {
                 const myEntry = ranked.find(u => u.userId === currentUserId);
-                if (myEntry) {
-                    itemsToShow.push(myEntry);
-                }
+                if (myEntry) itemsToShow.push(myEntry);
             }
 
-            // 4. Fetch Names from Users Collection
             try {
-                const userPromises = itemsToShow.map(attempt => {
-                    if (attempt.userId) {
-                        return getDoc(doc(db, "users", attempt.userId));
-                    }
-                    return Promise.resolve(null);
-                });
-
+                const userPromises = itemsToShow.map(attempt => attempt.userId ? getDoc(doc(db, "users", attempt.userId)) : Promise.resolve(null));
                 const userSnapshots = await Promise.all(userPromises);
                 const usersMap = {};
                 userSnapshots.forEach(docSnap => {
@@ -170,11 +133,7 @@ const LeaderboardView = ({ leaderboardData, currentUserId }) => {
                 setDisplayData(enrichedData);
             } catch (error) {
                 console.error("Error fetching leaderboard names:", error);
-                // Fallback
-                setDisplayData(itemsToShow.map(item => ({
-                     ...item,
-                     displayName: item.displayName || item.name || 'Anonymous'
-                })));
+                setDisplayData(itemsToShow.map(item => ({ ...item, displayName: item.displayName || item.name || 'Anonymous' })));
             } finally {
                 setLoading(false);
             }
@@ -183,25 +142,27 @@ const LeaderboardView = ({ leaderboardData, currentUserId }) => {
         processLeaderboard();
     }, [leaderboardData, currentUserId]);
 
-    if (loading) return <div className="p-12 text-center text-slate-500 bg-white rounded-xl shadow-sm">Loading Leaderboard...</div>;
-    if (!displayData || displayData.length === 0) return <div className="p-12 text-center text-slate-500 bg-white rounded-xl shadow-sm">No attempts recorded yet.</div>;
+    if (loading) return <div className="p-12 text-center text-slate-500 bg-white rounded-2xl shadow-sm border border-slate-200">Loading Leaderboard...</div>;
+    if (!displayData || displayData.length === 0) return <div className="p-12 text-center text-slate-500 bg-white rounded-2xl shadow-sm border border-slate-200">No attempts recorded yet.</div>;
 
     return (
-        <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden animate-fade-in-up">
-            <div className="p-6 bg-gradient-to-r from-blue-600 to-blue-700 text-white flex justify-between items-center">
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-200/60 overflow-hidden animate-fade-in-up">
+            <div className="p-6 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
                 <div className="flex items-center gap-3">
-                    <FaTrophy className="text-yellow-300 text-2xl" />
-                    <h3 className="text-lg md:text-xl font-bold">Leaderboard</h3>
+                    <div className="p-2 bg-yellow-100 rounded-lg text-yellow-600">
+                        <FaTrophy className="text-xl" />
+                    </div>
+                    <h3 className="text-lg md:text-xl font-extrabold text-slate-800">Leaderboard</h3>
                 </div>
                 {myRank > 0 && (
-                    <div className="bg-white/20 px-4 py-1 rounded-full text-sm font-medium backdrop-blur-sm">
+                    <div className="bg-blue-100 text-blue-700 px-4 py-1.5 rounded-full text-sm font-bold border border-blue-200">
                         Your Rank: #{myRank}
                     </div>
                 )}
             </div>
             <div className="overflow-x-auto">
                 <table className="w-full text-left text-sm text-slate-600">
-                    <thead className="bg-slate-50 text-xs uppercase font-semibold text-slate-500 border-b border-slate-200">
+                    <thead className="bg-white text-xs uppercase font-extrabold text-slate-400 border-b border-slate-100 tracking-wider">
                         <tr>
                             <th className="px-4 md:px-6 py-4 w-16 md:w-20 text-center">Rank</th>
                             <th className="px-4 md:px-6 py-4">Student</th>
@@ -209,7 +170,7 @@ const LeaderboardView = ({ leaderboardData, currentUserId }) => {
                             <th className="px-4 md:px-6 py-4 text-right">Score</th>
                         </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-100 text-sm">
+                    <tbody className="divide-y divide-slate-100/80 text-sm">
                         {displayData.map((user) => {
                             let totalTime = 0;
                             if (user.timeTaken) {
@@ -224,27 +185,27 @@ const LeaderboardView = ({ leaderboardData, currentUserId }) => {
                             const timeMins = Math.round(totalTime / 60);
 
                             return (
-                                <tr key={user.userId} className={`hover:bg-slate-50 transition-colors ${user.userId === currentUserId ? 'bg-blue-50/60' : ''}`}>
+                                <tr key={user.userId} className={`hover:bg-slate-50 transition-colors ${user.userId === currentUserId ? 'bg-blue-50/50 hover:bg-blue-50/80' : ''}`}>
                                     <td className="px-4 md:px-6 py-4 text-center">
                                         <span className={`inline-flex items-center justify-center w-8 h-8 rounded-full text-sm font-bold ${
-                                            user.rank === 1 ? 'bg-yellow-100 text-yellow-700' : 
-                                            user.rank === 2 ? 'bg-gray-100 text-gray-700' : 
-                                            user.rank === 3 ? 'bg-orange-100 text-orange-800' : 'text-slate-500'
+                                            user.rank === 1 ? 'bg-yellow-100 text-yellow-700 ring-2 ring-yellow-200' : 
+                                            user.rank === 2 ? 'bg-slate-100 text-slate-700 ring-2 ring-slate-200' : 
+                                            user.rank === 3 ? 'bg-orange-100 text-orange-800 ring-2 ring-orange-200' : 'text-slate-500 bg-slate-50'
                                         }`}>
                                             {user.rank}
                                         </span>
                                     </td>
-                                    <td className="px-4 md:px-6 py-4 font-medium text-slate-800">
+                                    <td className="px-4 md:px-6 py-4 font-bold text-slate-800">
                                         <div className="flex items-center gap-3">
-                                            <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center text-xs font-bold text-slate-500 overflow-hidden uppercase">
+                                            <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center text-xs font-bold text-slate-500 overflow-hidden uppercase shrink-0">
                                                 {user.photoURL ? <img src={user.photoURL} alt="User" className="w-full h-full object-cover"/> : user.displayName.charAt(0)}
                                             </div>
                                             <span className="truncate max-w-[150px] md:max-w-none">{user.displayName}</span>
-                                            {user.userId === currentUserId && <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-bold">You</span>}
+                                            {user.userId === currentUserId && <span className="text-[10px] bg-blue-600 text-white px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">You</span>}
                                         </div>
                                     </td>
-                                    <td className="px-4 md:px-6 py-4 text-center font-mono text-slate-500">{timeMins}m</td>
-                                    <td className="px-4 md:px-6 py-4 text-right font-bold text-slate-800">{user.totalScore?.toFixed(2)}</td>
+                                    <td className="px-4 md:px-6 py-4 text-center font-mono text-slate-500 font-medium">{timeMins}m</td>
+                                    <td className="px-4 md:px-6 py-4 text-right font-extrabold text-slate-800">{user.totalScore?.toFixed(2)}</td>
                                 </tr>
                             );
                         })}
@@ -255,7 +216,7 @@ const LeaderboardView = ({ leaderboardData, currentUserId }) => {
     );
 };
 
-// --- 4. Question Palette (With Stats at Bottom) ---
+// --- 4. Question Palette ---
 
 const QuestionPalette = ({ test, answers, currentQuestion, onNavigate, onClose, stats, isRevealed }) => {
     const [selectedSectionIdx, setSelectedSectionIdx] = useState(currentQuestion.secIdx);
@@ -267,44 +228,46 @@ const QuestionPalette = ({ test, answers, currentQuestion, onNavigate, onClose, 
     const activeSection = test.sections[selectedSectionIdx];
 
     return (
-        <div className="flex flex-col h-full bg-white md:border-l border-slate-200 w-full md:w-80 flex-shrink-0 shadow-xl z-20">
-            <div className="p-4 border-b border-slate-200 flex justify-between items-center bg-slate-50">
-                <h3 className="font-bold text-slate-700 flex items-center gap-2 text-base"><FaTh /> Question Palette</h3>
-                {onClose && <button onClick={onClose} className="md:hidden text-slate-500 hover:text-red-500 transition-colors"><FaTimes /></button>}
+        <div className="flex flex-col h-full bg-slate-50 md:border-l border-slate-200 w-full md:w-80 flex-shrink-0 z-20">
+            <div className="p-5 border-b border-slate-200 flex justify-between items-center bg-white">
+                <h3 className="font-extrabold text-slate-800 flex items-center gap-2 text-base">
+                    <FaTh className="text-slate-400" /> Palette
+                </h3>
+                {onClose && <button onClick={onClose} className="md:hidden text-slate-400 hover:text-slate-800 transition-colors bg-slate-100 p-2 rounded-full"><FaTimes /></button>}
             </div>
             
-            <div className="px-4 pt-4 pb-2">
-                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1 block">Select Section</label>
+            <div className="px-5 pt-5 pb-3">
+                <label className="text-[10px] font-extrabold text-slate-400 uppercase tracking-widest mb-2 block">Section</label>
                 <div className="relative">
                     <select 
                         value={selectedSectionIdx} 
                         onChange={(e) => setSelectedSectionIdx(parseInt(e.target.value))}
-                        className="w-full appearance-none bg-slate-100 border border-slate-200 text-slate-700 py-2 px-3 pr-8 rounded-lg leading-tight focus:outline-none focus:bg-white focus:border-blue-500 font-semibold text-sm"
+                        className="w-full appearance-none bg-white border border-slate-200 text-slate-700 py-2.5 px-4 pr-10 rounded-xl leading-tight focus:outline-none focus:ring-2 focus:ring-blue-500 font-bold text-sm shadow-sm transition-all hover:border-slate-300 cursor-pointer"
                     >
                         {test.sections.map((sec, idx) => (
                             <option key={idx} value={idx}>{sec.name}</option>
                         ))}
                     </select>
-                    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-600">
-                        <FaChevronDown />
+                    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-slate-400">
+                        <FaChevronDown className="text-xs" />
                     </div>
                 </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-4 space-y-2 scrollbar-thin scrollbar-thumb-slate-300">
-                <div className="grid grid-cols-5 gap-2 content-start">
+            <div className="flex-1 overflow-y-auto p-5 pt-2 space-y-2 scrollbar-thin scrollbar-thumb-slate-300">
+                <div className="grid grid-cols-5 gap-2.5 content-start">
                     {activeSection?.questions.map((q, qIdx) => {
                         const answer = answers[selectedSectionIdx]?.[qIdx];
                         const isAttempted = answer !== undefined && answer !== null && answer !== '';
-                        let statusClass = "bg-slate-100 text-slate-500 border-slate-200 hover:bg-slate-200"; 
+                        let statusClass = "bg-white text-slate-600 border-slate-200 hover:border-slate-300 hover:bg-slate-50"; 
                         
                         if (isAttempted) {
                             const isCorrect = q.type === 'TITA'
                                 ? String(answer).trim().toLowerCase() === String(q.correctOption).trim().toLowerCase()
                                 : parseInt(answer) === parseInt(q.correctOption);
                             statusClass = isCorrect 
-                                ? "bg-emerald-100 text-emerald-700 border-emerald-300 ring-1 ring-emerald-400" 
-                                : "bg-rose-100 text-rose-700 border-rose-300 ring-1 ring-rose-400";
+                                ? "bg-emerald-50 text-emerald-700 border-emerald-200 ring-1 ring-emerald-500" 
+                                : "bg-rose-50 text-rose-700 border-rose-200 ring-1 ring-rose-500";
                         }
 
                         const isActive = currentQuestion.secIdx === selectedSectionIdx && currentQuestion.qIdx === qIdx;
@@ -313,7 +276,9 @@ const QuestionPalette = ({ test, answers, currentQuestion, onNavigate, onClose, 
                             <button
                                 key={qIdx}
                                 onClick={() => onNavigate(selectedSectionIdx, qIdx)}
-                                className={`h-10 w-10 rounded-lg text-sm font-bold border transition-all shadow-sm ${statusClass} ${isActive ? 'ring-2 ring-blue-600 ring-offset-1 z-10 scale-110' : ''}`}
+                                className={`h-11 w-11 rounded-xl text-sm font-bold border transition-all shadow-sm flex items-center justify-center
+                                    ${statusClass} 
+                                    ${isActive ? '!ring-2 !ring-blue-600 ring-offset-2 z-10 scale-105 shadow-md' : ''}`}
                             >
                                 {qIdx + 1}
                             </button>
@@ -321,21 +286,17 @@ const QuestionPalette = ({ test, answers, currentQuestion, onNavigate, onClose, 
                     })}
                 </div>
             </div>
-            {/* Legend */}
-            <div className="p-4 border-t border-slate-200 bg-slate-50 text-xs text-slate-500 flex justify-between">
-                <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 bg-emerald-500 rounded-full"></div> Correct</div>
-                <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 bg-rose-500 rounded-full"></div> Wrong</div>
-                <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 bg-slate-300 rounded-full"></div> Skipped</div>
-            </div>
             
-            {/* Stats Panel moved here - Visible by default */}
-            <div className="flex-shrink-0 bg-slate-50 border-t border-slate-200">
+            <div className="p-5 border-t border-slate-200 bg-white">
+                <div className="flex justify-between items-center text-xs font-bold text-slate-500 mb-4">
+                    <div className="flex items-center gap-2"><div className="w-3 h-3 bg-emerald-500 rounded-full border border-emerald-600/20"></div> Correct</div>
+                    <div className="flex items-center gap-2"><div className="w-3 h-3 bg-rose-500 rounded-full border border-rose-600/20"></div> Wrong</div>
+                    <div className="flex items-center gap-2"><div className="w-3 h-3 bg-white border border-slate-300 rounded-full"></div> Skipped</div>
+                </div>
                 {stats ? (
-                    <div className="p-3">
-                        <QuestionStatsPanel metrics={stats} />
-                    </div>
+                    <QuestionStatsPanel metrics={stats} />
                 ) : (
-                    <div className="p-3 text-center text-xs text-slate-400">Loading Stats...</div>
+                    <div className="p-4 text-center text-xs font-medium text-slate-400 bg-slate-50 rounded-xl border border-slate-100">Loading Stats...</div>
                 )}
             </div>
         </div>
@@ -345,62 +306,55 @@ const QuestionPalette = ({ test, answers, currentQuestion, onNavigate, onClose, 
 // --- 5. Main Analysis View (Deep Dive) ---
 
 const AnswerOption = ({ 
-    label, 
-    text, 
-    isSelected, 
-    isCorrectOption, 
-    percentage, 
-    isToppersChoice,
-    isRevealed 
+    label, text, isSelected, isCorrectOption, percentage, isToppersChoice, isRevealed 
 }) => {
-    let containerClass = "border-slate-200 hover:bg-slate-50";
+    let containerClass = "border-slate-200 bg-white hover:bg-slate-50 hover:border-slate-300";
     let icon = null;
-    let labelClass = "text-slate-500 border-slate-300";
+    let labelClass = "text-slate-500 border-slate-200 bg-slate-50";
 
     if (!isRevealed) {
         if (isSelected) {
-            containerClass = "bg-blue-50 border-blue-400 ring-1 ring-blue-400";
-            labelClass = "text-blue-600 border-blue-400 bg-blue-100";
-            icon = <div className="w-3 h-3 rounded-full bg-blue-600"></div>; 
+            containerClass = "bg-blue-50/50 border-blue-300 ring-1 ring-blue-500";
+            labelClass = "text-blue-700 border-blue-300 bg-blue-100";
+            icon = <div className="w-2.5 h-2.5 rounded-full bg-blue-600"></div>; 
         }
     } else {
         if (isSelected && isCorrectOption) {
-            containerClass = "bg-emerald-50 border-emerald-500 ring-1 ring-emerald-500";
-            labelClass = "text-emerald-600 border-emerald-500";
-            icon = <FaCheck className="text-emerald-600" />;
+            containerClass = "bg-emerald-50/80 border-emerald-400 ring-1 ring-emerald-500";
+            labelClass = "text-emerald-700 border-emerald-400 bg-emerald-100";
+            icon = <FaCheck className="text-emerald-600 text-sm" />;
         } else if (isSelected && !isCorrectOption) {
-            containerClass = "bg-rose-50 border-rose-500 ring-1 ring-rose-500";
-            labelClass = "text-rose-600 border-rose-500";
-            icon = <FaTimes className="text-rose-600" />;
+            containerClass = "bg-rose-50/80 border-rose-300 ring-1 ring-rose-500";
+            labelClass = "text-rose-700 border-rose-300 bg-rose-100";
+            icon = <FaTimes className="text-rose-600 text-sm" />;
         } else if (!isSelected && isCorrectOption) {
-            containerClass = "bg-emerald-50/50 border-emerald-500 border-dashed";
-            labelClass = "text-emerald-600 border-emerald-500";
-            icon = <FaCheck className="text-emerald-600 opacity-50" />;
+            containerClass = "bg-emerald-50/40 border-emerald-400 border-dashed";
+            labelClass = "text-emerald-700 border-emerald-400 bg-emerald-100";
+            icon = <FaCheck className="text-emerald-600 text-sm opacity-60" />;
         }
     }
 
     return (
-        <div className={`relative flex flex-col p-0 border rounded-lg transition-all mb-2 md:mb-3 overflow-hidden ${containerClass}`}>
-            {isRevealed && (
+        <div className={`relative flex flex-col p-0 border rounded-2xl transition-all mb-3 overflow-hidden shadow-sm ${containerClass}`}>
+            {isRevealed && percentage > 0 && (
                 <div 
-                    className={`absolute top-0 left-0 h-full opacity-10 transition-all duration-1000 ${isCorrectOption ? 'bg-emerald-500' : (isSelected ? 'bg-rose-500' : 'bg-slate-400')}`}
-                    style={{ width: `${percentage}%`, opacity: 0.15 }}
+                    className={`absolute top-0 left-0 h-full opacity-10 transition-all duration-1000 ease-out rounded-l-2xl ${isCorrectOption ? 'bg-emerald-500' : (isSelected ? 'bg-rose-500' : 'bg-slate-400')}`}
+                    style={{ width: `${percentage}%` }}
                 />
             )}
             
-            {/* UPDATED: Reduced padding (p-3) and Text Size (text-sm md:text-base) */}
-            <div className="relative z-10 flex items-center p-3 sm:p-4">
-                <div className={`flex-shrink-0 h-6 w-6 md:h-7 md:w-7 flex items-center justify-center rounded-full border mr-3 bg-white ${labelClass}`}>
-                    {icon || <span className="text-[10px] md:text-xs font-bold">{label}</span>}
+            <div className="relative z-10 flex items-center p-4">
+                <div className={`flex-shrink-0 h-8 w-8 flex items-center justify-center rounded-xl border mr-4 shadow-sm ${labelClass}`}>
+                    {icon || <span className="text-xs font-extrabold">{label}</span>}
                 </div>
-                <span className={`text-sm md:text-base text-slate-800 flex-1 leading-relaxed ${isSelected && !isRevealed ? 'font-medium' : ''} ${isRevealed && (isSelected || isCorrectOption) ? 'font-medium' : ''}`}>{text}</span>
+                <span className={`text-[15px] text-slate-800 flex-1 leading-relaxed ${isRevealed && (isSelected || isCorrectOption) ? 'font-bold' : 'font-medium'}`}>{text}</span>
                 
                 {isRevealed && (
-                    <div className="flex flex-col items-end ml-2">
-                        {percentage > 0 && <span className="text-[10px] md:text-xs font-bold text-slate-500 mb-1">{percentage}%</span>}
+                    <div className="flex flex-col items-end ml-4 gap-1.5">
+                        {percentage > 0 && <span className="text-xs font-extrabold text-slate-500">{percentage}%</span>}
                         {isToppersChoice && !isCorrectOption && (
-                            <div className="flex items-center text-[9px] md:text-[10px] font-bold text-amber-600 bg-amber-100 px-1.5 py-0.5 rounded-full border border-amber-200 whitespace-nowrap">
-                                 <FaStar className="mr-1" /> Top
+                            <div className="flex items-center text-[10px] font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full border border-amber-200">
+                                 <FaStar className="mr-1 text-amber-500" /> Top Choice
                             </div>
                         )}
                     </div>
@@ -412,7 +366,6 @@ const AnswerOption = ({
 
 const AnalysisView = ({ test, attempt, allAttempts, onBack, toggleFullscreen, isFullscreen, onDashboard }) => {
     const [currentQuestion, setCurrentQuestion] = useState({ secIdx: 0, qIdx: 0 });
-    const [showSolution, setShowSolution] = useState(false);
     const [mobileView, setMobileView] = useState('question');
     const [stats, setStats] = useState(null);
     const [showCorrectAnswerHighlight, setShowCorrectAnswerHighlight] = useState(false); 
@@ -433,10 +386,9 @@ const AnalysisView = ({ test, attempt, allAttempts, onBack, toggleFullscreen, is
 
     useEffect(() => {
         setShowCorrectAnswerHighlight(false);
-        setShowSolution(false);
     }, [currentQuestion]);
 
-    // --- Analytics Logic ---
+    // Analytics processing
     useEffect(() => {
         if (!allAttempts || allAttempts.length === 0) return;
 
@@ -519,19 +471,6 @@ const AnalysisView = ({ test, attempt, allAttempts, onBack, toggleFullscreen, is
             ? String(userAnswer).toLowerCase() === String(activeQuestion.correctOption).toLowerCase()
             : parseInt(userAnswer) === parseInt(activeQuestion.correctOption);
 
-        let insightMsg = { message: "Review this question carefully.", color: "gray" };
-        if (!isAttempted) {
-             if (difficulty === 'Easy') insightMsg = { message: "You skipped an 'Easy' question. Try to capitalize on these next time.", color: "yellow" };
-             else if (difficulty === 'Hard') insightMsg = { message: "Skipping this 'Hard' question was likely a good strategic choice.", color: "yellow" };
-             else insightMsg = { message: "You skipped this question.", color: "gray" };
-        } else if (isUserCorrect) {
-            const timeDiff = toppersAvailable ? userTime - topperStats.time : -1;
-            if (timeDiff < 0) insightMsg = { message: "Great job! You answered faster than the toppers.", color: "green" };
-            else insightMsg = { message: "Correct answer! Consistent accuracy builds high scores.", color: "green" };
-        } else {
-             insightMsg = { message: `Incorrect. This was a '${difficulty}' question. Review the solution below.`, color: "red" };
-        }
-
         setStats({
             optionPercentages,
             topperStats,
@@ -545,7 +484,6 @@ const AnalysisView = ({ test, attempt, allAttempts, onBack, toggleFullscreen, is
             overallTimeTaken: overallTime,
             overallAccuracy: overallAccuracy,
             overallAttemptPercent: overallAttemptPercent,
-            insight: insightMsg,
             difficulty,
             toppersChoice: topperStats.mostCommonAnswer
         });
@@ -563,10 +501,7 @@ const AnalysisView = ({ test, attempt, allAttempts, onBack, toggleFullscreen, is
             : parseInt(userAnswer) === parseInt(activeQuestion.correctOption);
         
         statusText = isCorrect ? 'Correct' : 'Incorrect';
-        statusColor = isCorrect ? 'text-emerald-700 bg-emerald-50 border-emerald-200' : 'text-rose-700 bg-rose-50 border-rose-200';
-    } else {
-        statusText = 'Unattempted';
-        statusColor = 'text-slate-500 bg-slate-100 border-slate-200';
+        statusColor = isCorrect ? 'text-emerald-700 bg-emerald-50 border-emerald-300' : 'text-rose-700 bg-rose-50 border-rose-300';
     }
 
     const navigateTo = (secIdx, qIdx) => {
@@ -594,21 +529,21 @@ const AnalysisView = ({ test, attempt, allAttempts, onBack, toggleFullscreen, is
     };
 
     return (
-        <div className="flex flex-col h-screen bg-slate-50 relative overflow-hidden">
+        <div className="flex flex-col h-screen bg-slate-100 relative overflow-hidden">
             {/* Header */}
-            <div className="flex items-center justify-between px-4 py-3 bg-white border-b border-slate-200 shadow-sm z-30">
-                <div className="flex items-center gap-4">
-                    <button onClick={onBack} className="text-slate-500 hover:text-slate-800 font-medium flex items-center gap-2 px-2 py-1 rounded-md hover:bg-slate-100 transition-colors text-sm">
+            <div className="flex items-center justify-between px-6 py-4 bg-white border-b border-slate-200 shadow-sm z-30">
+                <div className="flex items-center gap-5">
+                    <button onClick={onBack} className="text-slate-500 hover:text-blue-600 font-bold flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-blue-50 transition-colors text-sm">
                         <FaArrowLeft /> <span className="hidden sm:inline">Summary</span>
                     </button>
                     <div className="h-6 w-px bg-slate-200 hidden sm:block"></div>
                     
-                    <div className="flex items-center gap-2 overflow-x-auto no-scrollbar max-w-[120px] sm:max-w-none">
+                    <div className="flex items-center gap-2 overflow-x-auto no-scrollbar max-w-[150px] sm:max-w-none">
                         {test.sections.map((sec, idx) => (
                             <button
                                 key={idx}
                                 onClick={() => navigateTo(idx, 0)}
-                                className={`px-4 py-1.5 text-sm rounded-full whitespace-nowrap transition-all ${currentQuestion.secIdx === idx ? 'bg-blue-600 text-white font-semibold shadow-md' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+                                className={`px-4 py-1.5 text-sm rounded-full whitespace-nowrap font-bold transition-all ${currentQuestion.secIdx === idx ? 'bg-blue-600 text-white shadow-md' : 'bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-700'}`}
                             >
                                 {sec.name}
                             </button>
@@ -619,17 +554,17 @@ const AnalysisView = ({ test, attempt, allAttempts, onBack, toggleFullscreen, is
                 <div className="flex items-center gap-3">
                     <button 
                         onClick={toggleFullscreen}
-                        className="p-2 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-md transition-colors"
+                        className="p-2.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-colors"
                         title={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}
                     >
-                        {isFullscreen ? <FaCompress /> : <FaExpand />}
+                        {isFullscreen ? <FaCompress className="text-lg"/> : <FaExpand className="text-lg"/>}
                     </button>
                     <button 
-        onClick={onDashboard}
-        className="hidden sm:flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-md transition-colors"
-    >
-        <FaTimes /> Dashboard
-    </button>
+                        onClick={onDashboard}
+                        className="hidden sm:flex items-center gap-2 px-4 py-2 text-sm font-bold text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors"
+                    >
+                        <FaTimes /> Exit
+                    </button>
                 </div>
             </div>
 
@@ -639,64 +574,65 @@ const AnalysisView = ({ test, attempt, allAttempts, onBack, toggleFullscreen, is
                 {/* 1. Passage Panel */}
                 {hasPassage && (
                     <div className={`
-                        bg-white p-6 lg:p-8 overflow-y-auto border-r border-slate-200 border-b md:border-b-0 scrollbar-thin scrollbar-thumb-slate-300
+                        bg-white p-6 lg:p-10 overflow-y-auto border-r border-slate-200 shadow-sm
                         ${mobileView === 'passage' ? 'flex flex-col flex-1' : 'hidden md:flex'}
-                        ${hasPassage ? 'md:w-[45%] shrink-0' : ''} 
+                        ${hasPassage ? 'md:w-5/12 shrink-0' : ''} 
                     `}>
-                        {activeQuestion.passage && <div className="prose prose-sm md:prose-lg max-w-none text-slate-800 whitespace-pre-wrap mb-6 leading-relaxed">{activeQuestion.passage}</div>}
-        
-        {activeQuestion.passageImageUrls?.map((url, i) => (
-            <img key={i} src={url} alt={`Passage ${i}`} className="rounded-lg max-w-full mt-4 border border-slate-200 shadow-sm"/>
-        ))}
+                        {activeQuestion.passage && <div className="prose prose-slate prose-p:leading-loose max-w-none text-slate-700 whitespace-pre-wrap mb-8 font-medium">{activeQuestion.passage}</div>}
+                        {activeQuestion.passageImageUrls?.map((url, i) => (
+                            <img key={i} src={url} alt={`Passage ${i}`} className="rounded-xl max-w-full mt-4 border border-slate-200 shadow-sm"/>
+                        ))}
                     </div>
                 )}
 
                 {/* 2. Question Panel */}
                 <div className={`
-                    bg-slate-50 p-4 md:p-6 overflow-y-auto scrollbar-thin scrollbar-thumb-slate-300
+                    bg-slate-50/50 p-4 md:p-8 overflow-y-auto
                     ${mobileView === 'question' ? 'flex flex-col flex-1' : 'hidden md:flex'}
                     ${hasPassage ? 'md:flex-1' : 'w-full'} 
                 `}>
-                    <div className="max-w-3xl mx-auto w-full">
+                    <div className="max-w-4xl mx-auto w-full">
                         
-                        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6">
-                            <div className="flex justify-between items-start mb-4">
-                                <div className="flex items-center gap-2">
-                                    <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wider">Question {currentQuestion.qIdx + 1}</h3>
+                        <div className="bg-white rounded-3xl shadow-sm border border-slate-200/80 p-6 md:p-8 mb-8">
+                            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-6">
+                                <div className="flex items-center gap-3">
+                                    <div className="bg-slate-100 px-3 py-1.5 rounded-lg">
+                                        <span className="text-sm font-extrabold text-slate-600 uppercase tracking-wider">Q. {currentQuestion.qIdx + 1}</span>
+                                    </div>
                                     {stats?.difficulty && showCorrectAnswerHighlight && (
-                                        <span className={`px-2 py-0.5 rounded text-xs font-bold 
-                                            ${stats.difficulty === 'Easy' ? 'bg-emerald-100 text-emerald-800' : 
-                                              stats.difficulty === 'Medium' ? 'bg-amber-100 text-amber-800' : 
-                                              'bg-rose-100 text-rose-800'}`}>
+                                        <span className={`px-2.5 py-1 rounded-md text-[11px] font-extrabold uppercase tracking-wider border
+                                            ${stats.difficulty === 'Easy' ? 'bg-emerald-50 text-emerald-600 border-emerald-200' : 
+                                              stats.difficulty === 'Medium' ? 'bg-amber-50 text-amber-600 border-amber-200' : 
+                                              'bg-rose-50 text-rose-600 border-rose-200'}`}>
                                             {stats.difficulty}
                                         </span>
                                     )}
                                 </div>
-                                <div className="flex items-center gap-2">
-                                    <span className={`px-2 py-1 rounded text-xs font-bold border ${statusColor}`}>
+                                <div className="flex items-center gap-2 self-start sm:self-auto">
+                                    <span className={`px-3 py-1 rounded-lg text-xs font-bold border ${statusColor}`}>
                                         {statusText}
                                     </span>
-                                    <span className="text-xs font-semibold text-slate-500 bg-slate-100 px-2 py-1 rounded">{activeQuestion.type}</span>
+                                    <span className="text-xs font-extrabold text-slate-500 bg-slate-100 px-3 py-1 rounded-lg uppercase tracking-wider">{activeQuestion.type}</span>
                                 </div>
                             </div>
                             
-                            <p className="text-lg text-slate-900 whitespace-pre-wrap mb-8 leading-relaxed font-medium">{activeQuestion.questionText}</p>
+                            <p className="text-lg md:text-xl text-slate-800 whitespace-pre-wrap mb-8 leading-relaxed font-semibold">{activeQuestion.questionText}</p>
                             
                             {activeQuestion.questionImageUrls?.map((url, i) => (
-                                <img key={i} src={url} alt={`Question ${i}`} className="mb-6 rounded-lg max-w-full border border-gray-200 shadow-sm"/>
+                                <img key={i} src={url} alt={`Question ${i}`} className="mb-8 rounded-xl max-w-full border border-slate-200 shadow-sm"/>
                             ))}
 
                             <div className="space-y-3">
                                 {activeQuestion.type === 'TITA' ? (
-                                    <div>
-                                        <div className={`p-4 rounded-lg border mb-4 ${userAnswer ? 'bg-blue-50 border-blue-200' : 'bg-slate-50 border-slate-200'}`}>
-                                            <span className="text-sm text-slate-500 block mb-1">Your Answer:</span>
-                                            <span className="font-mono text-lg font-bold text-slate-800">{userAnswer || '(No Answer)'}</span>
+                                    <div className="grid gap-4">
+                                        <div className={`p-5 rounded-2xl border ${userAnswer ? 'bg-blue-50 border-blue-200' : 'bg-slate-50 border-slate-200'}`}>
+                                            <span className="text-xs font-bold text-slate-400 uppercase tracking-widest block mb-2">Your Answer</span>
+                                            <span className="font-mono text-xl font-bold text-slate-800">{userAnswer || '(No Answer)'}</span>
                                         </div>
                                         {showCorrectAnswerHighlight && (
-                                            <div className="p-4 bg-emerald-50 rounded-lg border border-emerald-200">
-                                                <span className="text-sm text-emerald-700 block mb-1">Correct Answer:</span>
-                                                <span className="font-mono text-lg font-bold text-emerald-900">{activeQuestion.correctOption}</span>
+                                            <div className="p-5 bg-emerald-50 rounded-2xl border border-emerald-200">
+                                                <span className="text-xs font-bold text-emerald-600/70 uppercase tracking-widest block mb-2">Correct Answer</span>
+                                                <span className="font-mono text-xl font-bold text-emerald-700">{activeQuestion.correctOption}</span>
                                             </div>
                                         )}
                                     </div>
@@ -718,27 +654,28 @@ const AnalysisView = ({ test, attempt, allAttempts, onBack, toggleFullscreen, is
                         </div>
 
                         {/* Analysis Footer */}
-                        <div className="mb-6">
+                        <div className="mb-12">
                             {!showCorrectAnswerHighlight ? (
-                                <Button onClick={() => setShowCorrectAnswerHighlight(true)} className="w-full bg-slate-800 text-white hover:bg-slate-700 py-3 text-base shadow-md">
-                                    <FaEye className="mr-2" /> Reveal Answer & Explanation
+                                <Button onClick={() => setShowCorrectAnswerHighlight(true)} className="w-full bg-slate-800 text-white hover:bg-slate-700 py-4 text-base shadow-lg shadow-slate-200 rounded-2xl">
+                                    <FaEye className="mr-2 text-lg" /> Reveal Solution & Analysis
                                 </Button>
                             ) : (
                                 <div className="animate-fade-in-up">
-                                    {stats && <KeyInsightsCard insights={stats.insight} />}
-                                    
                                     <AnimatePresence>
                                         <motion.div 
                                             initial={{ opacity: 0, y: 10 }} 
                                             animate={{ opacity: 1, y: 0 }} 
                                             exit={{ opacity: 0, y: 10 }}
-                                            className="p-6 bg-blue-50 rounded-xl border border-blue-100 shadow-inner mb-6"
+                                            className="p-6 md:p-8 bg-white rounded-3xl border border-slate-200/80 shadow-sm mb-8"
                                         >
-                                            <h4 className="font-bold text-blue-900 mb-3 flex items-center gap-2 text-base"><FaFilter className="text-blue-500"/> Explanation</h4>
-                                            <div className="text-blue-900 whitespace-pre-wrap leading-relaxed prose prose-blue max-w-none text-base">{activeQuestion.solution}</div>
+                                            <h4 className="font-extrabold text-slate-800 mb-6 flex items-center gap-3 text-lg">
+                                                <div className="p-2 bg-blue-100 text-blue-600 rounded-lg"><FaFilter /></div> 
+                                                Solution Explanation
+                                            </h4>
+                                            <div className="text-slate-600 whitespace-pre-wrap leading-relaxed prose prose-slate prose-p:leading-loose max-w-none font-medium">{activeQuestion.solution}</div>
                                             
                                             {activeQuestion.solutionImageUrls?.map((url, i) => (
-                                                <img key={i} src={url} alt={`Solution ${i}`} className="mt-4 rounded-lg max-w-full border border-blue-200 shadow-sm"/>
+                                                <img key={i} src={url} alt={`Solution ${i}`} className="mt-6 rounded-xl max-w-full border border-slate-200 shadow-sm"/>
                                             ))}
                                         </motion.div>
                                     </AnimatePresence>
@@ -748,7 +685,7 @@ const AnalysisView = ({ test, attempt, allAttempts, onBack, toggleFullscreen, is
                     </div>
                 </div>
 
-                {/* 3. Palette Panel (Stats Visible at Bottom) */}
+                {/* 3. Palette Panel */}
                 <div className={`
                     bg-white border-l border-slate-200 shadow-xl
                     ${mobileView === 'palette' ? 'flex flex-col w-full' : 'hidden md:flex md:w-80'}
@@ -766,43 +703,43 @@ const AnalysisView = ({ test, attempt, allAttempts, onBack, toggleFullscreen, is
             </div>
 
             {/* Desktop Bottom Bar */}
-            <div className="hidden md:flex bg-white border-t border-slate-200 p-3 justify-between items-center z-30 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
-                <button onClick={handlePrev} className="px-5 py-2.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold flex items-center gap-2 transition-colors">
-                    <FaChevronLeft /> <span>Previous</span>
-                </button>
-                <div className="text-sm font-medium text-slate-500">
-                    Question <span className="font-bold text-slate-800">{currentQuestion.qIdx + 1}</span> of {activeSection.questions.length}
+            <div className="hidden md:flex bg-white border-t border-slate-200 p-4 justify-between items-center z-30">
+                <Button onClick={handlePrev} className="px-6 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700">
+                    <FaChevronLeft className="text-xs" /> Previous
+                </Button>
+                <div className="text-sm font-bold text-slate-400 uppercase tracking-widest">
+                    Question <span className="text-slate-800 mx-1">{currentQuestion.qIdx + 1}</span> of {activeSection.questions.length}
                 </div>
-                <button onClick={handleNext} className="px-5 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold flex items-center gap-2 transition-colors shadow-md shadow-blue-100">
-                    <span>Next</span> <FaChevronRight />
-                </button>
+                <Button onClick={handleNext} className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white shadow-md shadow-blue-500/20">
+                    Next <FaChevronRight className="text-xs" />
+                </Button>
             </div>
 
              {/* Mobile Sticky Footer */}
-             <div className="md:hidden flex flex-col z-50">
-                <div className="flex justify-between items-center p-3 bg-white border-t border-slate-200">
-                    <Button onClick={handlePrev} className="bg-slate-100 text-slate-800 text-sm py-2"><FaChevronLeft /></Button>
-                    <span className="text-sm font-bold text-slate-500">Q {currentQuestion.qIdx + 1}</span>
-                    <Button onClick={handleNext} className="bg-slate-800 text-white text-sm py-2"><FaChevronRight /></Button>
+             <div className="md:hidden flex flex-col z-50 bg-white">
+                <div className="flex justify-between items-center p-3 border-t border-slate-200 shadow-[0_-4px_10px_rgba(0,0,0,0.02)]">
+                    <Button onClick={handlePrev} className="bg-slate-100 text-slate-700 py-3 px-5 rounded-xl"><FaChevronLeft /></Button>
+                    <span className="text-xs font-extrabold text-slate-400 uppercase tracking-widest">Q {currentQuestion.qIdx + 1}</span>
+                    <Button onClick={handleNext} className="bg-blue-600 text-white py-3 px-5 rounded-xl shadow-md shadow-blue-500/20"><FaChevronRight /></Button>
                 </div>
-                <div className="flex bg-slate-900 text-slate-300">
+                <div className="flex bg-slate-50 border-t border-slate-200 text-slate-500">
                     {hasPassage && (
                         <button 
                             onClick={() => setMobileView('passage')} 
-                            className={`flex-1 py-3 text-xs font-bold uppercase flex flex-col items-center gap-1 ${mobileView === 'passage' ? 'bg-slate-800 text-white border-t-2 border-blue-500' : ''}`}
+                            className={`flex-1 py-3 text-[10px] font-extrabold uppercase tracking-wider flex flex-col items-center gap-1.5 transition-colors ${mobileView === 'passage' ? 'text-blue-600 bg-blue-50/50' : 'hover:bg-slate-100'}`}
                         >
                             <FaBookOpen className="text-lg" /> Passage
                         </button>
                     )}
                     <button 
                         onClick={() => setMobileView('question')} 
-                        className={`flex-1 py-3 text-xs font-bold uppercase flex flex-col items-center gap-1 ${mobileView === 'question' ? 'bg-slate-800 text-white border-t-2 border-blue-500' : ''}`}
+                        className={`flex-1 py-3 text-[10px] font-extrabold uppercase tracking-wider flex flex-col items-center gap-1.5 transition-colors ${mobileView === 'question' ? 'text-blue-600 bg-blue-50/50' : 'hover:bg-slate-100'}`}
                     >
                         <FaQuestionCircle className="text-lg"/> Question
                     </button>
                     <button 
                         onClick={() => setMobileView('palette')} 
-                        className={`flex-1 py-3 text-xs font-bold uppercase flex flex-col items-center gap-1 ${mobileView === 'palette' ? 'bg-slate-800 text-white border-t-2 border-blue-500' : ''}`}
+                        className={`flex-1 py-3 text-[10px] font-extrabold uppercase tracking-wider flex flex-col items-center gap-1.5 transition-colors ${mobileView === 'palette' ? 'text-blue-600 bg-blue-50/50' : 'hover:bg-slate-100'}`}
                     >
                         <FaTh className="text-lg"/> Palette
                     </button>
@@ -924,20 +861,22 @@ const ResultAnalysis = ({ navigate, attemptId }) => {
     }, [attempt, attemptId, analysisData]);
 
     if (loading) return <div className="flex items-center justify-center h-screen bg-slate-50"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div></div>;
-    if (!attempt || !test) return <div className="text-center text-rose-500 p-8">Could not load analysis data.</div>;
+    if (!attempt || !test) return <div className="text-center text-rose-500 p-8 font-semibold">Could not load analysis data.</div>;
     
     return (
-        <div ref={analysisContainerRef} className="min-h-screen bg-gray-50 text-gray-800 font-sans flex flex-col">
+        <div ref={analysisContainerRef} className="min-h-screen bg-slate-50 text-slate-800 font-sans flex flex-col">
             {activeTab !== 'analysis' && (
                 <div className="bg-white shadow-sm border-b border-slate-200 sticky top-0 z-20">
-                    <div className="max-w-7xl mx-auto px-4">
-                        <div className="flex justify-between items-center h-14 md:h-16">
-                            <h1 className="text-lg font-bold text-slate-800 truncate pr-4 hidden sm:block">{test.title} Analysis</h1>
-                            <div className="flex space-x-1 bg-slate-100 p-1 rounded-lg">
-                                <button onClick={() => setActiveTab('summary')} className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${activeTab === 'summary' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Summary</button>
-                                <button onClick={() => setActiveTab('leaderboard')} className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${activeTab === 'leaderboard' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Leaderboard</button>
+                    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                        <div className="flex justify-between items-center h-16 md:h-20">
+                            <h1 className="text-lg md:text-xl font-extrabold text-slate-800 truncate pr-4 hidden sm:block">{test.title} Analysis</h1>
+                            <div className="flex space-x-1 bg-slate-100/80 p-1.5 rounded-xl border border-slate-200/50">
+                                <button onClick={() => setActiveTab('summary')} className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'summary' ? 'bg-white text-blue-600 shadow-sm border border-slate-200/50' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'}`}>Summary</button>
+                                <button onClick={() => setActiveTab('leaderboard')} className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === 'leaderboard' ? 'bg-white text-blue-600 shadow-sm border border-slate-200/50' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'}`}>Leaderboard</button>
                             </div>
-                            <button onClick={() => navigate('home')} className="ml-4 text-sm font-medium text-slate-500 hover:text-slate-800 flex items-center gap-1"><FaTimes /> Exit</button>
+                            <button onClick={() => navigate('home')} className="ml-4 text-sm font-bold text-slate-400 hover:text-rose-600 bg-slate-50 hover:bg-rose-50 px-4 py-2 rounded-xl transition-colors flex items-center gap-2">
+                                <FaTimes /> Exit
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -955,87 +894,92 @@ const ResultAnalysis = ({ navigate, attemptId }) => {
                         onDashboard={() => navigate('home')}
                     />
                 ) : activeTab === 'leaderboard' ? (
-                    <div className="max-w-4xl mx-auto px-4 py-8 w-full animate-fade-in-up">
+                    <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8 md:py-12 w-full animate-fade-in-up">
                         <LeaderboardView leaderboardData={allAttempts} currentUserId={userData?.uid} />
                     </div>
                 ) : (
-                    <div className="max-w-7xl mx-auto px-4 py-8 w-full animate-fade-in-up">
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-                            <PerformanceMetric label="Total Score" value={analysisData.totalScore} color="text-blue-600" icon={FaTrophy} />
-                            <PerformanceMetric label="Accuracy" value={`${analysisData.overallAccuracy}%`} color="text-emerald-600" icon={FaChartPie} />
-                            <PerformanceMetric label="Attempted" value={`${analysisData.totalAttempted}/${analysisData.totalQuestions}`} color="text-violet-600" icon={FaListOl} />
-                            <PerformanceMetric label="Time Taken" value={`${Math.round(analysisData.totalTime / 60)} min`} color="text-slate-600" icon={FaClock} />
+                    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 md:py-12 w-full animate-fade-in-up">
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6 mb-10">
+                            <PerformanceMetric label="Total Score" value={analysisData.totalScore} colorClass="text-blue-600" iconBgClass="bg-blue-50" icon={FaTrophy} />
+                            <PerformanceMetric label="Accuracy" value={`${analysisData.overallAccuracy}%`} colorClass="text-emerald-500" iconBgClass="bg-emerald-50" icon={FaChartPie} />
+                            <PerformanceMetric label="Attempted" value={`${analysisData.totalAttempted}/${analysisData.totalQuestions}`} colorClass="text-violet-500" iconBgClass="bg-violet-50" icon={FaListOl} />
+                            <PerformanceMetric label="Time Taken" value={`${Math.round(analysisData.totalTime / 60)} min`} colorClass="text-amber-500" iconBgClass="bg-amber-50" icon={FaClock} />
                         </div>
 
-                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-                            <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-100 lg:col-span-2">
-                                <h3 className="font-bold text-slate-700 mb-6 flex items-center text-base"><FaChartPie className="mr-2 text-slate-400 text-lg"/> Attempt Breakdown</h3>
+                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-10">
+                            <div className="bg-white p-6 md:p-8 rounded-3xl shadow-sm border border-slate-200/60 lg:col-span-2">
+                                <h3 className="font-extrabold text-slate-800 mb-6 flex items-center text-lg gap-3">
+                                    <div className="p-2 bg-slate-100 rounded-lg text-slate-500"><FaChartPie /></div> 
+                                    Attempt Breakdown
+                                </h3>
                                 <div className="h-64 w-full">
                                     <ResponsiveContainer width="100%" height="100%">
                                         <PieChart>
                                             <Pie
                                                 data={[
                                                     { name: 'Correct', value: analysisData.totalCorrect, color: '#10b981' },
-                                                    { name: 'Incorrect', value: analysisData.totalIncorrect, color: '#ef4444' },
+                                                    { name: 'Incorrect', value: analysisData.totalIncorrect, color: '#f43f5e' },
                                                     { name: 'Unattempted', value: analysisData.totalQuestions - analysisData.totalAttempted, color: '#e2e8f0' }
                                                 ]}
-                                                cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5}
+                                                cx="50%" cy="50%" innerRadius={65} outerRadius={85} paddingAngle={5}
                                                 dataKey="value"
+                                                stroke="none"
                                             >
                                                 {[
                                                     { name: 'Correct', value: analysisData.totalCorrect, color: '#10b981' },
-                                                    { name: 'Incorrect', value: analysisData.totalIncorrect, color: '#ef4444' },
+                                                    { name: 'Incorrect', value: analysisData.totalIncorrect, color: '#f43f5e' },
                                                     { name: 'Unattempted', value: analysisData.totalQuestions - analysisData.totalAttempted, color: '#e2e8f0' }
                                                 ].map((entry, index) => (
                                                     <Cell key={`cell-${index}`} fill={entry.color} />
                                                 ))}
                                             </Pie>
-                                            <RechartsTooltip />
-                                            <Legend verticalAlign="bottom" height={36}/>
+                                            <RechartsTooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
+                                            <Legend verticalAlign="bottom" height={36} iconType="circle" wrapperStyle={{ fontSize: '12px', fontWeight: 'bold', color: '#64748b' }}/>
                                         </PieChart>
                                     </ResponsiveContainer>
                                 </div>
                             </div>
 
-                            <div className="bg-gradient-to-br from-blue-600 to-indigo-700 p-6 rounded-xl shadow-lg text-white flex flex-col justify-between transform transition-all hover:scale-[1.02]">
-                                <div>
-                                    <h3 className="text-xl font-bold mb-2">Deep Dive Analysis</h3>
-                                    <p className="text-blue-100 text-sm mb-6 leading-relaxed">Review every question in detail. See solutions, check your time, and understand where you can improve.</p>
+                            <div className="bg-gradient-to-br from-indigo-600 via-blue-600 to-sky-500 p-8 rounded-3xl shadow-lg text-white flex flex-col justify-center relative overflow-hidden group">
+                                <div className="absolute top-0 right-0 -mt-4 -mr-4 w-32 h-32 bg-white opacity-10 rounded-full blur-2xl group-hover:scale-150 transition-transform duration-700"></div>
+                                <div className="relative z-10">
+                                    <h3 className="text-2xl font-extrabold mb-3 leading-tight">Deep Dive Analysis</h3>
+                                    <p className="text-blue-100 text-sm mb-8 leading-relaxed font-medium">Review every question in detail. See solutions, check your time, and understand exactly where you can improve.</p>
+                                    <Button 
+                                        onClick={() => setActiveTab('analysis')}
+                                        className="w-full bg-white text-blue-600 py-3.5 hover:bg-blue-50 shadow-xl shadow-blue-900/20"
+                                    >
+                                        <FaListOl className="text-lg" /> Start Question Analysis
+                                    </Button>
                                 </div>
-                                <button 
-                                    onClick={() => setActiveTab('analysis')}
-                                    className="w-full bg-white text-blue-600 font-bold py-3 rounded-lg hover:bg-blue-50 transition-colors flex items-center justify-center gap-2 shadow-lg text-sm"
-                                >
-                                    <FaListOl className="text-lg mr-2" /> Start Question Analysis
-                                </button>
                             </div>
                         </div>
 
-                        <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
-                            <div className="p-6 border-b border-slate-100">
-                                <h3 className="font-bold text-slate-700 text-base">Sectional Performance</h3>
+                        <div className="bg-white rounded-3xl shadow-sm border border-slate-200/60 overflow-hidden">
+                            <div className="p-6 md:p-8 border-b border-slate-100">
+                                <h3 className="font-extrabold text-slate-800 text-lg">Sectional Performance</h3>
                             </div>
                             <div className="overflow-x-auto">
                                 <table className="w-full text-left text-sm text-slate-600">
-                                    <thead className="bg-slate-50 text-xs uppercase font-semibold text-slate-500">
+                                    <thead className="bg-slate-50 text-[11px] uppercase font-extrabold text-slate-400 tracking-wider border-b border-slate-100">
                                         <tr>
                                             <th className="px-6 py-4">Section</th>
                                             <th className="px-6 py-4 text-center">Score</th>
                                             <th className="px-6 py-4 text-center">Accuracy</th>
                                             <th className="px-6 py-4 text-center">Attempts</th>
-                                            <th className="px-6 py-4 text-center text-green-600">Correct</th>
-                                            <th className="px-6 py-4 text-center text-red-600">Wrong</th>
+                                            <th className="px-6 py-4 text-center text-emerald-500">Correct</th>
+                                            <th className="px-6 py-4 text-center text-rose-500">Wrong</th>
                                         </tr>
                                     </thead>
-                                    <tbody className="divide-y divide-slate-100">
+                                    <tbody className="divide-y divide-slate-100/80">
                                         {analysisData.sectionWise.map((section, idx) => (
-                                            <tr key={idx} className="hover:bg-slate-50 transition-colors">
-                                                <td className="px-6 py-4 font-medium text-slate-800">{section.name}</td>
-                                                <td className="px-6 py-4 text-center font-bold text-blue-600">{section.score}</td>
-                                                <td className="px-6 py-4 text-center">{section.accuracy}%</td>
-                                                <td className="px-6 py-4 text-center">{section.attempted}/{section.questions}</td>
-                                                <td className="px-6 py-4 text-center text-green-600 font-medium">{section.correct}</td>
-                                                <td className="px-6 py-4 text-center text-red-500 font-medium">{section.incorrect}</td>
+                                            <tr key={idx} className="hover:bg-slate-50/50 transition-colors">
+                                                <td className="px-6 py-5 font-bold text-slate-800">{section.name}</td>
+                                                <td className="px-6 py-5 text-center font-extrabold text-blue-600 text-base">{section.score}</td>
+                                                <td className="px-6 py-5 text-center font-semibold">{section.accuracy}%</td>
+                                                <td className="px-6 py-5 text-center font-medium">{section.attempted}/{section.questions}</td>
+                                                <td className="px-6 py-5 text-center text-emerald-500 font-bold">{section.correct}</td>
+                                                <td className="px-6 py-5 text-center text-rose-500 font-bold">{section.incorrect}</td>
                                             </tr>
                                         ))}
                                     </tbody>
@@ -1045,6 +989,13 @@ const ResultAnalysis = ({ navigate, attemptId }) => {
                     </div>
                 )}
             </div>
+            <style jsx global>{`
+                @keyframes fade-in-up {
+                    0% { opacity: 0; transform: translateY(20px); }
+                    100% { opacity: 1; transform: translateY(0); }
+                }
+                .animate-fade-in-up { animation: fade-in-up 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+            `}</style>
         </div>
     );
 };
