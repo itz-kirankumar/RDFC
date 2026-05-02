@@ -1,18 +1,36 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
     FaTicketAlt, FaUsers, FaListAlt, FaChartLine, FaTags, 
     FaStar, FaSpellCheck, FaSitemap, FaLink, FaBook 
 } from 'react-icons/fa';
+import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import { db } from '../firebase/config';
 
 const AdminDashboard = ({ navigate }) => {
+    const [openTicketsCount, setOpenTicketsCount] = useState(0);
+
+    useEffect(() => {
+        const q = query(collection(db, 'supportTickets'), where('status', '==', 'open'));
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            setOpenTicketsCount(snapshot.docs.length);
+        });
+        return () => unsubscribe();
+    }, []);
     
-    const DashboardCard = ({ onClick, title, description, icon, iconBgColor }) => (
+    const DashboardCard = ({ onClick, title, description, icon, iconBgColor, badgeCount }) => (
         <div className="dashboard-card-glow relative h-full">
             <button 
                 onClick={onClick} 
                 className="relative w-full h-full p-6 bg-slate-800/60 backdrop-blur-md border border-slate-700/80 rounded-xl 
                            shadow-lg hover:border-slate-600 transition-all duration-300 text-left flex flex-col overflow-hidden"
             >
+                {/* Notification Badge */}
+                {badgeCount > 0 && (
+                    <span className="absolute top-3 right-3 flex h-6 w-6 items-center justify-center rounded-full bg-red-500 text-xs font-bold text-white shadow-lg animate-pulse ring-4 ring-red-500/20">
+                        {badgeCount}
+                    </span>
+                )}
+
                 <div className="flex-shrink-0">
                     <div className={`w-14 h-14 rounded-lg flex items-center justify-center ${iconBgColor}`}>
                         {icon}
@@ -37,17 +55,12 @@ const AdminDashboard = ({ navigate }) => {
                     <p className="mt-2 text-lg text-slate-400">Welcome back! Manage your platform from here.</p>
                 </header>
 
-                {/* LAYOUT CHANGE: Main grid is now a balanced 2-column layout on extra-large screens */}
                 <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
-                    
-                    {/* Section 1: Content & Test Management */}
                     <section>
                         <div className="p-6 bg-slate-800/40 rounded-xl border border-slate-700/60 h-full">
                             <h2 className="text-2xl font-semibold text-slate-200 mb-6">Content & Test Management</h2>
-                            {/* LAYOUT CHANGE: Sub-grid is now consistently 2 columns to avoid gaps */}
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                 
-                                {/* LAYOUT CHANGE: "Test Manager" spans 2 columns for emphasis and to fill the grid */}
                                 <div className="md:col-span-2">
                                     <DashboardCard 
                                         onClick={() => navigate('manageTests')} 
@@ -90,14 +103,11 @@ const AdminDashboard = ({ navigate }) => {
                         </div>
                     </section>
 
-                    {/* Section 2: Business & Users */}
                     <section>
                         <div className="p-6 bg-slate-800/40 rounded-xl border border-slate-700/60 h-full">
                             <h2 className="text-2xl font-semibold text-slate-200 mb-6">Business & Users</h2>
-                            {/* LAYOUT CHANGE: Sub-grid is now consistently 2 columns */}
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
 
-                                {/* LAYOUT CHANGE: "Plan Access Mapper" spans 2 columns for emphasis */}
                                 <div className="md:col-span-2">
                                     <DashboardCard 
                                     onClick={() => navigate('earnings')} 
@@ -135,6 +145,7 @@ const AdminDashboard = ({ navigate }) => {
                                     description="View and respond to user support tickets."
                                     icon={<FaTicketAlt className="text-white text-2xl"/>}
                                     iconBgColor="bg-cyan-600"
+                                    badgeCount={openTicketsCount}
                                 />
                             </div>
                         </div>

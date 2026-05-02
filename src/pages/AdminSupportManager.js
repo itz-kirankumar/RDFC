@@ -4,8 +4,6 @@ import { db } from '../firebase/config';
 import { useAuth } from '../contexts/AuthContext';
 import { PaperAirplaneIcon, CheckCircleIcon, ArrowLeftIcon, TicketIcon, InboxIcon, UserCircleIcon } from '@heroicons/react/24/solid';
 
-// --- Reusable UI Sub-Components ---
-
 const Spinner = () => (
     <div className="flex h-full items-center justify-center p-8 text-gray-500">
         <svg className="h-8 w-8 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -36,17 +34,20 @@ const StatusBadge = ({ status }) => {
     );
 };
 
-// --- Main Display Components ---
-
 const TicketListItem = ({ ticket, isSelected, onSelect }) => {
     const userName = ticket.userName || ticket.userEmail;
     return (
         <div
             onClick={() => onSelect(ticket)}
-            className={`mb-2 cursor-pointer rounded-lg border-l-4 p-3 transition-all duration-200 ${isSelected ? 'border-blue-500 bg-slate-700/50' : 'border-transparent bg-slate-800/50 hover:bg-slate-700/50'}`}
+            className={`relative mb-2 cursor-pointer rounded-lg border-l-4 p-3 transition-all duration-200 ${isSelected ? 'border-blue-500 bg-slate-700/50' : 'border-transparent bg-slate-800/50 hover:bg-slate-700/50'}`}
         >
-            <div className="flex items-center justify-between gap-2">
-                <p className="truncate pr-2 font-bold text-white">{ticket.subject}</p>
+            {/* Pulsing indicator for Admin if ticket is open */}
+            {ticket.status === 'open' && (
+                <span className="absolute top-0 right-0 -mt-1 -mr-1 flex h-3 w-3 rounded-full bg-red-500 ring-2 ring-slate-800 animate-pulse" title="Action Required"></span>
+            )}
+            
+            <div className="flex items-center justify-between gap-2 pr-3">
+                <p className="truncate font-bold text-white">{ticket.subject}</p>
                 <StatusBadge status={ticket.status} />
             </div>
             <div className="mt-2 flex items-center gap-2">
@@ -68,7 +69,7 @@ const TicketDetail = ({ ticket, onClose, onReply, onResolve }) => {
 
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }, [ticket?.messages]); // Reruns whenever messages array changes
+    }, [ticket?.messages]); 
 
     const handleReply = () => {
         onReply(replyText);
@@ -167,15 +168,13 @@ const TicketList = ({ displayTickets, allTickets, filter, setFilter, selectedTic
     );
 };
 
-// --- Main Admin Manager Component ---
-
 const AdminSupportManager = ({ navigate }) => {
     const [tickets, setTickets] = useState([]);
     const [loading, setLoading] = useState(true);
     const [selectedTicket, setSelectedTicket] = useState(null);
     const [filter, setFilter] = useState('open');
     const { userData } = useAuth();
-    const isInitialLoad = useRef(true); // Use a ref to track the initial data load
+    const isInitialLoad = useRef(true); 
 
     useEffect(() => {
         const q = query(collection(db, 'supportTickets'), orderBy('updatedAt', 'desc'));
@@ -183,22 +182,15 @@ const AdminSupportManager = ({ navigate }) => {
             const fetchedTickets = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
             setTickets(fetchedTickets);
 
-            // Use the functional update form to avoid stale state in the listener's closure
             setSelectedTicket(currentSelectedTicket => {
-                // On the very first data fetch, if no ticket is selected yet, select the first open one
                 if (isInitialLoad.current && fetchedTickets.length > 0) {
-                    isInitialLoad.current = false; // Mark initial load as complete
+                    isInitialLoad.current = false; 
                     const firstOpen = fetchedTickets.find(t => t.status === 'open');
-                    return firstOpen || fetchedTickets[0]; // Return the found ticket or the first one
+                    return firstOpen || fetchedTickets[0]; 
                 }
-
-                // On subsequent updates, find the latest version of the currently selected ticket
                 if (currentSelectedTicket) {
-                    // If the selected ticket is deleted, this will return undefined, effectively deselecting it
                     return fetchedTickets.find(t => t.id === currentSelectedTicket.id) || null;
                 }
-
-                // If no ticket was selected, remain so.
                 return null;
             });
             
@@ -208,7 +200,7 @@ const AdminSupportManager = ({ navigate }) => {
             setLoading(false);
         });
         return () => unsubscribe();
-    }, []); // Empty dependency array ensures this effect runs only once
+    }, []); 
 
     const filteredTickets = useMemo(() => {
         if (filter === 'all') return tickets;
@@ -219,7 +211,7 @@ const AdminSupportManager = ({ navigate }) => {
         if (!selectedTicket || !replyText.trim() || !userData) return;
         const ticketRef = doc(db, 'supportTickets', selectedTicket.id);
         await updateDoc(ticketRef, {
-            messages: arrayUnion({ text: replyText, sender: 'admin', senderName: userData.name || 'Admin', timestamp: new Date() }),
+            messages: arrayUnion({ text: replyText, sender: 'admin', senderName: userData.displayName || 'Admin', timestamp: new Date() }),
             status: 'replied',
             updatedAt: serverTimestamp()
         });

@@ -5,9 +5,9 @@ import { useAuth } from '../contexts/AuthContext';
 import FeedbackForm from '../components/FeedbackForm';
 import { motion, AnimatePresence } from 'framer-motion';
 // --- ICONS ---
-import { FaEye, FaLock, FaPlay,FaUser, FaCheckCircle, FaHourglassHalf, FaBookOpen, FaCrown, FaTachometerAlt, FaVial, FaCommentDots, FaHeadset, FaChevronDown, FaArrowRight, FaChartLine, FaBullseye, FaStar, FaTrophy, FaBolt, FaCalendarAlt, FaChartPie, FaArrowUp, FaWhatsapp } from 'react-icons/fa';// --- CHARTING LIBRARY ---
+import { FaEye, FaLock, FaPlay,FaUser, FaCheckCircle, FaHourglassHalf, FaBookOpen, FaCrown, FaTachometerAlt, FaVial, FaCommentDots, FaHeadset, FaChevronDown, FaArrowRight, FaChartLine, FaBullseye, FaStar, FaTrophy, FaBolt, FaCalendarAlt, FaChartPie, FaArrowUp, FaWhatsapp } from 'react-icons/fa';
+// --- CHARTING LIBRARY ---
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-
 
 // --- (NEW) STYLED WIDGETS AND HELPERS ---
 
@@ -177,6 +177,21 @@ const VocabCardWidget = () => {
 
 // --- CUSTOM HOOKS ---
 
+// Hook to check for unread replies in support tickets for the User Dashboard
+const useUnreadSupportTickets = (uid) => {
+    const [unreadCount, setUnreadCount] = useState(0);
+    useEffect(() => {
+        if (!uid) { setUnreadCount(0); return; }
+        // User gets an unread count if an admin has 'replied' to their ticket
+        const q = query(collection(db, 'supportTickets'), where('userId', '==', uid), where('status', '==', 'replied'));
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            setUnreadCount(snapshot.docs.length);
+        });
+        return () => unsubscribe();
+    }, [uid]);
+    return unreadCount;
+};
+
 const useManagedTabs = () => {
     const [managedTabs, setManagedTabs] = useState([]);
     useEffect(() => {
@@ -199,8 +214,7 @@ const useMasterData = () => {
             try {
                 // Fetch all published tests and materials
                 const testsQuery = query(collection(db, 'tests'), where("isPublished", "==", true));
-                const materialsQuery = query(collection(db, 'materials'), where("isPublished", "==", true)
-);
+                const materialsQuery = query(collection(db, 'materials'), where("isPublished", "==", true));
 
                 const [testsSnapshot, materialsSnapshot] = await Promise.all([
                     getDocs(testsQuery),
@@ -229,10 +243,8 @@ const useMasterData = () => {
                 // Create a map of all materials, keyed by the ID they are associated with
                 const materialsMap = fetchedMaterials.reduce((acc, mat) => {
                     if (mat.linkedTestId) {
-                        // If linked to a test, use the test ID as the key
                         acc[mat.linkedTestId] = mat;
                     } else {
-                        // If standalone, use its own ID as the key
                         acc[mat.id] = mat;
                     }
                     return acc;
@@ -466,9 +478,10 @@ const UserDashboard = ({ navigate }) => {
     const { allContent, linkedMaterials, loading: masterDataLoading } = useMasterData();
     const userStatus = useUserStatus(userData?.uid);
     const userAttempts = useUserAttempts(userData?.uid);
-    const [performanceTimeFilter, setPerformanceTimeFilter] = useState('all');
+    const [performanceTimeFilter, setPerformanceTimeFilter] = useState('all'); // <-- ESLINT FIX: Restored missing useState hook
     const performanceData = usePerformanceData(userData?.uid, allContent, performanceTimeFilter);
-    // Performance hook call is now in the PerformanceContent component
+    const unreadSupportCount = useUnreadSupportTickets(userData?.uid); // <-- Fetch User Unread Tickets
+
     const welcomeText = useMemo(() => {
         if (userData?.metadata) {
             const creationTime = new Date(userData.metadata.creationTime).getTime();
@@ -592,7 +605,6 @@ const UserDashboard = ({ navigate }) => {
         }
     };
 
-    // REFACTORED: Simplified access logic, removed all legacy checks
     const getIsLocked = (content) => {
         // Rule 1: Free content is never locked for anyone.
         if (content.isFree) return false;
@@ -878,17 +890,23 @@ const UserDashboard = ({ navigate }) => {
         'Challenge': FaBullseye
     };
     
-    const TabButton = ({ value, label, icon: Icon }) => {
+    const TabButton = ({ value, label, icon: Icon, count }) => {
         const isActive = activeTab === value;
         return (
             <button 
                 onClick={() => setActiveTab(value)}
-                className={`flex-1 sm:flex-none flex flex-col sm:flex-row items-center justify-center sm:justify-start space-x-0 sm:space-x-2 px-4 py-2 text-sm font-semibold rounded-md transition-colors ${
+                className={`relative flex-1 sm:flex-none flex flex-col sm:flex-row items-center justify-center sm:justify-start space-x-0 sm:space-x-2 px-4 py-2 text-sm font-semibold rounded-md transition-colors ${
                     isActive ? 'bg-white/10 text-white' : 'text-gray-400 hover:bg-white/5 hover:text-white'
                 }`}
             >
                 {Icon && <Icon className="mb-1 sm:mb-0" />}
                 <span>{label}</span>
+                {/* Notification Badge */}
+                {count > 0 && (
+                    <span className="absolute top-0 right-0 -mt-1 -mr-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white shadow-md animate-pulse">
+                        {count}
+                    </span>
+                )}
             </button>
         );
     };
@@ -1145,7 +1163,7 @@ const UserDashboard = ({ navigate }) => {
         );
     };
 
-    const AccordionSection = ({ title, icon: Icon, sectionKey, children, tab }) => {
+    const AccordionSection = ({ title, icon: Icon, sectionKey, children, tab, badgeCount }) => {
         const isOpen = openAccordion === sectionKey;
 
         const handleToggle = () => {
@@ -1155,14 +1173,15 @@ const UserDashboard = ({ navigate }) => {
             } else {
                 setOpenAccordion(sectionKey);
                 // Automatically select the first available sub-tab when opening
-                const contentForTab = contentByTab[tab.name];
-                const hasSubTabs = tab.subTabs && tab.subTabs.some(sub => contentForTab.subTabs[sub.name]?.content?.length > 0);
-
-                if (hasSubTabs) {
-                    const firstSubTabWithContent = tab.subTabs.find(sub => contentForTab.subTabs[sub.name]?.content?.length > 0);
-                    setActiveMobileSubTab(firstSubTabWithContent ? firstSubTabWithContent.name : null);
-                } else {
-                    setActiveMobileSubTab(null);
+                const contentForTab = contentByTab[tab?.name];
+                if (contentForTab) {
+                    const hasSubTabs = tab.subTabs && tab.subTabs.some(sub => contentForTab.subTabs[sub.name]?.content?.length > 0);
+                    if (hasSubTabs) {
+                        const firstSubTabWithContent = tab.subTabs.find(sub => contentForTab.subTabs[sub.name]?.content?.length > 0);
+                        setActiveMobileSubTab(firstSubTabWithContent ? firstSubTabWithContent.name : null);
+                    } else {
+                        setActiveMobileSubTab(null);
+                    }
                 }
             }
         };
@@ -1171,11 +1190,17 @@ const UserDashboard = ({ navigate }) => {
             <div className="mb-2">
                 <button 
                     onClick={handleToggle}
-                    className="w-full flex items-center justify-between p-4 bg-gray-800 rounded-lg text-left text-white font-semibold"
+                    className="w-full flex items-center justify-between p-4 bg-gray-800 rounded-lg text-left text-white font-semibold relative"
                 >
                     <div className="flex items-center space-x-3">
                         {Icon && <Icon />}
                         <span>{title}</span>
+                        {/* Notification Badge inside Accordion */}
+                        {badgeCount > 0 && (
+                            <span className="ml-2 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white shadow-md animate-pulse">
+                                {badgeCount}
+                            </span>
+                        )}
                     </div>
                     <FaChevronDown className={`transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`} />
                 </button>
@@ -1400,7 +1425,8 @@ const UserDashboard = ({ navigate }) => {
                         <TabButton key={tab.id} value={tab.name} label={tab.name} icon={iconMap[tab.name] || FaVial} />
                     ))}
                     {userStatus?.isSubscribed && !userStatus.hasSubmittedFeedback && <TabButton value="feedback" label="Feedback" icon={FaCommentDots} />}
-                    <TabButton value="support" label="Support" icon={FaHeadset} />
+                    {/* Passed unread count here */}
+                    <TabButton value="support" label="Support" icon={FaHeadset} count={unreadSupportCount} />
                 </div>
 
                 {hasSubTabs && (
@@ -1518,7 +1544,12 @@ const UserDashboard = ({ navigate }) => {
                     )
                 })}
                 {userStatus?.isSubscribed && !userStatus.hasSubmittedFeedback && ( <AccordionSection title="Feedback" icon={FaCommentDots} sectionKey="feedback" tab={{ name: 'Feedback' }}>{showFeedbackThanks ? <p className="text-green-400 text-center">Thank you for your feedback!</p> : <FeedbackForm userStatus={userStatus} onSuccessfulSubmit={handleFeedbackSuccess} />}</AccordionSection> )}
-                <AccordionSection title="Support" icon={FaHeadset} sectionKey="support" tab={{ name: 'Support' }}><p className="text-gray-400 text-center mb-4">Need help? Visit our support center.</p><button onClick={() => navigate('support')} className="w-full bg-blue-600 text-white px-4 py-2 rounded-md font-semibold hover:bg-blue-700">Go to Support</button></AccordionSection>
+                
+                {/* Passed unread count here */}
+                <AccordionSection title="Support" icon={FaHeadset} sectionKey="support" tab={{ name: 'Support' }} badgeCount={unreadSupportCount}>
+                    <p className="text-gray-400 text-center mb-4">Need help? Visit our support center.</p>
+                    <button onClick={() => navigate('support')} className="w-full bg-blue-600 text-white px-4 py-2 rounded-md font-semibold hover:bg-blue-700">Go to Support</button>
+                </AccordionSection>
             </div>
 
             
@@ -1527,19 +1558,12 @@ const UserDashboard = ({ navigate }) => {
                 <div className="max-w-7xl mx-auto px-4">
                     <p className="text-xs sm:text-sm text-zinc-300">
                         <span className="font-semibold text-white mr-2">For any queries, please contact through support </span>
-                        {/* <span className="mr-1">Roshan Singh (Founder & TG Community Owner):</span>
-                        <a href="tel:+919105116887" className="underline hover:text-white mr-3">+91 91051 16887</a> */}
-                        {/* <span className="text-zinc-600 mx-1 hidden sm:inline">|</span> */}
-                        {/* <span className="mr-1">Anurag (Co-founder):</span>
-                        <a href="tel:+919639232862" className="underline hover:text-white">+91 96392 32862</a> */}
                     </p>
                 </div>
             </div>
             {/* --- END: Pinned Contact Footer --- */}
 
-        </div> // This is the last closing div
-    
-       
+        </div>
     );
 };
 
